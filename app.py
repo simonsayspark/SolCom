@@ -587,11 +587,29 @@ def show_announcements():
                     else:
                         st.error("⚠️ Preencha título e conteúdo")
         
-        # Clear all button
+        # Clear all button with confirmation
         if st.sidebar.button("🗑️ Limpar Todos os Anúncios", type="secondary"):
-            if save_announcements([]):
-                st.success("✅ Todos os anúncios foram removidos!")
-                st.rerun()
+            st.session_state.show_clear_confirmation = True
+        
+        # Show confirmation dialog if triggered
+        if st.session_state.get("show_clear_confirmation", False):
+            st.sidebar.warning("⚠️ **Confirmar exclusão?**")
+            st.sidebar.markdown("Esta ação não pode ser desfeita!")
+            
+            col1, col2 = st.sidebar.columns(2)
+            with col1:
+                if st.button("✅ Sim, limpar", type="primary", key="confirm_clear"):
+                    if save_announcements([]):
+                        st.success("✅ Todos os anúncios foram removidos!")
+                        st.session_state.show_clear_confirmation = False
+                        st.rerun()
+                    else:
+                        st.error("❌ Erro ao limpar anúncios")
+            
+            with col2:
+                if st.button("❌ Cancelar", key="cancel_clear"):
+                    st.session_state.show_clear_confirmation = False
+                    st.rerun()
     else:
         st.sidebar.info("👁️ Modo Visualização")
     
@@ -1145,9 +1163,9 @@ def show_purchase_list(produtos_existentes):
     # Calculate suggestions
     suggestions_df = calculate_purchase_suggestions(produtos_existentes)
     
-    # Filter products that need action
+    # Filter products that need action (increased range due to new categories)
     precisa_acao = suggestions_df[
-        (suggestions_df['Meses_Restantes'] <= 3) & 
+        (suggestions_df['Meses_Restantes'] <= 6) & 
         (suggestions_df['Consumo_Mensal'] > 0)
     ].sort_values('Meses_Restantes')
     
@@ -1166,19 +1184,19 @@ def show_purchase_list(produtos_existentes):
             use_container_width=True
         )
     
-    # Critical products (1-2 months)
-    criticos = precisa_acao[(precisa_acao['Meses_Restantes'] > 1) & (precisa_acao['Meses_Restantes'] <= 2)]
+    # Critical products (1-3 months)
+    criticos = precisa_acao[(precisa_acao['Meses_Restantes'] > 1) & (precisa_acao['Meses_Restantes'] <= 3)]
     if len(criticos) > 0:
-        st.warning("🔴 CRÍTICOS (1-2 meses)")
+        st.warning("🔴 CRÍTICOS (1-3 meses)")
         st.dataframe(
             criticos[['Produto', 'Quando_Acaba', 'Consumo_Mensal', 'Qtd_Comprar', 'Investimento_Estimado']].head(10).round(1),
             use_container_width=True
         )
     
-    # Attention products (2-3 months)
-    atencao = precisa_acao[(precisa_acao['Meses_Restantes'] > 2) & (precisa_acao['Meses_Restantes'] <= 3)]
+    # Attention products (3+ months)
+    atencao = precisa_acao[precisa_acao['Meses_Restantes'] > 3]
     if len(atencao) > 0:
-        st.info("🟡 ATENÇÃO (2-3 meses)")
+        st.info("🟡 ATENÇÃO (>3 meses)")
         st.dataframe(
             atencao[['Produto', 'Quando_Acaba', 'Consumo_Mensal', 'Qtd_Comprar', 'Investimento_Estimado']].head(10).round(1),
             use_container_width=True
@@ -1277,15 +1295,15 @@ def show_analytics_dashboard(produtos_existentes, produtos_novos):
     
     with col1:
         emergencia = suggestions_df[suggestions_df['Meses_Restantes'] <= 1]
-        criticos_chart = suggestions_df[(suggestions_df['Meses_Restantes'] > 1) & (suggestions_df['Meses_Restantes'] <= 2)]
-        atencao = suggestions_df[(suggestions_df['Meses_Restantes'] > 2) & (suggestions_df['Meses_Restantes'] <= 3)]
+        criticos_chart = suggestions_df[(suggestions_df['Meses_Restantes'] > 1) & (suggestions_df['Meses_Restantes'] <= 3)]
+        atencao = suggestions_df[suggestions_df['Meses_Restantes'] > 3]
         
         invest_emergencia = emergencia['Investimento_Estimado'].sum() if len(emergencia) > 0 else 0
         invest_criticos = criticos_chart['Investimento_Estimado'].sum() if len(criticos_chart) > 0 else 0
         invest_atencao = atencao['Investimento_Estimado'].sum() if len(atencao) > 0 else 0
         
         investment_data = {
-            'Período': ['Este Mês', 'Próximo Mês', 'Mês +2'],
+            'Período': ['Este Mês', 'Próximos 3 Meses', 'Longo Prazo'],
             'Investimento': [invest_emergencia, invest_criticos, invest_atencao]
         }
         
