@@ -1,16 +1,48 @@
-# Excel files
+# =============================================================================
+# 🔒 SECURITY - NEVER COMMIT THESE FILES
+# =============================================================================
+
+# Streamlit secrets and configuration
+.streamlit/secrets.toml
+.streamlit/config.toml
+
+# Environment variables and credentials
+.env
+.env.local
+*.key
+*.pem
+*.p8
+
+# Authentication and user data
+users.json
+announcements.json
+
+# =============================================================================
+# 📊 DATA FILES - KEEP PRIVATE
+# =============================================================================
+
+# Excel files (contain sensitive business data)
 *.xlsx
 *.xls
 *.xlsm
 *.xlsb
+Solicitação*.xlsx
+data.xlsx
 
-# Data files
+# Other data formats
 *.csv
-data/
 *.db
 *.sqlite
-announcements.json
-users.json
+data/
+
+# Uploads and temporary files
+uploads/
+temp/
+*.tmp
+
+# =============================================================================
+# 🐍 PYTHON STANDARD IGNORES
+# =============================================================================
 
 # Python cache
 __pycache__/
@@ -41,6 +73,10 @@ ENV/
 env.bak/
 venv.bak/
 
+# =============================================================================
+# 🛠️ DEVELOPMENT FILES
+# =============================================================================
+
 # IDE files
 .vscode/
 .idea/
@@ -51,36 +87,14 @@ venv.bak/
 .DS_Store
 Thumbs.db
 
-# Streamlit
-.streamlit/
-
-# Project specific
-users.json
-announcements.json
-
-# Sensitive data
-*.xlsx
-data.xlsx
-Solicitação*.xlsx
-*.xls
-
-# Uploads and temporary files
-uploads/
-temp/
-*.tmp
-
 # Log files
 *.log
-
-# Environment variables
-.env
-.env.local
 
 # Backup files
 *.bak
 *.backup
 
-# Images and screenshots
+# Images and screenshots (may contain sensitive data)
 *.png
 *.jpg
 *.jpeg
@@ -88,6 +102,21 @@ temp/
 *.bmp
 *.svg
 
-# Development folders
+# =============================================================================
+# 📁 PROJECT SPECIFIC
+# =============================================================================
+
+# Development and testing folders
 RemoveLater/
-@RemoveLater/ 
+@RemoveLater/
+
+# =============================================================================
+# ✅ WHAT IS SAFE TO COMMIT:
+# =============================================================================
+# ✅ bd/ folder (database structure code)
+# ✅ .streamlit/secrets.toml.template (template only)
+# ✅ All .py files (no sensitive data in code)
+# ✅ requirements.txt
+# ✅ README.md
+# ✅ .gitignore (this file)
+# ============================================================================= 

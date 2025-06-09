@@ -138,7 +138,7 @@ def show_dashboard():
 
 def show_timeline():
     st.title("📅 TIMELINE INTERATIVA DE COMPRAS")
-    st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
+st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
 
     with st.expander("ℹ️ Como usar esta aplicação"):
         st.markdown("""
@@ -1365,7 +1365,7 @@ def show_urgent_contacts(produtos_existentes):
         
         contact_critical = criticos[['Produto', 'Quando_Acaba', 'Consumo_Mensal', 'Qtd_Comprar']].head(10)
         st.dataframe(contact_critical, use_container_width=True)
-    else:
+else:
         st.success("✅ Nenhum contato crítico necessário")
     
     # Summary
@@ -1382,6 +1382,11 @@ def show_urgent_contacts(produtos_existentes):
     
     if len(emergencia) > 0 or len(criticos) > 0:
         st.info("💡 **DICA:** Prepare a lista de quantidades antes de ligar! Use a aba 'Lista de Compras' para ter os números exatos.")
+
+def show_snowflake():
+    """Show Snowflake integration page"""
+    st.info("❄️ Página do Snowflake carregada! Configure suas credenciais no arquivo .streamlit/secrets.toml")
+    st.markdown("Consulte a documentação na aba Snowflake para mais detalhes sobre a integração.")
 
 # Main app logic
 # Show user info in sidebar
@@ -1412,6 +1417,10 @@ if st.sidebar.button("📊 Análise de Estoque", use_container_width=True):
     st.session_state.current_page = "excel_analytics"
     st.rerun()
 
+if st.sidebar.button("❄️ Snowflake", use_container_width=True):
+    st.session_state.current_page = "snowflake"
+    st.rerun()
+
 # Show different pages based on navigation
 if st.session_state.current_page == "home":
     show_dashboard()
@@ -1421,5 +1430,7 @@ elif st.session_state.current_page == "announcements":
     show_announcements()
 elif st.session_state.current_page == "excel_analytics":
     show_excel_analytics()
+elif st.session_state.current_page == "snowflake":
+    show_snowflake()
 
  
