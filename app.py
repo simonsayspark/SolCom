@@ -10,10 +10,31 @@ st.set_page_config(page_title="Timeline MINIPA", page_icon="📅", layout="wide"
 st.title("📅 TIMELINE INTERATIVA DE COMPRAS - MINIPA")
 st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
 
+with st.expander("ℹ️ Como usar esta aplicação"):
+    st.markdown("""
+    **Para usar esta aplicação:**
+    1. 📁 **Upload:** Faça upload do seu arquivo Excel na barra lateral
+    2. 📊 **Exemplo:** Ou marque a opção "Usar dados de exemplo" para testar
+    3. 🎛️ **Configure:** Ajuste os parâmetros na barra lateral
+    4. 📈 **Analise:** Visualize os gráficos interativos
+    
+    **Formato do arquivo Excel:**
+    - Deve ter as colunas: Item, Modelo, Fornecedor, QTD, Preço FOB Unitário, Estoque Total, In Transit Shipt, Avg Sales, CBM, MOQ
+    - Os dados devem começar na linha 10 (header=9)
+    """)
+
 @st.cache_data
-def carregar_dados():
+def carregar_dados(uploaded_file=None):
     try:
-        df = pd.read_excel("Solicitação 05 JOI & SP (3).xlsx", header=9)
+        if uploaded_file is not None:
+            df = pd.read_excel(uploaded_file, header=9)
+        else:
+            # Tentar carregar arquivo local (para desenvolvimento)
+            try:
+                df = pd.read_excel("Solicitação 05 JOI & SP (3).xlsx", header=9)
+            except FileNotFoundError:
+                return None
+        
         df = df.dropna(subset=['Item'])
         df = df[df['Item'] != 'Item']
         
@@ -37,6 +58,22 @@ def carregar_dados():
     except Exception as e:
         st.error(f"Erro ao carregar dados: {e}")
         return None
+
+def criar_dados_exemplo():
+    """Cria dados de exemplo para demonstração"""
+    dados_exemplo = {
+        'Item': ['ITEM001', 'ITEM002', 'ITEM003', 'ITEM004', 'ITEM005'],
+        'Modelo': ['Multímetro DM-1000', 'Osciloscópio OS-200', 'Fonte DC-300', 'Gerador GF-400', 'Analisador AN-500'],
+        'Fornecedor': ['Fornecedor A', 'Fornecedor B', 'Fornecedor A', 'Fornecedor C', 'Fornecedor B'],
+        'QTD': [100, 50, 75, 30, 25],
+        'Preço FOB\nUnitário': [150.00, 800.00, 450.00, 1200.00, 2500.00],
+        'Estoque\nTotal ': [45, 12, 23, 8, 5],
+        'In Transit\nShipt': [20, 5, 10, 0, 2],
+        'Avg Sales\n': [15, 3, 8, 2, 1],
+        'CBM': [0.05, 0.15, 0.08, 0.12, 0.20],
+        'MOQ': [50, 10, 25, 5, 5]
+    }
+    return pd.DataFrame(dados_exemplo)
 
 def otimizar_quantidade_moq(vendas_mensais, moq, meta_meses=6):
     if vendas_mensais <= 0:
@@ -180,7 +217,25 @@ def criar_grafico_interativo(timeline_data, filtro_urgencia="Todos"):
     return fig
 
 # Interface principal
-df = carregar_dados()
+st.sidebar.header("📁 Upload de Dados")
+uploaded_file = st.sidebar.file_uploader(
+    "Faça upload do seu arquivo Excel:",
+    type=['xlsx', 'xls'],
+    help="Carregue um arquivo Excel com dados de estoque e vendas"
+)
+
+usar_dados_exemplo = st.sidebar.checkbox("📊 Usar dados de exemplo", value=False)
+
+if usar_dados_exemplo:
+    df = criar_dados_exemplo()
+    st.info("📊 Usando dados de exemplo para demonstração")
+elif uploaded_file is not None:
+    df = carregar_dados(uploaded_file)
+    st.success("✅ Arquivo carregado com sucesso!")
+else:
+    df = carregar_dados()
+    if df is None:
+        st.warning("📁 Faça upload de um arquivo Excel ou use os dados de exemplo para começar!")
 
 if df is not None:
     st.sidebar.header("🎛️ Controles")
