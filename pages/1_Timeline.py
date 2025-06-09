@@ -39,11 +39,8 @@ def carregar_dados(uploaded_file=None):
         if uploaded_file is not None:
             df = pd.read_excel(uploaded_file, header=9)
         else:
-            # Tentar carregar arquivo local (para desenvolvimento)
-            try:
-                df = pd.read_excel("Solicitação 05 JOI & SP (3).xlsx", header=9)
-            except FileNotFoundError:
-                return None
+            # No local file in production - user must upload
+            return None
         
         df = df.dropna(subset=['Item'])
         df = df[df['Item'] != 'Item']
