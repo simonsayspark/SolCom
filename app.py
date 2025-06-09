@@ -1702,6 +1702,19 @@ def show_snowflake():
         if st.button("🔍 Diagnóstico", use_container_width=True):
             run_snowflake_diagnostics()
     
+    # Migration section for existing users
+    st.subheader("🔄 Migração de Tabelas")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🔄 Atualizar Estrutura", use_container_width=True):
+            from bd.snowflake_config import migrate_existing_tables
+            migrate_existing_tables()
+    
+    with col2:
+        st.info("💡 Use se você tem tabelas antigas e precisa suporte para Timeline + Analytics")
+    
     # Database schema info
     st.subheader("🏗️ Estrutura do Banco")
     

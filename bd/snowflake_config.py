@@ -181,7 +181,21 @@ def upload_excel_to_snowflake(df, arquivo_nome, usuario="minipa", table_type="TI
                         table_type VARCHAR(20) DEFAULT 'TIMELINE'
                     )
                     """)
-                    
+                else:
+                    # Table exists, check if table_type column exists and add if not
+                    try:
+                        cursor.execute("SELECT table_type FROM ESTOQUE.PRODUTOS LIMIT 1")
+                    except:
+                        # table_type column doesn't exist, add it
+                        st.info("🔄 Adicionando coluna table_type à tabela existente...")
+                        try:
+                            cursor.execute("ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN table_type VARCHAR(20) DEFAULT 'TIMELINE'")
+                            conn.commit()
+                            st.success("✅ Coluna table_type adicionada!")
+                        except Exception as alter_error:
+                            st.warning(f"⚠️ Erro ao adicionar coluna: {str(alter_error)}")
+                            # Continue without table_type for backwards compatibility
+            
             else:  # ANALYTICS
                 # Check for analytics table
                 cursor.execute("SHOW TABLES LIKE 'ANALYTICS_DATA' IN SCHEMA ESTOQUE")
@@ -278,13 +292,24 @@ def upload_excel_to_snowflake(df, arquivo_nome, usuario="minipa", table_type="TI
                         continue
                     
                     # Insert timeline data
-                    cursor.execute("""
-                    INSERT INTO ESTOQUE.PRODUTOS 
-                    (item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
-                     in_transit, vendas_medias, cbm, moq, usuario, table_type)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """, (item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
-                          in_transit, vendas_medias, cbm, moq, usuario, table_type))
+                    try:
+                        # Try with table_type column first
+                        cursor.execute("""
+                        INSERT INTO ESTOQUE.PRODUTOS 
+                        (item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
+                         in_transit, vendas_medias, cbm, moq, usuario, table_type)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """, (item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
+                              in_transit, vendas_medias, cbm, moq, usuario, table_type))
+                    except Exception:
+                        # If table_type column doesn't exist, insert without it
+                        cursor.execute("""
+                        INSERT INTO ESTOQUE.PRODUTOS 
+                        (item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
+                         in_transit, vendas_medias, cbm, moq, usuario)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """, (item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
+                              in_transit, vendas_medias, cbm, moq, usuario))
                     
                     success_count += 1
                     
@@ -341,14 +366,23 @@ def upload_excel_to_snowflake(df, arquivo_nome, usuario="minipa", table_type="TI
         
         # Log the upload (only if CONFIG schema and table exist)
         try:
+            # Try with table_type column first
             cursor.execute("""
             INSERT INTO CONFIG.UPLOAD_LOG 
             (nome_arquivo, linhas_processadas, usuario, status, table_type)
             VALUES (%s, %s, %s, %s, %s)
             """, (arquivo_nome, success_count, usuario, 'SUCCESS', table_type))
-        except:
-            # If log table doesn't exist, continue without logging
-            pass
+        except Exception:
+            # If table_type column doesn't exist or table doesn't exist, try without it
+            try:
+                cursor.execute("""
+                INSERT INTO CONFIG.UPLOAD_LOG 
+                (nome_arquivo, linhas_processadas, usuario, status)
+                VALUES (%s, %s, %s, %s)
+                """, (arquivo_nome, success_count, usuario, 'SUCCESS'))
+            except:
+                # If log table doesn't exist, continue without logging
+                pass
         
         conn.commit()
         cursor.close()
@@ -468,41 +502,72 @@ def load_data_with_history(usuario="minipa", limit_days=30):
         
         # Simple check if table exists
         try:
+            # First try with table_type column
             cursor.execute("SELECT COUNT(*) FROM ESTOQUE.PRODUTOS WHERE usuario = %s AND table_type = 'TIMELINE'", [usuario])
             total_records = cursor.fetchone()[0]
+            use_table_type = True
             
-            if total_records == 0:
-                st.info("💡 Nenhum dado de timeline encontrado na tabela. Faça um upload de dados de timeline primeiro.")
+        except Exception:
+            # If table_type column doesn't exist, try without it (backwards compatibility)
+            try:
+                cursor.execute("SELECT COUNT(*) FROM ESTOQUE.PRODUTOS WHERE usuario = %s", [usuario])
+                total_records = cursor.fetchone()[0]
+                use_table_type = False
+                st.info("🔄 Usando tabela sem filtro de tipo (compatibilidade)")
+            except Exception as table_error:
+                st.warning(f"⚠️ Tabela pode não existir ainda: {str(table_error)}")
                 cursor.close()
                 conn.close()
                 return None
-                
-        except Exception as table_error:
-            st.warning(f"⚠️ Tabela pode não existir ainda: {str(table_error)}")
+        
+        if total_records == 0:
+            st.info("💡 Nenhum dado de timeline encontrado na tabela. Faça um upload de dados de timeline primeiro.")
             cursor.close()
             conn.close()
             return None
         
         # If we have data, execute the full query with proper column mapping
-        query = """
-        SELECT item as "Item", 
-               modelo as "Modelo", 
-               fornecedor as "Fornecedor", 
-               qtd_atual as "QTD", 
-               preco_unitario as "Preco_Unitario", 
-               estoque_total as "Estoque_Total",
-               in_transit as "In_Transit", 
-               vendas_medias as "Vendas_Medias",
-               cbm as "CBM", 
-               moq as "MOQ", 
-               data_upload,
-               ROW_NUMBER() OVER (PARTITION BY item ORDER BY data_upload DESC) as row_num
-        FROM ESTOQUE.PRODUTOS 
-        WHERE usuario = %s 
-        AND table_type = 'TIMELINE'
-        AND data_upload >= DATEADD(day, %s, CURRENT_DATE())
-        ORDER BY data_upload DESC
-        """
+        if use_table_type:
+            # Use query with table_type filter
+            query = """
+            SELECT item as "Item", 
+                   modelo as "Modelo", 
+                   fornecedor as "Fornecedor", 
+                   qtd_atual as "QTD", 
+                   preco_unitario as "Preco_Unitario", 
+                   estoque_total as "Estoque_Total",
+                   in_transit as "In_Transit", 
+                   vendas_medias as "Vendas_Medias",
+                   cbm as "CBM", 
+                   moq as "MOQ", 
+                   data_upload,
+                   ROW_NUMBER() OVER (PARTITION BY item ORDER BY data_upload DESC) as row_num
+            FROM ESTOQUE.PRODUTOS 
+            WHERE usuario = %s 
+            AND table_type = 'TIMELINE'
+            AND data_upload >= DATEADD(day, %s, CURRENT_DATE())
+            ORDER BY data_upload DESC
+            """
+        else:
+            # Use query without table_type filter (backwards compatibility)
+            query = """
+            SELECT item as "Item", 
+                   modelo as "Modelo", 
+                   fornecedor as "Fornecedor", 
+                   qtd_atual as "QTD", 
+                   preco_unitario as "Preco_Unitario", 
+                   estoque_total as "Estoque_Total",
+                   in_transit as "In_Transit", 
+                   vendas_medias as "Vendas_Medias",
+                   cbm as "CBM", 
+                   moq as "MOQ", 
+                   data_upload,
+                   ROW_NUMBER() OVER (PARTITION BY item ORDER BY data_upload DESC) as row_num
+            FROM ESTOQUE.PRODUTOS 
+            WHERE usuario = %s 
+            AND data_upload >= DATEADD(day, %s, CURRENT_DATE())
+            ORDER BY data_upload DESC
+            """
         
         cursor.close()  # Close the cursor before pandas read_sql
         
@@ -582,7 +647,9 @@ def load_analytics_data(usuario="minipa", limit_days=30):
                 return None
                 
         except Exception as table_error:
-            st.warning(f"⚠️ Tabela de análise pode não existir ainda: {str(table_error)}")
+            # Table doesn't exist yet
+            st.warning(f"⚠️ Tabela de análise não existe ainda: {str(table_error)}")
+            st.info("💡 A tabela será criada automaticamente no primeiro upload de análise.")
             cursor.close()
             conn.close()
             return None
@@ -632,4 +699,72 @@ def load_analytics_data(usuario="minipa", limit_days=30):
         
     except Exception as e:
         st.error(f"❄️ Erro ao carregar dados de análise: {str(e)}")
-        return None 
+        return None
+
+def migrate_existing_tables():
+    """
+    Migrate existing tables to new structure with table_type column
+    """
+    conn = get_snowflake_connection()
+    if not conn:
+        return False
+        
+    try:
+        cursor = conn.cursor()
+        
+        st.info("🔄 Verificando e atualizando estrutura das tabelas...")
+        
+        # Check and update PRODUTOS table
+        try:
+            cursor.execute("SELECT table_type FROM ESTOQUE.PRODUTOS LIMIT 1")
+            st.success("✅ Tabela PRODUTOS já tem coluna table_type")
+        except:
+            st.info("📋 Adicionando coluna table_type à tabela PRODUTOS...")
+            cursor.execute("ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN table_type VARCHAR(20) DEFAULT 'TIMELINE'")
+            st.success("✅ Coluna table_type adicionada à tabela PRODUTOS")
+        
+        # Check and update UPLOAD_LOG table
+        try:
+            cursor.execute("SELECT table_type FROM CONFIG.UPLOAD_LOG LIMIT 1")
+            st.success("✅ Tabela UPLOAD_LOG já tem coluna table_type")
+        except:
+            st.info("📋 Adicionando coluna table_type à tabela UPLOAD_LOG...")
+            cursor.execute("ALTER TABLE CONFIG.UPLOAD_LOG ADD COLUMN table_type VARCHAR(20)")
+            st.success("✅ Coluna table_type adicionada à tabela UPLOAD_LOG")
+        
+        # Create ANALYTICS_DATA table if it doesn't exist
+        try:
+            cursor.execute("SHOW TABLES LIKE 'ANALYTICS_DATA' IN SCHEMA ESTOQUE")
+            result = cursor.fetchall()
+            
+            if not result:
+                st.info("📊 Criando tabela ANALYTICS_DATA...")
+                cursor.execute("""
+                CREATE TABLE ESTOQUE.ANALYTICS_DATA (
+                    id INTEGER AUTOINCREMENT PRIMARY KEY,
+                    produto VARCHAR(200),
+                    estoque INTEGER,
+                    consumo_6_meses DECIMAL(10,2),
+                    media_6_meses DECIMAL(10,2),
+                    estoque_cobertura DECIMAL(8,2),
+                    data_upload TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP(),
+                    usuario VARCHAR(50),
+                    table_type VARCHAR(20) DEFAULT 'ANALYTICS'
+                )
+                """)
+                st.success("✅ Tabela ANALYTICS_DATA criada")
+            else:
+                st.success("✅ Tabela ANALYTICS_DATA já existe")
+        except Exception as e:
+            st.warning(f"⚠️ Erro ao criar tabela ANALYTICS_DATA: {str(e)}")
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        st.success("🎉 Migração concluída! Todas as tabelas foram atualizadas.")
+        return True
+        
+    except Exception as e:
+        st.error(f"❌ Erro na migração: {str(e)}")
+        return False 
