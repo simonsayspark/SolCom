@@ -308,7 +308,7 @@ def show_dashboard():
 
 def show_timeline():
     st.title("📅 TIMELINE INTERATIVA DE COMPRAS")
-    st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
+st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
 
     # Try to load data from Snowflake first
     try:
@@ -847,7 +847,7 @@ def show_announcements():
         
         if filtered_announcements:
             # Estatísticas
-            col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4 = st.columns(4)
             
             with col1:
                 total = len(filtered_announcements)
@@ -1195,7 +1195,7 @@ def show_excel_analytics():
             
             # Show sample format
             with st.expander("📋 Formato esperado do arquivo"):
-                st.markdown("""
+            st.markdown("""
                 **Planilha: 'Export'**
                 
                 Colunas necessárias:
@@ -1249,7 +1249,7 @@ def show_executive_summary(df, produtos_novos, produtos_existentes):
         if len(produtos_existentes) > 0:
             criticos = len(produtos_existentes[produtos_existentes['Estoque Cobertura'] <= 1])
             st.metric("🚨 Produtos Críticos", criticos)
-        else:
+else:
             st.metric("🚨 Produtos Críticos", 0)
     
     if len(produtos_existentes) > 0:
@@ -2072,6 +2072,10 @@ if st.sidebar.button("❄️ Snowflake", use_container_width=True):
     st.session_state.current_page = "snowflake"
     st.rerun()
 
+if st.sidebar.button("📈 Histórico & Performance", use_container_width=True):
+    st.session_state.current_page = "historical"
+    st.rerun()
+
 # Show different pages based on navigation
 if st.session_state.current_page == "home":
     show_dashboard()
@@ -2085,5 +2089,453 @@ elif st.session_state.current_page == "excel_analytics":
     show_excel_analytics()
 elif st.session_state.current_page == "snowflake":
     show_snowflake()
+elif st.session_state.current_page == "historical":
+    show_historical_analysis()
+
+def show_historical_analysis():
+    """Comprehensive historical analysis and performance tracking with real data"""
+    st.title("📈 HISTÓRICO & PERFORMANCE")
+    st.markdown("### 📊 Análise de Tendências e Performance de Compras")
+    
+    # Try to import Snowflake functions
+    try:
+        from bd.snowflake_config import get_snowflake_connection
+        snowflake_available = True
+    except ImportError:
+        st.error("❌ Snowflake não configurado!")
+        st.info("💡 Configure o Snowflake para usar análises históricas")
+        return
+    
+    # Get connection
+    conn = get_snowflake_connection()
+    if not conn:
+        st.error("❌ Não foi possível conectar ao Snowflake")
+        st.info("💡 Verifique sua configuração na página Snowflake")
+        return
+    
+    cursor = conn.cursor()
+    
+    try:
+        # Load historical data from both tables
+        st.subheader("📋 Visão Geral dos Dados")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        # Count timeline uploads
+        try:
+            cursor.execute("""
+                SELECT COUNT(DISTINCT DATE(data_upload)) as upload_days,
+                       COUNT(*) as total_records,
+                       MIN(data_upload) as first_upload,
+                       MAX(data_upload) as last_upload
+                FROM ESTOQUE.PRODUTOS 
+                WHERE table_type = 'timeline' OR table_type IS NULL
+            """)
+            timeline_stats = cursor.fetchone()
+            
+            with col1:
+                if timeline_stats and timeline_stats[0]:
+                    st.metric("📅 Timeline Uploads", timeline_stats[0])
+                    st.caption(f"Total: {timeline_stats[1]} produtos")
+                else:
+                    st.metric("📅 Timeline Uploads", "0")
+        except:
+            with col1:
+                st.metric("📅 Timeline Uploads", "N/A")
+        
+        # Count analytics uploads
+        try:
+            cursor.execute("""
+                SELECT COUNT(DISTINCT DATE(data_upload)) as upload_days,
+                       COUNT(*) as total_records
+                FROM ESTOQUE.ANALYTICS_DATA
+            """)
+            analytics_stats = cursor.fetchone()
+            
+            with col2:
+                if analytics_stats and analytics_stats[0]:
+                    st.metric("📊 Analytics Uploads", analytics_stats[0])
+                    st.caption(f"Total: {analytics_stats[1]} registros")
+                else:
+                    st.metric("📊 Analytics Uploads", "0")
+        except:
+            with col2:
+                st.metric("📊 Analytics Uploads", "N/A")
+        
+        # Date range
+        try:
+            cursor.execute("""
+                SELECT MIN(data_upload) as first_date, MAX(data_upload) as last_date
+                FROM (
+                    SELECT data_upload FROM ESTOQUE.PRODUTOS 
+                    UNION ALL 
+                    SELECT data_upload FROM ESTOQUE.ANALYTICS_DATA
+                )
+            """)
+            date_range = cursor.fetchone()
+            
+            with col3:
+                if date_range and date_range[0]:
+                    days_diff = (date_range[1] - date_range[0]).days if date_range[1] else 0
+                    st.metric("📆 Período Total", f"{days_diff} dias")
+                    st.caption(f"De {date_range[0].strftime('%d/%m/%Y')}")
+                else:
+                    st.metric("📆 Período Total", "N/A")
+        except:
+            with col3:
+                st.metric("📆 Período Total", "N/A")
+        
+        # Active suppliers
+        try:
+            cursor.execute("""
+                SELECT COUNT(DISTINCT fornecedor) as suppliers
+                FROM ESTOQUE.PRODUTOS 
+                WHERE fornecedor IS NOT NULL AND fornecedor != ''
+            """)
+            suppliers = cursor.fetchone()
+            
+            with col4:
+                if suppliers and suppliers[0]:
+                    st.metric("🏭 Fornecedores Ativos", suppliers[0])
+                else:
+                    st.metric("🏭 Fornecedores Ativos", "0")
+        except:
+            with col4:
+                st.metric("🏭 Fornecedores Ativos", "N/A")
+        
+        # Historical Price Analysis
+        st.subheader("💰 Análise de Preços Históricos")
+        
+        try:
+            cursor.execute("""
+                SELECT 
+                    item,
+                    modelo,
+                    fornecedor,
+                    preco_unitario,
+                    data_upload,
+                    LAG(preco_unitario, 1) OVER (PARTITION BY item ORDER BY data_upload) as preco_anterior
+                FROM ESTOQUE.PRODUTOS 
+                WHERE preco_unitario > 0 AND item IS NOT NULL
+                ORDER BY item, data_upload DESC
+            """)
+            
+            price_data = cursor.fetchall()
+            
+            if price_data:
+                # Convert to DataFrame for easier analysis
+                price_df = pd.DataFrame(price_data, columns=[
+                    'item', 'modelo', 'fornecedor', 'preco_atual', 'data_upload', 'preco_anterior'
+                ])
+                
+                # Calculate price changes
+                price_df['variacao_preco'] = ((price_df['preco_atual'] - price_df['preco_anterior']) / price_df['preco_anterior'] * 100).round(2)
+                price_df = price_df[price_df['preco_anterior'].notna()]
+                
+                if len(price_df) > 0:
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        # Biggest price increases
+                        maiores_altas = price_df.nlargest(10, 'variacao_preco')[['item', 'modelo', 'fornecedor', 'variacao_preco', 'preco_atual']]
+                        if len(maiores_altas) > 0:
+                            st.markdown("**🔴 Maiores Altas de Preço:**")
+                            for _, row in maiores_altas.iterrows():
+                                st.write(f"• **{row['item']}** - {row['modelo'][:30]}...")
+                                st.write(f"  ↗️ +{row['variacao_preco']:.1f}% | R$ {row['preco_atual']:.2f} | {row['fornecedor']}")
+                    
+                    with col2:
+                        # Biggest price decreases
+                        maiores_baixas = price_df.nsmallest(10, 'variacao_preco')[['item', 'modelo', 'fornecedor', 'variacao_preco', 'preco_atual']]
+                        if len(maiores_baixas) > 0:
+                            st.markdown("**🟢 Maiores Baixas de Preço:**")
+                            for _, row in maiores_baixas.iterrows():
+                                st.write(f"• **{row['item']}** - {row['modelo'][:30]}...")
+                                st.write(f"  ↘️ {row['variacao_preco']:.1f}% | R$ {row['preco_atual']:.2f} | {row['fornecedor']}")
+                    
+                    # Price volatility analysis
+                    st.markdown("**📊 Análise de Volatilidade de Preços:**")
+                    volatility_stats = price_df.groupby('item').agg({
+                        'variacao_preco': ['std', 'mean', 'count'],
+                        'preco_atual': 'last',
+                        'modelo': 'last',
+                        'fornecedor': 'last'
+                    }).round(2)
+                    
+                    volatility_stats.columns = ['volatilidade', 'variacao_media', 'num_mudancas', 'preco_atual', 'modelo', 'fornecedor']
+                    volatility_stats = volatility_stats.sort_values('volatilidade', ascending=False).head(15)
+                    
+                    if len(volatility_stats) > 0:
+                        for item, row in volatility_stats.iterrows():
+                            if row['num_mudancas'] >= 2:  # Only show items with at least 2 price changes
+                                st.write(f"**{item}** - Volatilidade: {row['volatilidade']:.1f}% | Variação Média: {row['variacao_media']:.1f}% | Mudanças: {int(row['num_mudancas'])}")
+                
+                else:
+                    st.info("💡 Não foram encontradas mudanças de preço nos dados históricos")
+            else:
+                st.info("💡 Nenhum dado de preço histórico encontrado")
+                
+        except Exception as e:
+            st.error(f"❌ Erro ao analisar preços históricos: {str(e)}")
+        
+        # Stock Performance Analysis
+        st.subheader("📦 Performance de Estoque")
+        
+        try:
+            cursor.execute("""
+                SELECT 
+                    p.item,
+                    p.modelo,
+                    p.fornecedor,
+                    p.qtd_atual,
+                    p.vendas_medias,
+                    p.data_upload,
+                    a.estoque as estoque_analytics,
+                    a.consumo_6_meses,
+                    a.media_6_meses,
+                    a.estoque_cobertura
+                FROM ESTOQUE.PRODUTOS p
+                LEFT JOIN ESTOQUE.ANALYTICS_DATA a ON p.item = a.produto
+                WHERE p.qtd_atual IS NOT NULL 
+                ORDER BY p.data_upload DESC
+                LIMIT 100
+            """)
+            
+            stock_data = cursor.fetchall()
+            
+            if stock_data:
+                stock_df = pd.DataFrame(stock_data, columns=[
+                    'item', 'modelo', 'fornecedor', 'qtd_atual', 'vendas_medias', 
+                    'data_upload', 'estoque_analytics', 'consumo_6m', 'media_6m', 'cobertura'
+                ])
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Critical stock levels
+                    stock_critico = stock_df[
+                        (stock_df['qtd_atual'] > 0) & 
+                        (stock_df['vendas_medias'] > 0) & 
+                        ((stock_df['qtd_atual'] / stock_df['vendas_medias']) < 2)
+                    ].sort_values('qtd_atual').head(10)
+                    
+                    if len(stock_critico) > 0:
+                        st.markdown("**🚨 Estoque Crítico (< 2 meses):**")
+                        for _, row in stock_critico.iterrows():
+                            meses_restantes = row['qtd_atual'] / row['vendas_medias'] if row['vendas_medias'] > 0 else 0
+                            st.write(f"• **{row['item']}** - {meses_restantes:.1f} meses restantes")
+                            st.write(f"  📦 Estoque: {int(row['qtd_atual'])} | Vendas/mês: {row['vendas_medias']:.1f}")
+                
+                with col2:
+                    # Excess stock
+                    stock_excessivo = stock_df[
+                        (stock_df['qtd_atual'] > 0) & 
+                        (stock_df['vendas_medias'] > 0) & 
+                        ((stock_df['qtd_atual'] / stock_df['vendas_medias']) > 12)
+                    ].sort_values('qtd_atual', ascending=False).head(10)
+                    
+                    if len(stock_excessivo) > 0:
+                        st.markdown("**📊 Estoque Excessivo (> 12 meses):**")
+                        for _, row in stock_excessivo.iterrows():
+                            meses_estoque = row['qtd_atual'] / row['vendas_medias'] if row['vendas_medias'] > 0 else 0
+                            st.write(f"• **{row['item']}** - {meses_estoque:.1f} meses de estoque")
+                            st.write(f"  📦 Estoque: {int(row['qtd_atual'])} | Vendas/mês: {row['vendas_medias']:.1f}")
+                
+        except Exception as e:
+            st.error(f"❌ Erro ao analisar performance de estoque: {str(e)}")
+        
+        # Supplier Performance
+        st.subheader("🏭 Performance de Fornecedores")
+        
+        try:
+            cursor.execute("""
+                SELECT 
+                    fornecedor,
+                    COUNT(*) as total_produtos,
+                    AVG(preco_unitario) as preco_medio,
+                    AVG(moq) as moq_medio,
+                    COUNT(DISTINCT DATE(data_upload)) as uploads_count
+                FROM ESTOQUE.PRODUTOS 
+                WHERE fornecedor IS NOT NULL AND fornecedor != ''
+                GROUP BY fornecedor
+                HAVING COUNT(*) >= 3
+                ORDER BY total_produtos DESC
+                LIMIT 15
+            """)
+            
+            supplier_data = cursor.fetchall()
+            
+            if supplier_data:
+                supplier_df = pd.DataFrame(supplier_data, columns=[
+                    'fornecedor', 'total_produtos', 'preco_medio', 'moq_medio', 'uploads'
+                ])
+                
+                st.markdown("**📊 Top Fornecedores por Volume:**")
+                
+                for _, row in supplier_df.iterrows():
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        st.metric(f"🏭 {row['fornecedor'][:20]}", f"{int(row['total_produtos'])} produtos")
+                    with col2:
+                        st.metric("💰 Preço Médio", f"R$ {row['preco_medio']:.2f}" if row['preco_medio'] else "N/A")
+                    with col3:
+                        st.metric("📦 MOQ Médio", f"{int(row['moq_medio'])}" if row['moq_medio'] else "N/A")
+                    with col4:
+                        st.metric("📅 Updates", f"{int(row['uploads'])}")
+                    
+                    st.markdown("---")
+                    
+        except Exception as e:
+            st.error(f"❌ Erro ao analisar fornecedores: {str(e)}")
+        
+        # Upload Activity Timeline
+        st.subheader("📅 Atividade de Uploads")
+        
+        try:
+            cursor.execute("""
+                SELECT 
+                    DATE(data_upload) as upload_date,
+                    COUNT(*) as records_count,
+                    'Timeline' as source
+                FROM ESTOQUE.PRODUTOS 
+                WHERE data_upload IS NOT NULL
+                GROUP BY DATE(data_upload)
+                
+                UNION ALL
+                
+                SELECT 
+                    DATE(data_upload) as upload_date,
+                    COUNT(*) as records_count,
+                    'Analytics' as source
+                FROM ESTOQUE.ANALYTICS_DATA 
+                WHERE data_upload IS NOT NULL
+                GROUP BY DATE(data_upload)
+                
+                ORDER BY upload_date DESC
+                LIMIT 30
+            """)
+            
+            upload_activity = cursor.fetchall()
+            
+            if upload_activity:
+                activity_df = pd.DataFrame(upload_activity, columns=['data', 'registros', 'fonte'])
+                
+                st.markdown("**📊 Histórico de Uploads Recentes:**")
+                
+                for _, row in activity_df.iterrows():
+                    icon = "📅" if row['fonte'] == 'Timeline' else "📊"
+                    st.write(f"• {icon} **{row['data'].strftime('%d/%m/%Y')}** - {row['registros']} registros ({row['fonte']})")
+                    
+        except Exception as e:            
+            st.error(f"❌ Erro ao carregar atividade de uploads: {str(e)}")
+        
+        # Data Quality Assessment
+        st.subheader("✅ Qualidade dos Dados")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("**📋 Timeline Data Quality:**")
+            try:
+                cursor.execute("""
+                    SELECT 
+                        COUNT(*) as total,
+                        COUNT(CASE WHEN item IS NOT NULL AND item != '' THEN 1 END) as items_valid,
+                        COUNT(CASE WHEN preco_unitario > 0 THEN 1 END) as precos_valid,
+                        COUNT(CASE WHEN fornecedor IS NOT NULL AND fornecedor != '' THEN 1 END) as fornecedor_valid,
+                        COUNT(CASE WHEN moq > 0 THEN 1 END) as moq_valid
+                    FROM ESTOQUE.PRODUTOS
+                """)
+                
+                quality_data = cursor.fetchone()
+                if quality_data and quality_data[0] > 0:
+                    total = quality_data[0]
+                    st.write(f"• **Items válidos:** {quality_data[1]}/{total} ({quality_data[1]/total*100:.1f}%)")
+                    st.write(f"• **Preços válidos:** {quality_data[2]}/{total} ({quality_data[2]/total*100:.1f}%)")
+                    st.write(f"• **Fornecedores válidos:** {quality_data[3]}/{total} ({quality_data[3]/total*100:.1f}%)")
+                    st.write(f"• **MOQs válidos:** {quality_data[4]}/{total} ({quality_data[4]/total*100:.1f}%)")
+            except Exception as e:
+                st.write(f"❌ Erro: {str(e)}")
+        
+        with col2:
+            st.markdown("**📊 Analytics Data Quality:**")
+            try:
+                cursor.execute("""
+                    SELECT 
+                        COUNT(*) as total,
+                        COUNT(CASE WHEN produto IS NOT NULL AND produto != '' THEN 1 END) as produtos_valid,
+                        COUNT(CASE WHEN estoque >= 0 THEN 1 END) as estoque_valid,
+                        COUNT(CASE WHEN consumo_6_meses > 0 THEN 1 END) as consumo_valid
+                    FROM ESTOQUE.ANALYTICS_DATA
+                """)
+                
+                analytics_quality = cursor.fetchone()
+                if analytics_quality and analytics_quality[0] > 0:
+                    total = analytics_quality[0]
+                    if total > 0:
+                        st.write(f"• **Produtos válidos:** {analytics_quality[1]}/{total} ({analytics_quality[1]/total*100:.1f}%)")
+                        st.write(f"• **Estoque válido:** {analytics_quality[2]}/{total} ({analytics_quality[2]/total*100:.1f}%)")
+                        st.write(f"• **Consumo válido:** {analytics_quality[3]}/{total} ({analytics_quality[3]/total*100:.1f}%)")
+                    else:
+                        st.write("💡 Nenhum dado de analytics encontrado")
+            except Exception as e:
+                st.write(f"❌ Erro: {str(e)}")
+        
+        # Recommendations
+        st.subheader("💡 Recomendações")
+        
+        recommendations = []
+        
+        # Check upload frequency
+        try:
+            cursor.execute("""
+                SELECT DATEDIFF(day, MAX(data_upload), CURRENT_DATE) as days_since_last
+                FROM ESTOQUE.PRODUTOS
+            """)
+            days_since = cursor.fetchone()
+            if days_since and days_since[0] > 7:
+                recommendations.append(f"🔄 Último upload foi há {days_since[0]} dias. Considere fazer uploads mais frequentes.")
+        except:
+            pass
+        
+        # Check for missing MOQs
+        try:
+            cursor.execute("""
+                SELECT COUNT(*) as total, 
+                       COUNT(CASE WHEN moq IS NULL OR moq = 0 THEN 1 END) as missing_moq
+                FROM ESTOQUE.PRODUTOS
+            """)
+            moq_check = cursor.fetchone()
+            if moq_check and moq_check[1] > 0:
+                recommendations.append(f"📦 {moq_check[1]} produtos sem MOQ definido. Complete esses dados para melhor análise.")
+        except:
+            pass
+        
+        # Check for price inconsistencies
+        try:
+            cursor.execute("""
+                SELECT COUNT(*) as items_sem_preco
+                FROM ESTOQUE.PRODUTOS 
+                WHERE preco_unitario IS NULL OR preco_unitario = 0
+            """)
+            price_check = cursor.fetchone()
+            if price_check and price_check[0] > 0:
+                recommendations.append(f"💰 {price_check[0]} produtos sem preço definido. Atualize os preços para análises completas.")
+        except:
+            pass
+        
+        if recommendations:
+            for rec in recommendations:
+                st.warning(rec)
+        else:
+            st.success("✅ Qualidade dos dados está boa! Continue com os uploads regulares.")
+    
+    except Exception as e:
+        st.error(f"❌ Erro geral na análise histórica: {str(e)}")
+    
+    finally:
+        cursor.close()
+        conn.close()
 
  
