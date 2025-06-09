@@ -154,7 +154,7 @@ def upload_excel_to_snowflake(df, arquivo_nome, usuario="minipa"):
         cursor = conn.cursor()
         
         # Clear existing data (for this demo - in production you might want versioning)
-        cursor.execute("DELETE FROM ESTOQUE.PRODUTOS WHERE usuario = %s", (usuario,))
+        cursor.execute("DELETE FROM ESTOQUE.PRODUTOS WHERE usuario = ?", (usuario,))
         
         # Insert new data
         for idx, row in df.iterrows():
@@ -162,7 +162,7 @@ def upload_excel_to_snowflake(df, arquivo_nome, usuario="minipa"):
             INSERT INTO ESTOQUE.PRODUTOS 
             (item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
              in_transit, vendas_medias, cbm, moq, usuario)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 str(row.get('Item', '')),
                 str(row.get('Modelo', '')),
@@ -181,7 +181,7 @@ def upload_excel_to_snowflake(df, arquivo_nome, usuario="minipa"):
         cursor.execute("""
         INSERT INTO CONFIG.UPLOAD_LOG 
         (nome_arquivo, linhas_processadas, usuario, status)
-        VALUES (%s, %s, %s, %s)
+        VALUES (?, ?, ?, ?)
         """, (arquivo_nome, len(df), usuario, 'SUCCESS'))
         
         conn.commit()
@@ -209,7 +209,7 @@ def load_data_from_snowflake(usuario="minipa"):
                in_transit as "In_Transit", vendas_medias as "Vendas_Medias",
                cbm as CBM, moq as MOQ, data_upload
         FROM ESTOQUE.PRODUTOS 
-        WHERE usuario = %s
+        WHERE usuario = ?
         ORDER BY data_upload DESC
         """
         
