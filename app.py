@@ -106,136 +106,93 @@ def show_data_upload():
                 
                 # Show preview with selected options
                 try:
-                    if file_type == "Análise de Estoque":
-                        # Try to read as Analytics file (Export sheet)
-                        try:
-                            df_preview = pd.read_excel(
-                                uploaded_file, 
-                                sheet_name='Export' if 'Export' in pd.ExcelFile(uploaded_file).sheet_names else selected_sheet,
-                                nrows=10
-                            )
-                            st.info("📊 Detectado como arquivo de Análise de Estoque")
-                        except:
-                            df_preview = pd.read_excel(
-                                uploaded_file, 
-                                sheet_name=selected_sheet, 
-                                header=selected_header,
-                                nrows=10
-                            )
+                    # Use the new improved Excel analysis function
+                    df_full, detected_sheet, detected_header = analyze_and_process_excel(uploaded_file, file_type)
+                    
+                    if df_full is not None:
+                        st.subheader("👀 Dados Processados")
+                        st.dataframe(df_full.head(10))
+                        
+                        # Show data quality info
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            total_rows = len(df_full)
+                            st.metric("📊 Linhas processadas", total_rows)
+                        with col2:
+                            total_cols = len(df_full.columns)
+                            st.metric("📋 Colunas", total_cols)
+                        with col3:
+                            non_null = df_full.count().sum()
+                            st.metric("✅ Valores válidos", non_null)
+                        with col4:
+                            file_size = len(uploaded_file.getvalue()) / 1024
+                            st.metric("📁 Tamanho", f"{file_size:.1f} KB")
+                        
+                        # Upload button
+                        if st.button("💾 Salvar na Nuvem", key="save_main", type="primary"):
+                            with st.spinner("📤 Processando e enviando dados para Snowflake..."):
+                                try:
+                                    # Upload to Snowflake with improved function
+                                    success = upload_excel_to_snowflake(df_full, uploaded_file.name, "minipa")
+                                    
+                                    if success:
+                                        st.success("🎉 Dados salvos com sucesso na nuvem!")
+                                        st.balloons()
+                                        
+                                        # Show detailed summary
+                                        st.info(f"""
+                                        📈 **Resumo do upload:**
+                                        - 📁 Arquivo: {uploaded_file.name}
+                                        - 📋 Planilha: {detected_sheet}
+                                        - 📊 Linha do cabeçalho: {detected_header + 1}
+                                        - 📈 Linhas processadas: {len(df_full)}
+                                        - 📅 Histórico mantido: ✅
+                                        - 🕒 Data: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}
+                                        """)
+                                        
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ Erro ao salvar dados na nuvem")
+                                        
+                                except Exception as e:
+                                    st.error(f"❌ Erro ao processar arquivo: {str(e)}")
+                                    st.info("💡 Tente:")
+                                    st.write("- Verificar se o arquivo não está corrompido")
+                                    st.write("- Testar com um arquivo menor primeiro")
+                                    st.write("- Verificar a conexão com Snowflake")
                     else:
-                        # Standard reading
-                        df_preview = pd.read_excel(
-                            uploaded_file, 
-                            sheet_name=selected_sheet, 
-                            header=selected_header,
-                            nrows=10
+                        st.error("❌ Não foi possível processar o arquivo Excel")
+                        
+                        # Fallback: show raw data for manual inspection
+                        st.subheader("🔍 Inspeção Manual")
+                        selected_sheet = st.selectbox(
+                            "📋 Escolha a planilha:",
+                            options=pd.ExcelFile(uploaded_file).sheet_names
                         )
-                    
-                    st.subheader("👀 Prévia dos dados")
-                    st.dataframe(df_preview)
-                    
-                    # Show data quality info
-                    col1, col2, col3, col4 = st.columns(4)
-                    with col1:
-                        total_rows = len(df_preview)
-                        st.metric("📊 Linhas (prévia)", total_rows)
-                    with col2:
-                        total_cols = len(df_preview.columns)
-                        st.metric("📋 Colunas", total_cols)
-                    with col3:
-                        non_null = df_preview.count().sum()
-                        st.metric("✅ Valores válidos", non_null)
-                    with col4:
-                        file_size = len(uploaded_file.getvalue()) / 1024
-                        st.metric("📁 Tamanho", f"{file_size:.1f} KB")
-                    
-                    # Upload button
-                    if st.button("💾 Salvar na Nuvem", key="save_main", type="primary"):
-                        with st.spinner("📤 Processando e enviando dados para Snowflake..."):
+                        selected_header = st.number_input(
+                            "📍 Linha do cabeçalho:",
+                            min_value=0,
+                            max_value=20,
+                            value=9,
+                            help="Linha onde estão os nomes das colunas (0-indexed)"
+                        )
+                        
+                        if st.button("🔄 Tentar novamente com configurações manuais"):
                             try:
-                                # Read full dataset based on file type
-                                if file_type == "Análise de Estoque":
-                                    try:
-                                        df_full = pd.read_excel(
-                                            uploaded_file,
-                                            sheet_name='Export'
-                                        )
-                                        st.info("📊 Processando como arquivo de Análise de Estoque")
-                                        
-                                        # Clean analytics data
-                                        df_full = df_full.dropna(subset=['Produto'])
-                                        df_full = df_full[df_full['Produto'] != 'nan']
-                                        df_full = df_full[~df_full['Produto'].str.contains('Filtros aplicados', na=False)]
-                                        
-                                        # Convert numeric columns for analytics
-                                        numeric_columns = ['Estoque', 'Média 6 Meses', 'Estoque Cobertura', 'Qtde Tot Compras']
-                                        for col in numeric_columns:
-                                            if col in df_full.columns:
-                                                df_full[col] = pd.to_numeric(df_full[col], errors='coerce').fillna(0)
-                                        
-                                    except:
-                                        df_full = pd.read_excel(
-                                            uploaded_file,
-                                            sheet_name=selected_sheet,
-                                            header=selected_header
-                                        )
-                                else:
-                                    # Timeline/MOQ or other files
-                                    df_full = pd.read_excel(
-                                        uploaded_file,
-                                        sheet_name=selected_sheet,
-                                        header=selected_header
-                                    )
-                                    
-                                    # Apply original Timeline processing if detected
-                                    if file_type == "Timeline/MOQ" or any(col in str(df_full.columns) for col in ['Item', 'Fornecedor', 'MOQ', 'QTD']):
-                                        st.info("📅 Processando como arquivo de Timeline/MOQ")
-                                        
-                                        # Clean and process like original working code
-                                        df_full = df_full.dropna(subset=['Item'] if 'Item' in df_full.columns else [df_full.columns[0]])
-                                        
-                                        # Convert numeric columns
-                                        numeric_cols = []
-                                        for col in df_full.columns:
-                                            col_str = str(col)
-                                            if any(word in col_str for word in ['QTD', 'Preço', 'Estoque', 'Transit', 'Sales', 'CBM', 'MOQ']):
-                                                numeric_cols.append(col)
-                                        
-                                        for col in numeric_cols:
-                                            df_full[col] = pd.to_numeric(df_full[col], errors='coerce').fillna(0)
-                                
-                                # Upload to Snowflake with improved function
-                                success = upload_excel_to_snowflake(df_full, uploaded_file.name, "minipa")
-                                
-                                if success:
-                                    st.success("🎉 Dados salvos com sucesso na nuvem!")
-                                    st.balloons()
-                                    
-                                    # Show detailed summary
-                                    st.info(f"""
-                                    📈 **Resumo do upload:**
-                                    - 📁 Arquivo: {uploaded_file.name}
-                                    - 📋 Planilha: {selected_sheet}
-                                    - 📊 Tipo: {file_type}
-                                    - 📈 Linhas processadas: {len(df_full)}
-                                    - 📅 Histórico mantido: ✅
-                                    - 🕒 Data: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}
-                                    """)
-                                    
-                                    st.rerun()
-                                else:
-                                    st.error("❌ Erro ao salvar dados na nuvem")
-                                    
+                                df_manual = pd.read_excel(
+                                    uploaded_file, 
+                                    sheet_name=selected_sheet, 
+                                    header=selected_header
+                                )
+                                df_manual = df_manual.dropna(how='all')
+                                st.success("✅ Dados carregados manualmente!")
+                                st.dataframe(df_manual.head())
                             except Exception as e:
-                                st.error(f"❌ Erro ao processar arquivo: {str(e)}")
-                                st.info("💡 Tente:")
-                                st.write("- Ajustar a linha do cabeçalho")
-                                st.write("- Escolher outra planilha")
-                                st.write("- Verificar se o arquivo não está corrompido")
+                                st.error(f"❌ Erro: {str(e)}")
                     
                 except Exception as e:
-                    st.error(f"❌ Erro ao ler arquivo: {str(e)}")
-                    st.info("💡 Tente ajustar a linha do cabeçalho ou escolher outra planilha")
+                    st.error(f"❌ Erro ao analisar arquivo: {str(e)}")
+                    st.info("💡 Tente com um arquivo Excel válido")
                     
             else:
                 st.warning("⚠️ Não foi possível detectar automaticamente a estrutura do arquivo")
@@ -243,17 +200,26 @@ def show_data_upload():
         else:
             st.warning("⚠️ Snowflake não configurado. Dados serão usados apenas localmente.")
     
-    with tab2:
-        st.markdown("**Para Análise de Estoque Detalhada**")
-        uploaded_file_analytics = st.file_uploader(
-            "Arquivo Excel para Analytics",
-            type=['xlsx'],
-            help="Deve conter planilha 'Export' com: Produto, Estoque, Média 6 Meses, Estoque Cobertura",
-            key="analytics_upload"
-        )
+    # Additional help section
+    with st.expander("💡 Dicas para Upload"):
+        st.markdown("""
+        **Formato de arquivo suportado:**
+        - ✅ Arquivos Excel (.xlsx, .xls)
+        - ✅ Headers a partir da linha 9 ou 10
+        - ✅ Colunas: Item, Fornecedor, QTD, Modelo, Preço FOB, Estoque Total, In Transit, Avg Sales, CBM, MOQ
         
-        if uploaded_file_analytics is not None:
-            st.info("📊 Use este arquivo na página 'Análise de Estoque' para visualizar relatórios detalhados")
+        **Para melhores resultados:**
+        - 📋 Certifique-se que os dados não tenham linhas vazias no topo
+        - 📊 Números devem estar formatados como números (não texto)
+        - 🔤 Nomes de produtos devem estar na coluna 'Modelo' ou 'Item'
+        """)
+    
+    # Show cloud data status
+    if snowflake_available:
+        st.divider()
+        st.subheader("☁️ Status da Nuvem")
+        if st.button("🔄 Recarregar dados da nuvem", use_container_width=True):
+            st.rerun()
 
 def show_dashboard():
     st.title("🏢 DASHBOARD CORPORATIVO")
@@ -1630,6 +1596,159 @@ def show_snowflake():
     """Show Snowflake integration page"""
     st.info("❄️ Página do Snowflake carregada! Configure suas credenciais no arquivo .streamlit/secrets.toml")
     st.markdown("Consulte a documentação na aba Snowflake para mais detalhes sobre a integração.")
+
+def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
+    """
+    Advanced Excel analysis and processing based on actual user table structure
+    """
+    try:
+        # Read the Excel file to understand structure
+        xl_file = pd.ExcelFile(uploaded_file)
+        sheets = xl_file.sheet_names
+        
+        st.info(f"📋 Planilhas encontradas: {sheets}")
+        
+        # Try different sheets and header positions
+        best_sheet = None
+        best_header_row = 0
+        best_df = None
+        
+        # Priority order for sheets
+        sheet_priority = []
+        for sheet in sheets:
+            sheet_lower = sheet.lower()
+            if 'export' in sheet_lower:
+                sheet_priority.insert(0, sheet)  # Export first
+            elif any(word in sheet_lower for word in ['data', 'dados', 'planilha', 'sheet']):
+                sheet_priority.append(sheet)
+            else:
+                sheet_priority.append(sheet)
+        
+        # Test different header rows (based on user's table which seems to start around row 9-10)
+        header_candidates = [8, 9, 10, 7, 6, 11, 0, 1, 2]
+        
+        for sheet in sheet_priority[:3]:  # Check first 3 most promising sheets
+            for header_row in header_candidates:
+                try:
+                    # Read sample to test
+                    df_test = pd.read_excel(uploaded_file, sheet_name=sheet, header=header_row, nrows=10)
+                    
+                    if len(df_test) == 0:
+                        continue
+                    
+                    # Look for expected column patterns from user's table
+                    columns = [str(col).strip() for col in df_test.columns]
+                    
+                    # Score this attempt based on expected columns
+                    score = 0
+                    expected_patterns = [
+                        'item', 'fornecedor', 'qtd', 'modelo', 'preço', 'estoque', 
+                        'transit', 'sales', 'avg', 'cbm', 'moq', 'fob'
+                    ]
+                    
+                    for col in columns:
+                        col_lower = col.lower()
+                        for pattern in expected_patterns:
+                            if pattern in col_lower:
+                                score += 1
+                                break
+                    
+                    # Check if we have actual data (not all empty)
+                    data_rows = 0
+                    for _, row in df_test.iterrows():
+                        if row.count() >= 3:  # At least 3 non-null values
+                            data_rows += 1
+                    
+                    # This is a good candidate if:
+                    # 1. We found expected column patterns
+                    # 2. We have actual data
+                    # 3. Columns are not mostly "Unnamed" or None
+                    unnamed_count = sum(1 for col in columns if 'unnamed' in col.lower() or col == 'None')
+                    
+                    if score >= 3 and data_rows >= 2 and unnamed_count < len(columns) * 0.5:
+                        best_sheet = sheet
+                        best_header_row = header_row
+                        best_df = df_test
+                        st.success(f"✅ Melhor estrutura encontrada: Planilha '{sheet}', Linha {header_row + 1}")
+                        st.info(f"🎯 Score: {score} | Colunas válidas: {len(columns) - unnamed_count}")
+                        break
+                        
+                except Exception:
+                    continue
+            
+            if best_df is not None:
+                break
+        
+        if best_df is None:
+            st.error("❌ Não foi possível detectar a estrutura do Excel automaticamente")
+            return None, None, None
+        
+        # Now read the full dataset with the best parameters
+        df_full = pd.read_excel(uploaded_file, sheet_name=best_sheet, header=best_header_row)
+        
+        # Clean the dataframe
+        df_full = df_full.dropna(how='all')  # Remove completely empty rows
+        
+        # Show what we found
+        st.success(f"📊 Dados carregados: {len(df_full)} linhas de '{best_sheet}'")
+        
+        # Display column mapping
+        with st.expander("🔍 Estrutura detectada"):
+            st.write("**Colunas encontradas:**")
+            for i, col in enumerate(df_full.columns):
+                sample_val = df_full[col].dropna().iloc[0] if len(df_full[col].dropna()) > 0 else "Vazio"
+                st.write(f"{i+1}. `{col}` - Exemplo: {sample_val}")
+        
+        # Smart column mapping based on user's actual table
+        column_mapping = {}
+        
+        for col in df_full.columns:
+            col_str = str(col).strip().lower()
+            
+            # Map to standardized names based on content patterns
+            if any(word in col_str for word in ['item', 'codigo', 'produto']):
+                column_mapping[col] = 'Item'
+            elif any(word in col_str for word in ['fornecedor', 'supplier', 'vendor']):
+                column_mapping[col] = 'Fornecedor'
+            elif 'qtd' in col_str and 'total' not in col_str:
+                column_mapping[col] = 'QTD'
+            elif any(word in col_str for word in ['modelo', 'model', 'description']):
+                column_mapping[col] = 'Modelo'
+            elif 'preço' in col_str and 'unitario' in col_str:
+                column_mapping[col] = 'Preco_Unitario'
+            elif 'estoque' in col_str and 'total' in col_str:
+                column_mapping[col] = 'Estoque_Total'
+            elif any(word in col_str for word in ['transit', 'transito']):
+                column_mapping[col] = 'In_Transit'
+            elif any(word in col_str for word in ['avg', 'sales', 'vendas', 'media']):
+                column_mapping[col] = 'Vendas_Medias'
+            elif 'cbm' in col_str:
+                column_mapping[col] = 'CBM'
+            elif 'moq' in col_str:
+                column_mapping[col] = 'MOQ'
+        
+        # Apply the mapping
+        df_mapped = df_full.rename(columns=column_mapping)
+        
+        # Show mapping results
+        if column_mapping:
+            st.info("🔄 Mapeamento de colunas aplicado:")
+            for old, new in column_mapping.items():
+                st.write(f"• `{old}` → `{new}`")
+        
+        # Convert numeric columns safely
+        numeric_columns = ['QTD', 'Preco_Unitario', 'Estoque_Total', 'In_Transit', 'Vendas_Medias', 'CBM', 'MOQ']
+        
+        for col in numeric_columns:
+            if col in df_mapped.columns:
+                # Convert to numeric, replacing errors with 0
+                df_mapped[col] = pd.to_numeric(df_mapped[col], errors='coerce').fillna(0)
+        
+        return df_mapped, best_sheet, best_header_row
+        
+    except Exception as e:
+        st.error(f"❌ Erro ao processar Excel: {str(e)}")
+        return None, None, None
 
 # Main app logic
 # Show user info in sidebar
