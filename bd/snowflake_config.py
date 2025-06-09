@@ -27,12 +27,22 @@ def get_snowflake_connection():
     Returns connection object or None if failed
     """
     try:
+        # Debug: Check if secrets exist at all
+        st.write("🔍 Debug: Checking secrets...")
+        st.write(f"Available secrets: {list(st.secrets.keys()) if hasattr(st, 'secrets') else 'No secrets object'}")
+        
         # Check if secrets are configured
-        if "snowflake" not in st.secrets:
+        if not hasattr(st, 'secrets') or "snowflake" not in st.secrets:
             st.error("❄️ Snowflake não configurado. Configure em .streamlit/secrets.toml")
+            st.info("💡 Verifique se o arquivo .streamlit/secrets.toml está configurado corretamente.")
             return None
             
+        # Debug: Show what snowflake secrets we have
+        snowflake_keys = list(st.secrets.snowflake.keys()) if "snowflake" in st.secrets else []
+        st.write(f"Snowflake config keys: {snowflake_keys}")
+            
         # Create connection
+        st.info("🔄 Tentando conectar ao Snowflake...")
         conn = snowflake.connector.connect(
             account=st.secrets.snowflake.account,
             user=st.secrets.snowflake.user,
@@ -42,9 +52,11 @@ def get_snowflake_connection():
             database=st.secrets.snowflake.database,
             schema=st.secrets.snowflake.schema
         )
+        st.success("✅ Conexão estabelecida!")
         return conn
     except Exception as e:
         st.error(f"❄️ Erro ao conectar com Snowflake: {str(e)}")
+        st.info("💡 Verifique se o arquivo .streamlit/secrets.toml está configurado corretamente.")
         return None
 
 def get_snowpark_session():
