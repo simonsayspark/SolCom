@@ -296,7 +296,7 @@ def show_dashboard():
 
 def show_timeline():
     st.title("📅 TIMELINE INTERATIVA DE COMPRAS")
-st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
+    st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
 
     # Try to load data from Snowflake first
     try:
@@ -826,7 +826,7 @@ def show_announcements():
         
         if filtered_announcements:
             # Estatísticas
-        col1, col2, col3, col4 = st.columns(4)
+            col1, col2, col3, col4 = st.columns(4)
             
             with col1:
                 total = len(filtered_announcements)
@@ -1196,7 +1196,7 @@ def show_executive_summary(df, produtos_novos, produtos_existentes):
         if len(produtos_existentes) > 0:
             criticos = len(produtos_existentes[produtos_existentes['Estoque Cobertura'] <= 1])
             st.metric("🚨 Produtos Críticos", criticos)
-else:
+        else:
             st.metric("🚨 Produtos Críticos", 0)
     
     if len(produtos_existentes) > 0:
