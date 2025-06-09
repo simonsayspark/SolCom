@@ -386,6 +386,27 @@ def load_data_with_history(usuario="minipa", limit_days=30):
         return None
         
     try:
+        # First, check if the table exists and has data
+        cursor = conn.cursor()
+        
+        # Simple check if table exists
+        try:
+            cursor.execute("SELECT COUNT(*) FROM ESTOQUE.PRODUTOS WHERE usuario = %s", [usuario])
+            total_records = cursor.fetchone()[0]
+            
+            if total_records == 0:
+                st.info("💡 Nenhum dado encontrado na tabela. Faça um upload primeiro.")
+                cursor.close()
+                conn.close()
+                return None
+                
+        except Exception as table_error:
+            st.warning(f"⚠️ Tabela pode não existir ainda: {str(table_error)}")
+            cursor.close()
+            conn.close()
+            return None
+        
+        # If we have data, execute the full query
         query = """
         SELECT item, modelo, fornecedor, qtd_atual as QTD, 
                preco_unitario as "Preco_Unitario", estoque_total as "Estoque_Total",
@@ -398,19 +419,36 @@ def load_data_with_history(usuario="minipa", limit_days=30):
         ORDER BY data_upload DESC
         """
         
+        cursor.close()  # Close the cursor before pandas read_sql
+        
         df = pd.read_sql(query, conn, params=[usuario, -limit_days])
         conn.close()
         
-        # Show history summary
-        if not df.empty:
+        # Check if we got any data
+        if df.empty:
+            st.info(f"💡 Nenhum dado encontrado nos últimos {limit_days} dias.")
+            return None
+        
+        # Check if row_num column exists before trying to use it
+        if 'row_num' not in df.columns:
+            st.warning("⚠️ Estrutura de dados inesperada. Retornando dados sem filtro de histórico.")
+            return df
+        
+        # Show history summary and filter for latest records
+        try:
             latest_df = df[df['row_num'] == 1].drop('row_num', axis=1)
             history_count = len(df[df['row_num'] > 1])
             
             st.info(f"📅 Dados atuais: {len(latest_df)} produtos | 📈 Histórico: {history_count} registros")
             
             return latest_df
-        
-        return df
+            
+        except Exception as filter_error:
+            st.warning(f"⚠️ Erro ao filtrar histórico: {str(filter_error)}. Retornando todos os dados.")
+            # Remove row_num column if it exists and return all data
+            if 'row_num' in df.columns:
+                df = df.drop('row_num', axis=1)
+            return df
         
     except Exception as e:
         st.error(f"❄️ Erro ao carregar dados: {str(e)}")
