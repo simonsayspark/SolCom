@@ -86,4 +86,8 @@ temp/
 *.jpeg
 *.gif
 *.bmp
-*.svg 
+*.svg
+
+# Development folders
+RemoveLater/
+@RemoveLater/ 
