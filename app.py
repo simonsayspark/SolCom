@@ -138,7 +138,7 @@ def show_dashboard():
 
 def show_timeline():
     st.title("📅 TIMELINE INTERATIVA DE COMPRAS")
-st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
+    st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
 
     with st.expander("ℹ️ Como usar esta aplicação"):
         st.markdown("""
@@ -1365,7 +1365,7 @@ def show_urgent_contacts(produtos_existentes):
         
         contact_critical = criticos[['Produto', 'Quando_Acaba', 'Consumo_Mensal', 'Qtd_Comprar']].head(10)
         st.dataframe(contact_critical, use_container_width=True)
-else:
+    else:
         st.success("✅ Nenhum contato crítico necessário")
     
     # Summary
