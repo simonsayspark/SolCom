@@ -1526,9 +1526,262 @@ def show_urgent_contacts(produtos_existentes):
         st.info("💡 **DICA:** Prepare a lista de quantidades antes de ligar! Use a aba 'Lista de Compras' para ter os números exatos.")
 
 def show_snowflake():
-    """Show Snowflake integration page"""
-    st.info("❄️ Página do Snowflake carregada! Configure suas credenciais no arquivo .streamlit/secrets.toml")
-    st.markdown("Consulte a documentação na aba Snowflake para mais detalhes sobre a integração.")
+    """Enhanced Snowflake integration management page"""
+    st.title("❄️ SNOWFLAKE DATABASE")
+    st.markdown("### 🔧 Gerenciamento de Banco de Dados")
+    
+    # Try to import Snowflake functions
+    try:
+        from bd.snowflake_config import (
+            test_connection, create_tables, get_snowflake_connection,
+            load_data_with_history
+        )
+        snowflake_available = True
+    except ImportError as e:
+        st.error("❌ Snowflake não configurado!")
+        st.code(f"Erro: {str(e)}")
+        st.info("💡 Verifique se o arquivo bd/snowflake_config.py existe e as dependências estão instaladas")
+        snowflake_available = False
+        return
+    
+    # Connection status section
+    st.subheader("🔌 Status da Conexão")
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        if st.button("🔄 Testar Conexão", type="primary"):
+            with st.spinner("Testando conexão com Snowflake..."):
+                if test_connection():
+                    st.success("✅ Conectado com sucesso!")
+                    st.session_state.snowflake_connected = True
+                else:
+                    st.error("❌ Falha na conexão")
+                    st.session_state.snowflake_connected = False
+    
+    with col2:
+        connection_status = getattr(st.session_state, 'snowflake_connected', None)
+        if connection_status is True:
+            st.success("🟢 Online")
+        elif connection_status is False:
+            st.error("🔴 Offline")
+        else:
+            st.info("⚪ Não testado")
+    
+    # Configuration info
+    st.subheader("⚙️ Configuração")
+    
+    if hasattr(st, 'secrets') and "connections" in st.secrets and "snowflake" in st.secrets.connections:
+        config = st.secrets.connections.snowflake
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.info(f"""
+            **Configuração Atual:**
+            - 🏢 Account: `{config.account}`
+            - 👤 User: `{config.user}`
+            - 🗄️ Database: `{config.database}`
+            - 📋 Schema: `{config.schema}`
+            """)
+        
+        with col2:
+            st.info(f"""
+            **Recursos:**
+            - ⚡ Warehouse: `{config.warehouse}`
+            - 🔐 Role: `{config.role}`
+            - 🔒 Password: `***`
+            """)
+    else:
+        st.warning("⚠️ Configuração não encontrada!")
+        st.info("💡 Configure em `.streamlit/secrets.toml`")
+    
+    # Table management
+    st.subheader("🗃️ Gerenciamento de Tabelas")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("🔨 Criar Tabelas", use_container_width=True):
+            with st.spinner("Criando estrutura de tabelas..."):
+                if create_tables():
+                    st.success("✅ Tabelas criadas com sucesso!")
+                    st.balloons()
+                else:
+                    st.error("❌ Erro ao criar tabelas")
+    
+    with col2:
+        if st.button("📊 Verificar Dados", use_container_width=True):
+            try:
+                data = load_data_with_history()
+                if data is not None and len(data) > 0:
+                    st.success(f"✅ {len(data)} registros encontrados")
+                    with st.expander("👀 Prévia dos dados"):
+                        st.dataframe(data.head())
+                else:
+                    st.info("💡 Nenhum dado encontrado")
+            except Exception as e:
+                st.error(f"❌ Erro ao carregar dados: {str(e)}")
+    
+    with col3:
+        if st.button("🔍 Diagnóstico", use_container_width=True):
+            run_snowflake_diagnostics()
+    
+    # Database schema info
+    st.subheader("🏗️ Estrutura do Banco")
+    
+    with st.expander("📋 Esquema das Tabelas"):
+        st.markdown("""
+        **ESTOQUE.PRODUTOS** - Tabela principal de produtos
+        ```sql
+        - id (INTEGER) - Chave primária
+        - item (VARCHAR) - Código do item
+        - modelo (VARCHAR) - Descrição/modelo do produto
+        - fornecedor (VARCHAR) - Nome do fornecedor
+        - qtd_atual (INTEGER) - Quantidade em estoque
+        - preco_unitario (DECIMAL) - Preço FOB unitário
+        - estoque_total (INTEGER) - Estoque total disponível
+        - in_transit (INTEGER) - Quantidade em trânsito
+        - vendas_medias (DECIMAL) - Média de vendas
+        - cbm (DECIMAL) - Volume CBM
+        - moq (INTEGER) - Quantidade mínima de pedido
+        - data_upload (TIMESTAMP) - Data do upload
+        - usuario (VARCHAR) - Usuário que fez o upload
+        ```
+        
+        **CONFIG.UPLOAD_LOG** - Log de uploads
+        ```sql
+        - id (INTEGER) - Chave primária
+        - nome_arquivo (VARCHAR) - Nome do arquivo Excel
+        - linhas_processadas (INTEGER) - Número de linhas processadas
+        - data_upload (TIMESTAMP) - Data do upload
+        - usuario (VARCHAR) - Usuário
+        - status (VARCHAR) - Status do upload
+        ```
+        """)
+    
+    # Help section
+    st.subheader("💡 Ajuda")
+    
+    with st.expander("🚀 Como usar"):
+        st.markdown("""
+        **Passos para configurar:**
+        
+        1. **Configure credenciais** em `.streamlit/secrets.toml`:
+        ```toml
+        [connections.snowflake]
+        account = "sua_conta"
+        user = "seu_usuario"
+        password = "sua_senha"
+        role = "ACCOUNTADMIN"
+        warehouse = "COMPUTE_WH"
+        database = "COMPRAS_MINIPA"
+        schema = "ESTOQUE"
+        ```
+        
+        2. **Teste a conexão** clicando em "Testar Conexão"
+        
+        3. **Crie as tabelas** clicando em "Criar Tabelas"
+        
+        4. **Faça upload** na página "Upload de Dados"
+        
+        5. **Use os dados** em todas as funcionalidades do app
+        """)
+    
+    with st.expander("🔧 Solução de Problemas"):
+        st.markdown("""
+        **Erros comuns:**
+        
+        - **"Table does not exist"**: Clique em "Criar Tabelas"
+        - **"Connection failed"**: Verifique credenciais no secrets.toml
+        - **"Parameter formatting"**: Verifique se as tabelas foram criadas corretamente
+        - **"Schema not found"**: Verifique se o database COMPRAS_MINIPA existe no Snowflake
+        
+        **Se persistirem problemas:**
+        1. Verifique se você tem permissões ACCOUNTADMIN
+        2. Confirme que o database COMPRAS_MINIPA existe
+        3. Execute o diagnóstico para mais detalhes
+        """)
+
+def run_snowflake_diagnostics():
+    """Run comprehensive Snowflake diagnostics"""
+    st.subheader("🔍 Diagnóstico Completo")
+    
+    try:
+        from bd.snowflake_config import get_snowflake_connection
+        
+        conn = get_snowflake_connection()
+        if not conn:
+            st.error("❌ Não foi possível conectar ao Snowflake")
+            return
+        
+        cursor = conn.cursor()
+        
+        # Test 1: Basic connection
+        st.write("**1. Teste de Conexão Básica**")
+        try:
+            cursor.execute("SELECT CURRENT_VERSION()")
+            version = cursor.fetchone()[0]
+            st.success(f"✅ Conectado! Versão: {version}")
+        except Exception as e:
+            st.error(f"❌ Falha na conexão: {str(e)}")
+            return
+        
+        # Test 2: Database and schema access
+        st.write("**2. Acesso ao Database e Schema**")
+        try:
+            cursor.execute("SELECT CURRENT_DATABASE(), CURRENT_SCHEMA()")
+            db, schema = cursor.fetchone()
+            st.success(f"✅ Database: {db}, Schema: {schema}")
+        except Exception as e:
+            st.error(f"❌ Erro de acesso: {str(e)}")
+        
+        # Test 3: Table existence
+        st.write("**3. Verificação de Tabelas**")
+        try:
+            cursor.execute("SHOW TABLES")
+            tables = cursor.fetchall()
+            if tables:
+                st.success(f"✅ {len(tables)} tabelas encontradas:")
+                for table in tables:
+                    st.write(f"   - {table[1]}")  # Table name is in second column
+            else:
+                st.warning("⚠️ Nenhuma tabela encontrada")
+                st.info("💡 Clique em 'Criar Tabelas' para criar a estrutura")
+        except Exception as e:
+            st.error(f"❌ Erro ao listar tabelas: {str(e)}")
+        
+        # Test 4: Data count
+        st.write("**4. Contagem de Dados**")
+        try:
+            cursor.execute("SELECT COUNT(*) FROM ESTOQUE.PRODUTOS")
+            count = cursor.fetchone()[0]
+            st.success(f"✅ {count} registros na tabela PRODUTOS")
+        except Exception as e:
+            st.warning(f"⚠️ Erro ao contar dados: {str(e)}")
+            st.info("💡 Tabela PRODUTOS pode não existir ainda")
+        
+        # Test 5: Permissions
+        st.write("**5. Verificação de Permissões**")
+        try:
+            cursor.execute("SELECT CURRENT_ROLE()")
+            role = cursor.fetchone()[0]
+            st.success(f"✅ Role atual: {role}")
+            
+            # Try to create a test table
+            cursor.execute("CREATE OR REPLACE TABLE TEST_PERMISSIONS (id INTEGER)")
+            cursor.execute("DROP TABLE TEST_PERMISSIONS")
+            st.success("✅ Permissões de CREATE/DROP confirmadas")
+        except Exception as e:
+            st.error(f"❌ Problema de permissões: {str(e)}")
+        
+        cursor.close()
+        conn.close()
+        
+        st.success("🎉 Diagnóstico concluído!")
+        
+    except Exception as e:
+        st.error(f"❌ Erro no diagnóstico: {str(e)}")
 
 def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
     """

@@ -153,88 +153,143 @@ def upload_excel_to_snowflake(df, arquivo_nome, usuario="minipa"):
     try:
         cursor = conn.cursor()
         
-        # Don't clear existing data - keep for history
-        # Instead, add new data with timestamp
+        # First, ensure tables exist - create them if they don't
+        st.info("🔧 Verificando/criando tabelas...")
+        try:
+            # Check if table exists, if not create it
+            cursor.execute("SHOW TABLES LIKE 'PRODUTOS' IN SCHEMA ESTOQUE")
+            result = cursor.fetchall()
+            
+            if not result:
+                st.info("📋 Criando tabela PRODUTOS...")
+                cursor.execute("""
+                CREATE TABLE IF NOT EXISTS ESTOQUE.PRODUTOS (
+                    id INTEGER AUTOINCREMENT PRIMARY KEY,
+                    item VARCHAR(100),
+                    modelo VARCHAR(200),
+                    fornecedor VARCHAR(200),
+                    qtd_atual INTEGER,
+                    preco_unitario DECIMAL(10,2),
+                    estoque_total INTEGER,
+                    in_transit INTEGER,
+                    vendas_medias DECIMAL(10,2),
+                    cbm DECIMAL(8,4),
+                    moq INTEGER,
+                    data_upload TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP(),
+                    usuario VARCHAR(50)
+                )
+                """)
+                
+                # Also create the log table
+                cursor.execute("""
+                CREATE TABLE IF NOT EXISTS CONFIG.UPLOAD_LOG (
+                    id INTEGER AUTOINCREMENT PRIMARY KEY,
+                    nome_arquivo VARCHAR(255),
+                    tamanho_arquivo INTEGER,
+                    linhas_processadas INTEGER,
+                    data_upload TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP(),
+                    usuario VARCHAR(50),
+                    status VARCHAR(20)
+                )
+                """)
+                
+                conn.commit()
+                st.success("✅ Tabelas criadas com sucesso!")
+            
+        except Exception as table_error:
+            st.warning(f"⚠️ Erro ao verificar/criar tabelas: {str(table_error)}")
+            # Continue anyway - maybe tables exist but show command failed
         
         # Clean the dataframe - remove NaN and empty rows
         df_clean = df.copy()
-        
-        # Remove completely empty rows
         df_clean = df_clean.dropna(how='all')
         
         # Get actual column names from the dataframe
         available_columns = list(df_clean.columns)
         st.info(f"📊 Colunas encontradas: {available_columns}")
         
-        # Insert new data - adapting to whatever columns exist
-        for idx, row in df_clean.iterrows():
-            # Skip if all important values are NaN
-            if pd.isna(row).all():
-                continue
-                
-            # Prepare values safely
-            values = []
-            for col in available_columns[:10]:  # Limit to first 10 columns to match table
-                val = row[col] if col in row.index else ''
-                
-                # Handle different data types safely
-                if pd.isna(val) or val == '' or str(val).lower() == 'nan':
-                    if col in ['QTD', 'Estoque_Total', 'In_Transit', 'MOQ']:
-                        values.append(0)  # Numeric defaults to 0
-                    elif col in ['Preco_Unitario', 'Vendas_Medias', 'CBM']:
-                        values.append(0.0)  # Float defaults to 0.0
-                    else:
-                        values.append('')  # String defaults to empty
-                else:
-                    # Convert based on expected type
-                    if col in ['QTD', 'Estoque_Total', 'In_Transit', 'MOQ']:
-                        try:
-                            values.append(int(float(str(val))))
-                        except:
-                            values.append(0)
-                    elif col in ['Preco_Unitario', 'Vendas_Medias', 'CBM']:
-                        try:
-                            values.append(float(str(val)))
-                        except:
-                            values.append(0.0)
-                    else:
-                        values.append(str(val))
-            
-            # Ensure we have exactly 11 values (10 data + 1 user)
-            while len(values) < 10:
-                values.append('')
-            values.append(usuario)  # Add user at the end
-            
-            # Insert with proper parameter binding for Snowflake
-            # Ensure we have exactly 11 values for 11 placeholders
-            if len(values) != 11:
-                st.warning(f"⚠️ Linha {idx}: esperado 11 valores, encontrado {len(values)}")
-                continue
-                
-            cursor.execute("""
-            INSERT INTO ESTOQUE.PRODUTOS 
-            (item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
-             in_transit, vendas_medias, cbm, moq, usuario)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, values)
+        success_count = 0
         
-        # Log the upload
-        cursor.execute("""
-        INSERT INTO CONFIG.UPLOAD_LOG 
-        (nome_arquivo, linhas_processadas, usuario, status)
-        VALUES (%s, %s, %s, %s)
-        """, (arquivo_nome, len(df_clean), usuario, 'SUCCESS'))
+        # Insert new data row by row
+        for idx, row in df_clean.iterrows():
+            try:
+                # Extract values in the exact order needed for database
+                item = str(row.get('Item', '')) if 'Item' in row.index else ''
+                modelo = str(row.get('Modelo', '')) if 'Modelo' in row.index else ''
+                fornecedor = str(row.get('Fornecedor', '')) if 'Fornecedor' in row.index else ''
+                
+                # Handle numeric values safely
+                def safe_numeric(val, default=0):
+                    if pd.isna(val) or val == '' or str(val).lower() == 'nan':
+                        return default
+                    try:
+                        return int(float(str(val)))
+                    except:
+                        return default
+                
+                def safe_float(val, default=0.0):
+                    if pd.isna(val) or val == '' or str(val).lower() == 'nan':
+                        return default
+                    try:
+                        return float(val)
+                    except:
+                        return default
+                
+                qtd_atual = safe_numeric(row.get('QTD', 0))
+                preco_unitario = safe_float(row.get('Preco_Unitario', 0.0))
+                estoque_total = safe_numeric(row.get('Estoque_Total', 0)) 
+                in_transit = safe_numeric(row.get('In_Transit', 0))
+                vendas_medias = safe_float(row.get('Vendas_Medias', 0.0))
+                cbm = safe_float(row.get('CBM', 0.0))
+                moq = safe_numeric(row.get('MOQ', 0))
+                
+                # Skip completely empty rows
+                if not any([item, modelo, fornecedor]) and all(v == 0 for v in [qtd_atual, estoque_total]):
+                    continue
+                
+                # Insert with exactly 11 parameters
+                cursor.execute("""
+                INSERT INTO ESTOQUE.PRODUTOS 
+                (item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
+                 in_transit, vendas_medias, cbm, moq, usuario)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
+                      in_transit, vendas_medias, cbm, moq, usuario))
+                
+                success_count += 1
+                
+            except Exception as row_error:
+                st.warning(f"⚠️ Erro na linha {idx + 1}: {str(row_error)}")
+                continue
+        
+        # Log the upload (only if CONFIG schema and table exist)
+        try:
+            cursor.execute("""
+            INSERT INTO CONFIG.UPLOAD_LOG 
+            (nome_arquivo, linhas_processadas, usuario, status)
+            VALUES (%s, %s, %s, %s)
+            """, (arquivo_nome, success_count, usuario, 'SUCCESS'))
+        except:
+            # If log table doesn't exist, continue without logging
+            pass
         
         conn.commit()
         cursor.close()
         conn.close()
         
-        st.success(f"✅ {len(df_clean)} linhas processadas (sem NaN)")
+        st.success(f"✅ {success_count} linhas processadas com sucesso!")
         return True
         
     except Exception as e:
         st.error(f"❄️ Erro ao fazer upload: {str(e)}")
         st.error(f"📊 Detalhes do erro: {type(e).__name__}")
+        
+        # Show more helpful error message
+        error_str = str(e)
+        if "does not exist" in error_str:
+            st.error("🔧 **Problema**: As tabelas não existem no Snowflake")
+            st.info("💡 **Solução**: Vá para a página 'Snowflake' e clique em 'Criar Tabelas'")
+        
         return False
 
 def analyze_excel_structure(uploaded_file):
