@@ -153,44 +153,77 @@ def upload_excel_to_snowflake(df, arquivo_nome, usuario="minipa"):
     try:
         cursor = conn.cursor()
         
+        # Debug: Show dataframe info
+        st.info(f"🔍 Debug: DataFrame shape: {df.shape}")
+        st.info(f"🔍 Debug: Columns: {list(df.columns)}")
+        
+        # Check if required columns exist
+        required_columns = ['Item', 'Modelo', 'Fornecedor', 'QTD', 'Preco_Unitario', 
+                          'Estoque_Total', 'In_Transit', 'Vendas_Medias', 'CBM', 'MOQ']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        
+        if missing_columns:
+            st.error(f"❌ Colunas obrigatórias não encontradas: {missing_columns}")
+            st.info("💡 Certifique-se de que o arquivo Excel foi processado corretamente")
+            return False
+        
         # Clear existing data (for this demo - in production you might want versioning)
         cursor.execute("DELETE FROM ESTOQUE.PRODUTOS WHERE usuario = ?", (usuario,))
         
-        # Insert new data
+        # Insert new data with better error handling
+        success_count = 0
         for idx, row in df.iterrows():
-            cursor.execute("""
-            INSERT INTO ESTOQUE.PRODUTOS 
-            (item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
-             in_transit, vendas_medias, cbm, moq, usuario)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                str(row.get('Item', '')),
-                str(row.get('Modelo', '')),
-                str(row.get('Fornecedor', '')),
-                int(row.get('QTD', 0)),
-                float(row.get('Preco_Unitario', 0)),
-                int(row.get('Estoque_Total', 0)),
-                int(row.get('In_Transit', 0)),
-                float(row.get('Vendas_Medias', 0)),
-                float(row.get('CBM', 0)),
-                int(row.get('MOQ', 0)),
-                usuario
-            ))
+            try:
+                # Convert and validate data
+                item = str(row.get('Item', ''))[:50]  # Limit to 50 chars
+                modelo = str(row.get('Modelo', ''))[:100]  # Limit to 100 chars
+                fornecedor = str(row.get('Fornecedor', ''))[:100]  # Limit to 100 chars
+                
+                # Handle numeric conversions safely
+                qtd_atual = int(float(row.get('QTD', 0))) if pd.notna(row.get('QTD')) else 0
+                preco_unitario = float(row.get('Preco_Unitario', 0)) if pd.notna(row.get('Preco_Unitario')) else 0.0
+                estoque_total = int(float(row.get('Estoque_Total', 0))) if pd.notna(row.get('Estoque_Total')) else 0
+                in_transit = int(float(row.get('In_Transit', 0))) if pd.notna(row.get('In_Transit')) else 0
+                vendas_medias = float(row.get('Vendas_Medias', 0)) if pd.notna(row.get('Vendas_Medias')) else 0.0
+                cbm = float(row.get('CBM', 0)) if pd.notna(row.get('CBM')) else 0.0
+                moq = int(float(row.get('MOQ', 0))) if pd.notna(row.get('MOQ')) else 0
+                
+                cursor.execute("""
+                INSERT INTO ESTOQUE.PRODUTOS 
+                (item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
+                 in_transit, vendas_medias, cbm, moq, usuario)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    item, modelo, fornecedor, qtd_atual, preco_unitario, 
+                    estoque_total, in_transit, vendas_medias, cbm, moq, usuario
+                ))
+                success_count += 1
+                
+            except Exception as row_error:
+                st.warning(f"⚠️ Erro na linha {idx}: {str(row_error)}")
+                continue
         
         # Log the upload
         cursor.execute("""
         INSERT INTO CONFIG.UPLOAD_LOG 
         (nome_arquivo, linhas_processadas, usuario, status)
         VALUES (?, ?, ?, ?)
-        """, (arquivo_nome, len(df), usuario, 'SUCCESS'))
+        """, (arquivo_nome, success_count, usuario, 'SUCCESS'))
         
         conn.commit()
         cursor.close()
         conn.close()
-        return True
+        
+        if success_count > 0:
+            st.success(f"✅ {success_count} registros inseridos com sucesso!")
+            return True
+        else:
+            st.error("❌ Nenhum registro foi inserido")
+            return False
         
     except Exception as e:
         st.error(f"❄️ Erro ao fazer upload: {str(e)}")
+        st.error(f"🔍 Tipo do erro: {type(e).__name__}")
         return False
 
 def load_data_from_snowflake(usuario="minipa"):
