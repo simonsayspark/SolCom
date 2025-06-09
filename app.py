@@ -3,6 +3,11 @@ from datetime import datetime
 import auth
 import sys
 import os
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import numpy as np
 
 # Check authentication first
 if not auth.require_auth():
@@ -132,12 +137,6 @@ def show_dashboard():
     """, unsafe_allow_html=True)
 
 def show_timeline():
-    import pandas as pd
-    import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
-    import numpy as np
-    from datetime import datetime, timedelta
-    
     st.title("📅 TIMELINE INTERATIVA DE COMPRAS")
     st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
 
@@ -154,254 +153,254 @@ def show_timeline():
         - Os dados devem começar na linha 10 (header=9)
         """)
 
-    @st.cache_data
-    def carregar_dados(uploaded_file=None):
-        try:
-            if uploaded_file is not None:
-                df = pd.read_excel(uploaded_file, header=9)
-            else:
-                # No local file in production - user must upload
-                return None
-            
-            df = df.dropna(subset=['Item'])
-            df = df[df['Item'] != 'Item']
-            
-            # Converter colunas numéricas
-            colunas_numericas = ['QTD', 'Preço FOB\nUnitário', 'Estoque\nTotal ', 
-                               'In Transit\nShipt', 'Avg Sales\n', 'CBM', 'MOQ']
-            
-            for col in colunas_numericas:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-            
-            # Renomear colunas
-            df = df.rename(columns={
-                'Preço FOB\nUnitário': 'Preco_Unitario',
-                'Estoque\nTotal ': 'Estoque_Total',
-                'In Transit\nShipt': 'In_Transit',
-                'Avg Sales\n': 'Vendas_Medias'
-            })
-            
-            return df
-        except Exception as e:
-            st.error(f"Erro ao carregar dados: {e}")
+@st.cache_data
+def carregar_dados(uploaded_file=None):
+    try:
+        if uploaded_file is not None:
+            df = pd.read_excel(uploaded_file, header=9)
+        else:
+            # No local file in production - user must upload
             return None
+        
+        df = df.dropna(subset=['Item'])
+        df = df[df['Item'] != 'Item']
+        
+        # Converter colunas numéricas
+        colunas_numericas = ['QTD', 'Preço FOB\nUnitário', 'Estoque\nTotal ', 
+                           'In Transit\nShipt', 'Avg Sales\n', 'CBM', 'MOQ']
+        
+        for col in colunas_numericas:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        
+        # Renomear colunas
+        df = df.rename(columns={
+            'Preço FOB\nUnitário': 'Preco_Unitario',
+            'Estoque\nTotal ': 'Estoque_Total',
+            'In Transit\nShipt': 'In_Transit',
+            'Avg Sales\n': 'Vendas_Medias'
+        })
+        
+        return df
+    except Exception as e:
+        st.error(f"Erro ao carregar dados: {e}")
+        return None
 
-    def criar_dados_exemplo():
-        """Cria dados de exemplo para demonstração"""
-        dados_exemplo = {
-            'Item': ['ITEM001', 'ITEM002', 'ITEM003', 'ITEM004', 'ITEM005'],
-            'Modelo': ['Multímetro DM-1000', 'Osciloscópio OS-200', 'Fonte DC-300', 'Gerador GF-400', 'Analisador AN-500'],
-            'Fornecedor': ['Fornecedor A', 'Fornecedor B', 'Fornecedor A', 'Fornecedor C', 'Fornecedor B'],
-            'QTD': [100, 50, 75, 30, 25],
-            'Preço FOB\nUnitário': [150.00, 800.00, 450.00, 1200.00, 2500.00],
-            'Estoque\nTotal ': [45, 12, 23, 8, 5],
-            'In Transit\nShipt': [20, 5, 10, 0, 2],
-            'Avg Sales\n': [15, 3, 8, 2, 1],
-            'CBM': [0.05, 0.15, 0.08, 0.12, 0.20],
-            'MOQ': [50, 10, 25, 5, 5]
-        }
-        return pd.DataFrame(dados_exemplo)
+def criar_dados_exemplo():
+    """Cria dados de exemplo para demonstração"""
+    dados_exemplo = {
+        'Item': ['ITEM001', 'ITEM002', 'ITEM003', 'ITEM004', 'ITEM005'],
+        'Modelo': ['Multímetro DM-1000', 'Osciloscópio OS-200', 'Fonte DC-300', 'Gerador GF-400', 'Analisador AN-500'],
+        'Fornecedor': ['Fornecedor A', 'Fornecedor B', 'Fornecedor A', 'Fornecedor C', 'Fornecedor B'],
+        'QTD': [100, 50, 75, 30, 25],
+        'Preço FOB\nUnitário': [150.00, 800.00, 450.00, 1200.00, 2500.00],
+        'Estoque\nTotal ': [45, 12, 23, 8, 5],
+        'In Transit\nShipt': [20, 5, 10, 0, 2],
+        'Avg Sales\n': [15, 3, 8, 2, 1],
+        'CBM': [0.05, 0.15, 0.08, 0.12, 0.20],
+        'MOQ': [50, 10, 25, 5, 5]
+    }
+    return pd.DataFrame(dados_exemplo)
 
-    # Timeline sidebar controls
-    st.sidebar.header("📁 Upload de Dados")
-    uploaded_file = st.sidebar.file_uploader(
-        "Faça upload do seu arquivo Excel:",
-        type=['xlsx', 'xls'],
-        help="Carregue um arquivo Excel com dados de estoque e vendas"
-    )
+# Timeline sidebar controls
+st.sidebar.header("📁 Upload de Dados")
+uploaded_file = st.sidebar.file_uploader(
+    "Faça upload do seu arquivo Excel:",
+    type=['xlsx', 'xls'],
+    help="Carregue um arquivo Excel com dados de estoque e vendas"
+)
 
-    usar_dados_exemplo = st.sidebar.checkbox("📊 Usar dados de exemplo", value=False)
+usar_dados_exemplo = st.sidebar.checkbox("📊 Usar dados de exemplo", value=False)
 
-    if usar_dados_exemplo:
-        df = criar_dados_exemplo()
-        st.info("📊 Usando dados de exemplo para demonstração")
-    elif uploaded_file is not None:
-        df = carregar_dados(uploaded_file)
-        st.success("✅ Arquivo carregado com sucesso!")
-    else:
-        df = carregar_dados()
-        if df is None:
-            st.warning("📁 Faça upload de um arquivo Excel ou use os dados de exemplo para começar!")
+if usar_dados_exemplo:
+    df = criar_dados_exemplo()
+    st.info("📊 Usando dados de exemplo para demonstração")
+elif uploaded_file is not None:
+    df = carregar_dados(uploaded_file)
+    st.success("✅ Arquivo carregado com sucesso!")
+else:
+    df = carregar_dados()
+    if df is None:
+        st.warning("📁 Faça upload de um arquivo Excel ou use os dados de exemplo para começar!")
+
+if df is not None:
+    st.sidebar.header("🎛️ Controles")
     
-    if df is not None:
-        st.sidebar.header("🎛️ Controles")
-        
-        meta_meses = st.sidebar.slider("🎯 Meta (meses)", 3, 12, 6)
-        
-        def otimizar_quantidade_moq(vendas_mensais, moq, meta_meses=6):
-            if vendas_mensais <= 0:
-                return moq if moq > 0 else 0
-            
-            qtd_ideal = vendas_mensais * meta_meses
-            
-            if moq > qtd_ideal:
-                return moq
-            
-            if moq <= 0:
-                return int(qtd_ideal)
-            
-            multiplos = max(1, int(np.ceil(qtd_ideal / moq)))
-            return multiplos * moq
+    meta_meses = st.sidebar.slider("🎯 Meta (meses)", 3, 12, 6)
 
-        def calcular_timeline(df, meta_meses=6):
-            hoje = datetime.now()
-            timeline_data = []
-            
-            for idx, row in df.iterrows():
-                produto = str(row['Modelo'])
-                fornecedor = str(row['Fornecedor'])
-                estoque_atual = row['Estoque_Total'] + row['In_Transit']
-                vendas_mensais = row['Vendas_Medias']
-                moq = row['MOQ']
-                preco = row['Preco_Unitario']
-                cbm = row['CBM']
-                
-                if vendas_mensais > 0:
-                    meses_ate_zerar = estoque_atual / vendas_mensais
-                    data_esgotamento = hoje + timedelta(days=int(meses_ate_zerar * 30))
-                    data_pedido = data_esgotamento - timedelta(days=45)
-                    if data_pedido < hoje:
-                        data_pedido = hoje
-                    
-                    qtd_otimizada = otimizar_quantidade_moq(vendas_mensais, moq, meta_meses)
-                    valor_pedido = qtd_otimizada * preco
-                    cbm_pedido = qtd_otimizada * cbm
-                    
-                    if meses_ate_zerar <= 1:
-                        cor = '#FF0000'
-                        urgencia = 'CRÍTICO'
-                    elif meses_ate_zerar <= 3:
-                        cor = '#FF8C00'
-                        urgencia = 'MÉDIO'
-                    elif meses_ate_zerar <= 6:
-                        cor = '#FFD700'
-                        urgencia = 'ATENÇÃO'
-                    else:
-                        cor = '#32CD32'
-                        urgencia = 'OK'
-                    
-                    timeline_data.append({
-                        'Produto': produto,
-                        'Fornecedor': fornecedor,
-                        'Dias_Restantes': int(meses_ate_zerar * 30),
-                        'Estoque_Atual': estoque_atual,
-                        'Vendas_Mensais': vendas_mensais,
-                        'MOQ': moq,
-                        'Qtd_Otimizada': qtd_otimizada,
-                        'Valor_Pedido': valor_pedido,
-                        'CBM_Pedido': cbm_pedido,
-                        'Cor': cor,
-                        'Urgencia': urgencia
-                    })
-            
-            return sorted(timeline_data, key=lambda x: x['Dias_Restantes'])
+def otimizar_quantidade_moq(vendas_mensais, moq, meta_meses=6):
+    if vendas_mensais <= 0:
+        return moq if moq > 0 else 0
+    
+    qtd_ideal = vendas_mensais * meta_meses
+    
+    if moq > qtd_ideal:
+        return moq
+    
+    if moq <= 0:
+        return int(qtd_ideal)
+    
+    multiplos = max(1, int(np.ceil(qtd_ideal / moq)))
+    return multiplos * moq
 
-        def criar_grafico_interativo(timeline_data, filtro_urgencia="Todos"):
-            if filtro_urgencia != "Todos":
-                timeline_data = [item for item in timeline_data if item['Urgencia'] == filtro_urgencia]
-            
-            if not timeline_data:
-                return None
-            
-            fig = make_subplots(
-                rows=2, cols=1,
-                subplot_titles=('⏰ QUANDO O ESTOQUE VAI ACABAR', '📦 QUANTO COMPRAR (MOQ)'),
-                vertical_spacing=0.15
-            )
-            
-            produtos = [item['Produto'] for item in timeline_data]
-            
-            # Gráfico 1: Timeline
-            for i, item in enumerate(timeline_data):
-                fig.add_trace(
-                    go.Bar(
-                        y=[i],
-                        x=[item['Dias_Restantes']],
-                        orientation='h',
-                        marker_color=item['Cor'],
-                        opacity=0.7,
-                        showlegend=False,
-                        hovertemplate=(
-                            f"<b>{item['Produto']}</b><br>" +
-                            f"Fornecedor: {item['Fornecedor']}<br>" +
-                            f"Estoque: {item['Estoque_Atual']:.0f} un.<br>" +
-                            f"Dias restantes: {item['Dias_Restantes']}<br>" +
-                            f"MOQ: {item['MOQ']:.0f}<br>" +
-                            f"Comprar: {item['Qtd_Otimizada']:.0f}<br>" +
-                            "<extra></extra>"
-                        )
-                    ),
-                    row=1, col=1
-                )
-            
-            # Gráfico 2: Quantidades
-            for i, item in enumerate(timeline_data):
-                fig.add_trace(
-                    go.Bar(
-                        y=[i],
-                        x=[item['Qtd_Otimizada']],
-                        orientation='h',
-                        marker_color=item['Cor'],
-                        opacity=0.7,
-                        showlegend=False,
-                        hovertemplate=(
-                            f"<b>{item['Produto']}</b><br>" +
-                            f"Quantidade: {item['Qtd_Otimizada']:.0f} un.<br>" +
-                            f"MOQ: {item['MOQ']:.0f}<br>" +
-                            f"Valor: R$ {item['Valor_Pedido']:,.0f}<br>" +
-                            f"CBM: {item['CBM_Pedido']:.1f}<br>" +
-                            "<extra></extra>"
-                        )
-                    ),
-                    row=2, col=1
-                )
-            
-            fig.update_layout(
-                title="📅 TIMELINE INTERATIVA COM MOQ",
-                height=max(800, len(timeline_data) * 40),
-                showlegend=False
-            )
-            
-            fig.update_yaxes(tickvals=list(range(len(produtos))), ticktext=produtos, row=1, col=1)
-            fig.update_yaxes(tickvals=list(range(len(produtos))), ticktext=produtos, row=2, col=1)
-            fig.update_xaxes(title_text="Dias", row=1, col=1)
-            fig.update_xaxes(title_text="Quantidade", row=2, col=1)
-            
-            return fig
+def calcular_timeline(df, meta_meses=6):
+    hoje = datetime.now()
+    timeline_data = []
+    
+    for idx, row in df.iterrows():
+        produto = str(row['Modelo'])
+        fornecedor = str(row['Fornecedor'])
+        estoque_atual = row['Estoque_Total'] + row['In_Transit']
+        vendas_mensais = row['Vendas_Medias']
+        moq = row['MOQ']
+        preco = row['Preco_Unitario']
+        cbm = row['CBM']
         
-        timeline_data = calcular_timeline(df, meta_meses)
+        if vendas_mensais > 0:
+            meses_ate_zerar = estoque_atual / vendas_mensais
+            data_esgotamento = hoje + timedelta(days=int(meses_ate_zerar * 30))
+            data_pedido = data_esgotamento - timedelta(days=45)
+            if data_pedido < hoje:
+                data_pedido = hoje
+            
+            qtd_otimizada = otimizar_quantidade_moq(vendas_mensais, moq, meta_meses)
+            valor_pedido = qtd_otimizada * preco
+            cbm_pedido = qtd_otimizada * cbm
+            
+            if meses_ate_zerar <= 1:
+                cor = '#FF0000'
+                urgencia = 'CRÍTICO'
+            elif meses_ate_zerar <= 3:
+                cor = '#FF8C00'
+                urgencia = 'MÉDIO'
+            elif meses_ate_zerar <= 6:
+                cor = '#FFD700'
+                urgencia = 'ATENÇÃO'
+            else:
+                cor = '#32CD32'
+                urgencia = 'OK'
+            
+            timeline_data.append({
+                'Produto': produto,
+                'Fornecedor': fornecedor,
+                'Dias_Restantes': int(meses_ate_zerar * 30),
+                'Estoque_Atual': estoque_atual,
+                'Vendas_Mensais': vendas_mensais,
+                'MOQ': moq,
+                'Qtd_Otimizada': qtd_otimizada,
+                'Valor_Pedido': valor_pedido,
+                'CBM_Pedido': cbm_pedido,
+                'Cor': cor,
+                'Urgencia': urgencia
+            })
+    
+    return sorted(timeline_data, key=lambda x: x['Dias_Restantes'])
+
+def criar_grafico_interativo(timeline_data, filtro_urgencia="Todos"):
+    if filtro_urgencia != "Todos":
+        timeline_data = [item for item in timeline_data if item['Urgencia'] == filtro_urgencia]
+    
+    if not timeline_data:
+        return None
+    
+    fig = make_subplots(
+        rows=2, cols=1,
+        subplot_titles=('⏰ QUANDO O ESTOQUE VAI ACABAR', '📦 QUANTO COMPRAR (MOQ)'),
+        vertical_spacing=0.15
+    )
+    
+    produtos = [item['Produto'] for item in timeline_data]
+    
+    # Gráfico 1: Timeline
+    for i, item in enumerate(timeline_data):
+        fig.add_trace(
+            go.Bar(
+                y=[i],
+                x=[item['Dias_Restantes']],
+                orientation='h',
+                marker_color=item['Cor'],
+                opacity=0.7,
+                showlegend=False,
+                hovertemplate=(
+                    f"<b>{item['Produto']}</b><br>" +
+                    f"Fornecedor: {item['Fornecedor']}<br>" +
+                    f"Estoque: {item['Estoque_Atual']:.0f} un.<br>" +
+                    f"Dias restantes: {item['Dias_Restantes']}<br>" +
+                    f"MOQ: {item['MOQ']:.0f}<br>" +
+                    f"Comprar: {item['Qtd_Otimizada']:.0f}<br>" +
+                    "<extra></extra>"
+                )
+            ),
+            row=1, col=1
+        )
+    
+    # Gráfico 2: Quantidades
+    for i, item in enumerate(timeline_data):
+        fig.add_trace(
+            go.Bar(
+                y=[i],
+                x=[item['Qtd_Otimizada']],
+                orientation='h',
+                marker_color=item['Cor'],
+                opacity=0.7,
+                showlegend=False,
+                hovertemplate=(
+                    f"<b>{item['Produto']}</b><br>" +
+                    f"Quantidade: {item['Qtd_Otimizada']:.0f} un.<br>" +
+                    f"MOQ: {item['MOQ']:.0f}<br>" +
+                    f"Valor: R$ {item['Valor_Pedido']:,.0f}<br>" +
+                    f"CBM: {item['CBM_Pedido']:.1f}<br>" +
+                    "<extra></extra>"
+                )
+            ),
+            row=2, col=1
+        )
+    
+    fig.update_layout(
+        title="📅 TIMELINE INTERATIVA COM MOQ",
+        height=max(800, len(timeline_data) * 40),
+        showlegend=False
+    )
+    
+    fig.update_yaxes(tickvals=list(range(len(produtos))), ticktext=produtos, row=1, col=1)
+    fig.update_yaxes(tickvals=list(range(len(produtos))), ticktext=produtos, row=2, col=1)
+    fig.update_xaxes(title_text="Dias", row=1, col=1)
+    fig.update_xaxes(title_text="Quantidade", row=2, col=1)
+    
+    return fig
+    
+    timeline_data = calcular_timeline(df, meta_meses)
+    
+    if timeline_data:
+        urgencias = ["Todos"] + sorted(list(set(item['Urgencia'] for item in timeline_data)))
+        filtro = st.sidebar.selectbox("🔍 Filtrar", urgencias)
         
-        if timeline_data:
-            urgencias = ["Todos"] + sorted(list(set(item['Urgencia'] for item in timeline_data)))
-            filtro = st.sidebar.selectbox("🔍 Filtrar", urgencias)
+        # Métricas
+        col1, col2, col3, col4 = st.columns(4)
+        criticos = len([x for x in timeline_data if x['Urgencia'] == 'CRÍTICO'])
+        medios = len([x for x in timeline_data if x['Urgencia'] == 'MÉDIO'])
+        atencao = len([x for x in timeline_data if x['Urgencia'] == 'ATENÇÃO'])
+        ok = len([x for x in timeline_data if x['Urgencia'] == 'OK'])
+        
+        col1.metric("🔴 Críticos", criticos)
+        col2.metric("🟠 Médios", medios)
+        col3.metric("🟡 Atenção", atencao)
+        col4.metric("🟢 OK", ok)
+        
+        valor_total = sum(item['Valor_Pedido'] for item in timeline_data)
+        st.metric("💰 Investimento Total", f"R$ {valor_total:,.0f}")
+        
+        # Gráfico
+        fig = criar_grafico_interativo(timeline_data, filtro)
+        if fig:
+            st.plotly_chart(fig, use_container_width=True)
             
-            # Métricas
-            col1, col2, col3, col4 = st.columns(4)
-            criticos = len([x for x in timeline_data if x['Urgencia'] == 'CRÍTICO'])
-            medios = len([x for x in timeline_data if x['Urgencia'] == 'MÉDIO'])
-            atencao = len([x for x in timeline_data if x['Urgencia'] == 'ATENÇÃO'])
-            ok = len([x for x in timeline_data if x['Urgencia'] == 'OK'])
-            
-            col1.metric("🔴 Críticos", criticos)
-            col2.metric("🟠 Médios", medios)
-            col3.metric("🟡 Atenção", atencao)
-            col4.metric("🟢 OK", ok)
-            
-            valor_total = sum(item['Valor_Pedido'] for item in timeline_data)
-            st.metric("💰 Investimento Total", f"R$ {valor_total:,.0f}")
-            
-            # Gráfico
-            fig = criar_grafico_interativo(timeline_data, filtro)
-            if fig:
-                st.plotly_chart(fig, use_container_width=True)
-                
-                st.markdown("""
-                **💡 Como usar:**
-                - 🖱️ **Zoom**: Ferramentas no canto superior direito
-                - 👆 **Hover**: Passe o mouse para ver detalhes
-                - 🔍 **Filtrar**: Use a sidebar
-                """)
+            st.markdown("""
+            **💡 Como usar:**
+            - 🖱️ **Zoom**: Ferramentas no canto superior direito
+            - 👆 **Hover**: Passe o mouse para ver detalhes
+            - 🔍 **Filtrar**: Use a sidebar
+            """)
         else:
             st.warning("📊 Nenhum dado válido encontrado para criar o timeline.")
     else:
@@ -911,6 +910,449 @@ def show_announcements():
     else:
         st.info("📢 Nenhum anúncio encontrado. Use os dados de exemplo ou crie um novo anúncio!")
 
+def show_excel_analytics():
+    """Análise avançada de dados Excel - Sistema de Gestão de Estoque"""
+    
+    st.title("📊 Análise de Estoque - Sistema MINIPA")
+    st.markdown("**Ferramenta prática para gestão de estoque focada em AÇÃO e DECISÃO**")
+    
+    # File upload
+    st.subheader("📁 Upload do Arquivo")
+    uploaded_file = st.file_uploader(
+        "Faça upload do arquivo Excel (.xlsx)",
+        type=['xlsx'],
+        help="Arquivo deve conter planilha 'Export' com colunas: Produto, Estoque, Média 6 Meses, Estoque Cobertura, Qtde Tot Compras"
+    )
+    
+    if uploaded_file is not None:
+        try:
+            # Read the Excel file
+            df = pd.read_excel(uploaded_file, sheet_name='Export')
+            
+            # Clean data
+            df = df.dropna(subset=['Produto'])
+            df = df[df['Produto'] != 'nan']
+            df = df[~df['Produto'].str.contains('Filtros aplicados', na=False)]
+            
+            # Convert numeric columns
+            numeric_columns = ['Estoque', 'Média 6 Meses', 'Estoque Cobertura', 'Qtde Tot Compras']
+            for col in numeric_columns:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            
+            st.success(f"✅ Dados carregados: {len(df)} produtos")
+            
+            # Separate new and existing products
+            produtos_novos = df[(df['Estoque'] == 0) & (df['Média 6 Meses'] == 0) & (df['Qtde Tot Compras'] > 0)]
+            produtos_existentes = df[(df['Estoque'] > 0) | (df['Média 6 Meses'] > 0)]
+            
+            # Show analytics tabs
+            tab1, tab2, tab3, tab4 = st.tabs(["📋 Resumo Executivo", "🚨 Lista de Compras", "📊 Dashboards", "📞 Contatos Urgentes"])
+            
+            with tab1:
+                show_executive_summary(df, produtos_novos, produtos_existentes)
+            
+            with tab2:
+                show_purchase_list(produtos_existentes)
+            
+            with tab3:
+                show_analytics_dashboard(produtos_existentes, produtos_novos)
+            
+            with tab4:
+                show_urgent_contacts(produtos_existentes)
+                
+        except Exception as e:
+            st.error(f"❌ Erro ao processar arquivo: {str(e)}")
+            st.info("💡 Certifique-se de que o arquivo contém uma planilha 'Export' com as colunas necessárias")
+    
+    else:
+        st.info("📁 Faça upload de um arquivo Excel para começar a análise")
+        
+        # Show sample format
+        with st.expander("📋 Formato esperado do arquivo"):
+            st.markdown("""
+            **Planilha: 'Export'**
+            
+            Colunas necessárias:
+            - `Produto`: Nome do produto
+            - `Estoque`: Quantidade atual em estoque
+            - `Média 6 Meses`: Consumo médio mensal
+            - `Estoque Cobertura`: Cobertura em meses
+            - `Qtde Tot Compras`: Quantidade total para compras (opcional)
+            """)
+
+def show_executive_summary(df, produtos_novos, produtos_existentes):
+    """Resumo executivo dos dados"""
+    
+    st.subheader("📋 Resumo Executivo")
+    
+    # Main metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("📦 Total de Produtos", len(df))
+    
+    with col2:
+        st.metric("🆕 Produtos Novos", len(produtos_novos))
+    
+    with col3:
+        st.metric("📈 Produtos Existentes", len(produtos_existentes))
+    
+    with col4:
+        if len(produtos_existentes) > 0:
+            criticos = len(produtos_existentes[produtos_existentes['Estoque Cobertura'] <= 1])
+            st.metric("🚨 Produtos Críticos", criticos)
+        else:
+            st.metric("🚨 Produtos Críticos", 0)
+    
+    if len(produtos_existentes) > 0:
+        # Status breakdown
+        st.subheader("🎯 Status dos Produtos Existentes")
+        
+        criticos = len(produtos_existentes[produtos_existentes['Estoque Cobertura'] <= 1])
+        alerta = len(produtos_existentes[(produtos_existentes['Estoque Cobertura'] > 1) & (produtos_existentes['Estoque Cobertura'] <= 3)])
+        saudaveis = len(produtos_existentes[produtos_existentes['Estoque Cobertura'] > 3])
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric(
+                "🔴 Críticos (≤1 mês)", 
+                criticos,
+                delta=f"{criticos/len(produtos_existentes)*100:.1f}%"
+            )
+        
+        with col2:
+            st.metric(
+                "🟡 Alerta (1-3 meses)", 
+                alerta,
+                delta=f"{alerta/len(produtos_existentes)*100:.1f}%"
+            )
+        
+        with col3:
+            st.metric(
+                "🟢 Saudáveis (>3 meses)", 
+                saudaveis,
+                delta=f"{saudaveis/len(produtos_existentes)*100:.1f}%"
+            )
+        
+        # Financial overview
+        st.subheader("💰 Visão Financeira")
+        
+        estoque_total = produtos_existentes['Estoque'].sum()
+        consumo_total = produtos_existentes['Média 6 Meses'].sum()
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("📦 Estoque Total", f"{estoque_total:,.0f} unidades")
+        
+        with col2:
+            st.metric("📈 Consumo Mensal", f"{consumo_total:,.1f} unidades")
+        
+        with col3:
+            if consumo_total > 0:
+                duracao = estoque_total / consumo_total
+                st.metric("⏱️ Duração Média", f"{duracao:.1f} meses")
+            else:
+                st.metric("⏱️ Duração Média", "N/A")
+    
+    # Action items
+    if len(produtos_existentes) > 0:
+        st.subheader("🚨 Ações Necessárias")
+        
+        if criticos > 0:
+            st.error(f"⚡ URGENTE: {criticos} produtos críticos precisam de compra IMEDIATA")
+        if alerta > 0:
+            st.warning(f"📅 PLANEJAR: {alerta} produtos em alerta para próximas semanas")
+        if len(produtos_novos) > 0:
+            st.info(f"🆕 MONITORAR: {len(produtos_novos)} produtos novos sendo lançados")
+        
+        if criticos == 0 and alerta == 0:
+            st.success("✅ Situação de estoque sob controle!")
+
+def calculate_purchase_suggestions(produtos_existentes):
+    """Calculate purchase suggestions for products"""
+    
+    def calcular_quando_vai_acabar(estoque, consumo_mensal):
+        if consumo_mensal <= 0:
+            return "Sem consumo", 999
+        
+        meses_restantes = estoque / consumo_mensal
+        
+        if meses_restantes <= 0:
+            return "JÁ ACABOU", 0
+        elif meses_restantes < 0.5:
+            dias = int(meses_restantes * 30)
+            return f"{dias} dias", meses_restantes
+        else:
+            return f"{meses_restantes:.1f} meses", meses_restantes
+    
+    def quanto_comprar(consumo_mensal, estoque_atual, meses_desejados=6):
+        if consumo_mensal <= 0:
+            return 0
+        
+        estoque_ideal = consumo_mensal * meses_desejados
+        falta = max(0, estoque_ideal - estoque_atual)
+        
+        # Round for easier purchasing
+        return int(np.ceil(falta / 50) * 50) if falta > 0 else 0
+    
+    # Calculate for each product
+    suggestions = []
+    
+    for _, row in produtos_existentes.iterrows():
+        produto = str(row['Produto'])
+        estoque = row['Estoque']
+        consumo = row['Média 6 Meses']
+        
+        quando_acaba, meses_num = calcular_quando_vai_acabar(estoque, consumo)
+        qtd_comprar = quanto_comprar(consumo, estoque)
+        
+        suggestions.append({
+            'Produto': produto,
+            'Estoque_Atual': estoque,
+            'Consumo_Mensal': consumo,
+            'Quando_Acaba': quando_acaba,
+            'Meses_Restantes': meses_num,
+            'Qtd_Comprar': qtd_comprar,
+            'Investimento_Estimado': qtd_comprar * 15  # R$ 15 per unit estimate
+        })
+    
+    return pd.DataFrame(suggestions)
+
+def show_purchase_list(produtos_existentes):
+    """Show practical purchase list"""
+    
+    st.subheader("🛒 Lista Prática de Compras")
+    
+    if len(produtos_existentes) == 0:
+        st.info("Nenhum produto existente para análise")
+        return
+    
+    # Calculate suggestions
+    suggestions_df = calculate_purchase_suggestions(produtos_existentes)
+    
+    # Filter products that need action
+    precisa_acao = suggestions_df[
+        (suggestions_df['Meses_Restantes'] <= 3) & 
+        (suggestions_df['Consumo_Mensal'] > 0)
+    ].sort_values('Meses_Restantes')
+    
+    if len(precisa_acao) == 0:
+        st.success("✅ Nenhum produto necessita compra urgente!")
+        return
+    
+    st.info(f"📦 {len(precisa_acao)} produtos precisam de compra")
+    
+    # Emergency products (≤ 1 month)
+    emergencia = precisa_acao[precisa_acao['Meses_Restantes'] <= 1]
+    if len(emergencia) > 0:
+        st.error("🚨 EMERGÊNCIA (≤ 1 mês)")
+        st.dataframe(
+            emergencia[['Produto', 'Quando_Acaba', 'Consumo_Mensal', 'Qtd_Comprar', 'Investimento_Estimado']].round(1),
+            use_container_width=True
+        )
+    
+    # Critical products (1-2 months)
+    criticos = precisa_acao[(precisa_acao['Meses_Restantes'] > 1) & (precisa_acao['Meses_Restantes'] <= 2)]
+    if len(criticos) > 0:
+        st.warning("🔴 CRÍTICOS (1-2 meses)")
+        st.dataframe(
+            criticos[['Produto', 'Quando_Acaba', 'Consumo_Mensal', 'Qtd_Comprar', 'Investimento_Estimado']].head(10).round(1),
+            use_container_width=True
+        )
+    
+    # Attention products (2-3 months)
+    atencao = precisa_acao[(precisa_acao['Meses_Restantes'] > 2) & (precisa_acao['Meses_Restantes'] <= 3)]
+    if len(atencao) > 0:
+        st.info("🟡 ATENÇÃO (2-3 meses)")
+        st.dataframe(
+            atencao[['Produto', 'Quando_Acaba', 'Consumo_Mensal', 'Qtd_Comprar', 'Investimento_Estimado']].head(10).round(1),
+            use_container_width=True
+        )
+    
+    # Summary
+    st.subheader("💰 Resumo de Investimento")
+    
+    total_emergencia = len(emergencia)
+    total_criticos = len(criticos)
+    total_atencao = len(atencao)
+    
+    investimento_total = precisa_acao['Investimento_Estimado'].sum()
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("🚨 Emergência", total_emergencia)
+    with col2:
+        st.metric("🔴 Críticos", total_criticos)
+    with col3:
+        st.metric("🟡 Atenção", total_atencao)
+    with col4:
+        st.metric("💰 Investimento", f"R$ {investimento_total:,.0f}")
+
+def show_analytics_dashboard(produtos_existentes, produtos_novos):
+    """Show visual analytics dashboard"""
+    
+    st.subheader("📊 Dashboard Visual")
+    
+    if len(produtos_existentes) == 0:
+        st.info("Nenhum produto para análise visual")
+        return
+    
+    # Calculate data for charts
+    suggestions_df = calculate_purchase_suggestions(produtos_existentes)
+    
+    # Urgency categorization
+    muito_critico = len(suggestions_df[suggestions_df['Meses_Restantes'] <= 1])
+    critico = len(suggestions_df[(suggestions_df['Meses_Restantes'] > 1) & (suggestions_df['Meses_Restantes'] <= 3)])
+    moderado = len(suggestions_df[(suggestions_df['Meses_Restantes'] > 3) & (suggestions_df['Meses_Restantes'] <= 6)])
+    ok = len(suggestions_df[suggestions_df['Meses_Restantes'] > 6])
+    
+    # Chart 1: Products by urgency
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        urgency_data = {
+            'Categoria': ['≤1 mês', '1-3 meses', '3-6 meses', '>6 meses'],
+            'Quantidade': [muito_critico, critico, moderado, ok],
+            'Cor': ['#8B0000', '#FF0000', '#FFA500', '#008000']
+        }
+        
+        fig_urgency = px.bar(
+            urgency_data,
+            x='Categoria',
+            y='Quantidade',
+            color='Cor',
+            title='🚨 Produtos por Urgência',
+            color_discrete_map={color: color for color in urgency_data['Cor']}
+        )
+        st.plotly_chart(fig_urgency, use_container_width=True)
+    
+    with col2:
+        # Chart 2: Stock coverage distribution
+        if len(produtos_existentes) > 0:
+            fig_pie = px.pie(
+                values=[muito_critico, critico, moderado, ok],
+                names=['≤1 mês', '1-3 meses', '3-6 meses', '>6 meses'],
+                title='⏰ Distribuição de Cobertura',
+                color_discrete_sequence=['#8B0000', '#FF0000', '#FFA500', '#008000']
+            )
+            st.plotly_chart(fig_pie, use_container_width=True)
+    
+    # Chart 3: Top products to buy
+    precisa_acao = suggestions_df[
+        (suggestions_df['Meses_Restantes'] <= 3) & 
+        (suggestions_df['Consumo_Mensal'] > 0)
+    ].sort_values('Qtd_Comprar', ascending=False).head(10)
+    
+    if len(precisa_acao) > 0:
+        fig_top = px.bar(
+            precisa_acao,
+            x='Qtd_Comprar',
+            y='Produto',
+            orientation='h',
+            title='🛒 Top 10 Produtos para Comprar',
+            color='Meses_Restantes',
+            color_continuous_scale='Reds_r'
+        )
+        fig_top.update_layout(height=500)
+        st.plotly_chart(fig_top, use_container_width=True)
+    
+    # Chart 4: Investment timeline
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        emergencia = suggestions_df[suggestions_df['Meses_Restantes'] <= 1]
+        criticos_chart = suggestions_df[(suggestions_df['Meses_Restantes'] > 1) & (suggestions_df['Meses_Restantes'] <= 2)]
+        atencao = suggestions_df[(suggestions_df['Meses_Restantes'] > 2) & (suggestions_df['Meses_Restantes'] <= 3)]
+        
+        invest_emergencia = emergencia['Investimento_Estimado'].sum() if len(emergencia) > 0 else 0
+        invest_criticos = criticos_chart['Investimento_Estimado'].sum() if len(criticos_chart) > 0 else 0
+        invest_atencao = atencao['Investimento_Estimado'].sum() if len(atencao) > 0 else 0
+        
+        investment_data = {
+            'Período': ['Este Mês', 'Próximo Mês', 'Mês +2'],
+            'Investimento': [invest_emergencia, invest_criticos, invest_atencao]
+        }
+        
+        fig_invest = px.bar(
+            investment_data,
+            x='Período',
+            y='Investimento',
+            title='💰 Investimento por Período',
+            color='Investimento',
+            color_continuous_scale='Reds'
+        )
+        st.plotly_chart(fig_invest, use_container_width=True)
+    
+    with col2:
+        # Product status overview
+        if len(produtos_novos) > 0:
+            overview_data = {
+                'Categoria': ['Produtos Existentes', 'Produtos Novos'],
+                'Quantidade': [len(produtos_existentes), len(produtos_novos)]
+            }
+            
+            fig_overview = px.pie(
+                overview_data,
+                values='Quantidade',
+                names='Categoria',
+                title='📊 Visão Geral dos Produtos'
+            )
+            st.plotly_chart(fig_overview, use_container_width=True)
+
+def show_urgent_contacts(produtos_existentes):
+    """Show urgent contacts list"""
+    
+    st.subheader("📞 Lista de Contatos Urgentes")
+    
+    if len(produtos_existentes) == 0:
+        st.info("Nenhum produto para análise de contatos")
+        return
+    
+    suggestions_df = calculate_purchase_suggestions(produtos_existentes)
+    
+    # Emergency contacts (≤ 0.5 months)
+    emergencia = suggestions_df[suggestions_df['Meses_Restantes'] <= 0.5]
+    
+    # Critical contacts (0.5-1 months)
+    criticos = suggestions_df[(suggestions_df['Meses_Restantes'] > 0.5) & (suggestions_df['Meses_Restantes'] <= 1)]
+    
+    st.subheader("🚨 LIGAR HOJE (EMERGÊNCIA)")
+    if len(emergencia) > 0:
+        st.error(f"📞 {len(emergencia)} fornecedores para contactar HOJE")
+        
+        contact_emergency = emergencia[['Produto', 'Quando_Acaba', 'Consumo_Mensal', 'Qtd_Comprar']].head(10)
+        st.dataframe(contact_emergency, use_container_width=True)
+    else:
+        st.success("✅ Nenhum contato de emergência necessário")
+    
+    st.subheader("🔴 LIGAR ESTA SEMANA (CRÍTICOS)")
+    if len(criticos) > 0:
+        st.warning(f"📞 {len(criticos)} fornecedores para contactar ESTA SEMANA")
+        
+        contact_critical = criticos[['Produto', 'Quando_Acaba', 'Consumo_Mensal', 'Qtd_Comprar']].head(10)
+        st.dataframe(contact_critical, use_container_width=True)
+    else:
+        st.success("✅ Nenhum contato crítico necessário")
+    
+    # Summary
+    st.subheader("📋 Resumo de Contatos")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("🚨 HOJE", len(emergencia))
+    with col2:
+        st.metric("🔴 ESTA SEMANA", len(criticos))
+    with col3:
+        st.metric("📞 TOTAL", len(emergencia) + len(criticos))
+    
+    if len(emergencia) > 0 or len(criticos) > 0:
+        st.info("💡 **DICA:** Prepare a lista de quantidades antes de ligar! Use a aba 'Lista de Compras' para ter os números exatos.")
+
 # Main app logic
 # Show user info in sidebar
 auth.show_user_info()
@@ -936,6 +1378,10 @@ if st.sidebar.button("📢 Anúncios", use_container_width=True):
     st.session_state.current_page = "announcements"
     st.rerun()
 
+if st.sidebar.button("📊 Análise de Estoque", use_container_width=True):
+    st.session_state.current_page = "excel_analytics"
+    st.rerun()
+
 # Show different pages based on navigation
 if st.session_state.current_page == "home":
     show_dashboard()
@@ -943,5 +1389,7 @@ elif st.session_state.current_page == "timeline":
     show_timeline()
 elif st.session_state.current_page == "announcements":
     show_announcements()
+elif st.session_state.current_page == "excel_analytics":
+    show_excel_analytics()
 
  

@@ -38,6 +38,8 @@ wheels/
 venv/
 env/
 ENV/
+env.bak/
+venv.bak/
 
 # IDE files
 .vscode/
@@ -47,4 +49,41 @@ ENV/
 
 # OS files
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Streamlit
+.streamlit/
+
+# Project specific
+users.json
+announcements.json
+
+# Sensitive data
+*.xlsx
+data.xlsx
+Solicitação*.xlsx
+*.xls
+
+# Uploads and temporary files
+uploads/
+temp/
+*.tmp
+
+# Log files
+*.log
+
+# Environment variables
+.env
+.env.local
+
+# Backup files
+*.bak
+*.backup
+
+# Images and screenshots
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.svg 
