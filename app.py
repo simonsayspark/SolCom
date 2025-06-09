@@ -443,14 +443,23 @@ def calcular_timeline(df, meta_meses=6):
     hoje = datetime.now()
     timeline_data = []
     
+    # Debug: Show what columns we actually have
+    st.info(f"🔍 Colunas disponíveis para timeline: {list(df.columns)}")
+    
+    # Check if we have any data
+    if df.empty:
+        st.warning("⚠️ DataFrame vazio - nenhum dado para calcular timeline")
+        return []
+    
     for idx, row in df.iterrows():
-        produto = str(row['Modelo'])
-        fornecedor = str(row['Fornecedor'])
-        estoque_atual = row['Estoque_Total'] + row['In_Transit']
-        vendas_mensais = row['Vendas_Medias']
-        moq = row['MOQ']
-        preco = row['Preco_Unitario']
-        cbm = row['CBM']
+        # Safely access columns with fallbacks
+        produto = str(row.get('Modelo', f'Produto_{idx}'))
+        fornecedor = str(row.get('Fornecedor', 'Fornecedor Desconhecido'))
+        estoque_atual = row.get('Estoque_Total', 0) + row.get('In_Transit', 0)
+        vendas_mensais = row.get('Vendas_Medias', 0)
+        moq = row.get('MOQ', 0)
+        preco = row.get('Preco_Unitario', 0)
+        cbm = row.get('CBM', 0)
         
         if vendas_mensais > 0:
             meses_ate_zerar = estoque_atual / vendas_mensais

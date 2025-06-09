@@ -406,12 +406,19 @@ def load_data_with_history(usuario="minipa", limit_days=30):
             conn.close()
             return None
         
-        # If we have data, execute the full query
+        # If we have data, execute the full query with proper column mapping
         query = """
-        SELECT item, modelo, fornecedor, qtd_atual as QTD, 
-               preco_unitario as "Preco_Unitario", estoque_total as "Estoque_Total",
-               in_transit as "In_Transit", vendas_medias as "Vendas_Medias",
-               cbm as CBM, moq as MOQ, data_upload,
+        SELECT item as "Item", 
+               modelo as "Modelo", 
+               fornecedor as "Fornecedor", 
+               qtd_atual as "QTD", 
+               preco_unitario as "Preco_Unitario", 
+               estoque_total as "Estoque_Total",
+               in_transit as "In_Transit", 
+               vendas_medias as "Vendas_Medias",
+               cbm as "CBM", 
+               moq as "MOQ", 
+               data_upload,
                ROW_NUMBER() OVER (PARTITION BY item ORDER BY data_upload DESC) as row_num
         FROM ESTOQUE.PRODUTOS 
         WHERE usuario = %s 
