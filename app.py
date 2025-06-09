@@ -496,8 +496,12 @@ def carregar_dados(uploaded_file=None):
         df = df[df['Item'] != 'Item']
         
         # Converter colunas numéricas
-        colunas_numericas = ['QTD', 'Preço FOB\nUnitário', 'Estoque\nTotal ', 
-                           'In Transit\nShipt', 'Avg Sales\n', 'CBM', 'MOQ']
+        colunas_numericas = ['QTD', 'Preço FOB
+Unitário', 'Estoque
+Total ', 
+                           'In Transit
+Shipt', 'Avg Sales
+', 'CBM', 'MOQ']
         
         for col in colunas_numericas:
             if col in df.columns:
@@ -505,10 +509,14 @@ def carregar_dados(uploaded_file=None):
         
         # Renomear colunas
         df = df.rename(columns={
-            'Preço FOB\nUnitário': 'Preco_Unitario',
-            'Estoque\nTotal ': 'Estoque_Total',
-            'In Transit\nShipt': 'In_Transit',
-            'Avg Sales\n': 'Vendas_Medias'
+            'Preço FOB
+Unitário': 'Preco_Unitario',
+            'Estoque
+Total ': 'Estoque_Total',
+            'In Transit
+Shipt': 'In_Transit',
+            'Avg Sales
+': 'Vendas_Medias'
         })
         
         return df
@@ -523,10 +531,14 @@ def criar_dados_exemplo():
         'Modelo': ['Multímetro DM-1000', 'Osciloscópio OS-200', 'Fonte DC-300', 'Gerador GF-400', 'Analisador AN-500'],
         'Fornecedor': ['Fornecedor A', 'Fornecedor B', 'Fornecedor A', 'Fornecedor C', 'Fornecedor B'],
         'QTD': [100, 50, 75, 30, 25],
-        'Preço FOB\nUnitário': [150.00, 800.00, 450.00, 1200.00, 2500.00],
-        'Estoque\nTotal ': [45, 12, 23, 8, 5],
-        'In Transit\nShipt': [20, 5, 10, 0, 2],
-        'Avg Sales\n': [15, 3, 8, 2, 1],
+        'Preço FOB
+Unitário': [150.00, 800.00, 450.00, 1200.00, 2500.00],
+        'Estoque
+Total ': [45, 12, 23, 8, 5],
+        'In Transit
+Shipt': [20, 5, 10, 0, 2],
+        'Avg Sales
+': [15, 3, 8, 2, 1],
         'CBM': [0.05, 0.15, 0.08, 0.12, 0.20],
         'MOQ': [50, 10, 25, 5, 5]
     }
@@ -876,7 +888,8 @@ def show_announcements():
     view_mode = st.sidebar.radio(
         "👔 Modo de Visualização",
         ["🎯 Blocos (Por Prioridade)", "📋 Lista (Detalhada)"],
-        help="Blocos: Layout compacto em blocos por prioridade\nLista: Vista tradicional com todos os detalhes"
+        help="Blocos: Layout compacto em blocos por prioridade
+Lista: Vista tradicional com todos os detalhes"
     )
     
     if announcements:
@@ -918,7 +931,8 @@ def show_announcements():
         
         if filtered_announcements:
             # Estatísticas
-            col1, col2, col3, col4 = st.columns(4)\n            
+            col1, col2, col3, col4 = st.columns(4)
+            
             with col1:
                 total = len(filtered_announcements)
                 st.metric("📢 Total de Anúncios", total)
