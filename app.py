@@ -474,7 +474,7 @@ def show_announcements():
                 "content": "Por favor, atualizem suas senhas até o final da semana. Nova política de segurança requer senhas com pelo menos 12 caracteres.",
                 "type": "Segurança",
                 "priority": "Crítica",
-                "department": "TI",
+                "department": "Importação",
                 "author": "Segurança da Informação",
                 "date": "2024-01-12",
                 "expiry_date": "2024-01-19",
@@ -543,7 +543,7 @@ def show_announcements():
                 with col2:
                     department = st.selectbox(
                         "Departamento",
-                        ["Todos", "TI", "Compras", "Vendas", "RH", "Financeiro", "Produção"]
+                        ["Todos", "Importação"]
                     )
                     author = st.text_input("Autor", value=current_user['name'])
                 
@@ -587,11 +587,11 @@ def show_announcements():
     # Filtros
     st.sidebar.subheader("🔍 Filtros")
     
-    # Executive view toggle
+    # View mode toggle
     view_mode = st.sidebar.radio(
         "👔 Modo de Visualização",
-        ["🎯 Executivo (Por Prioridade)", "📋 Detalhado (Lista Completa)"],
-        help="Executivo: Categorizado por prioridade para liderança\nDetalhado: Lista tradicional com todos os anúncios"
+        ["🎯 Blocos (Por Prioridade)", "📋 Lista (Detalhada)"],
+        help="Blocos: Layout compacto em blocos por prioridade\nLista: Vista tradicional com todos os detalhes"
     )
     
     if announcements:
@@ -609,7 +609,7 @@ def show_announcements():
 
         filter_department = st.sidebar.selectbox(
             "Departamento",
-            ["Todos"] + ["TI", "Compras", "Vendas", "RH", "Financeiro", "Produção"]
+            ["Todos", "Importação"]
         )
     
     # Main content area
@@ -656,9 +656,9 @@ def show_announcements():
                 st.metric("⏰ Expirando", expirando)
             
             # Show different views based on mode
-            if view_mode == "🎯 Executivo (Por Prioridade)":
-                # Categorização por prioridade
-                st.subheader("📋 Central de Anúncios - Painel Executivo")
+            if view_mode == "🎯 Blocos (Por Prioridade)":
+                # Categorização por prioridade em blocos
+                st.subheader("📋 Central de Anúncios - Importação")
                 
                 # Agrupar anúncios por prioridade
                 priority_groups = {
@@ -676,162 +676,175 @@ def show_announcements():
                 for priority in priority_groups:
                     priority_groups[priority].sort(key=lambda x: x.get('date'), reverse=True)
                 
-                # Mostrar cada categoria de prioridade
+                # Configurações de prioridade
                 priority_configs = {
-                    "Crítica": {
-                        "icon": "🚨",
-                        "color": "#FF4444",
-                        "bg_color": "#FFF5F5",
-                        "description": "Requer ação imediata da liderança"
-                    },
-                    "Alta": {
-                        "icon": "🔥",
-                        "color": "#FF8800", 
-                        "bg_color": "#FFF8F0",
-                        "description": "Importante para decisões estratégicas"
-                    },
-                    "Média": {
-                        "icon": "⚡",
-                        "color": "#FFDD00",
-                        "bg_color": "#FFFEF0",
-                        "description": "Informações relevantes para gestores"
-                    },
-                    "Baixa": {
-                        "icon": "📝",
-                        "color": "#44AA44",
-                        "bg_color": "#F8FFF8",
-                        "description": "Informações gerais e atualizações"
-                    }
+                    "Crítica": {"icon": "🚨", "color": "#FF4444", "bg": "#FFF5F5"},
+                    "Alta": {"icon": "🔥", "color": "#FF8800", "bg": "#FFF8F0"},
+                    "Média": {"icon": "⚡", "color": "#FFDD00", "bg": "#FFFEF0"},
+                    "Baixa": {"icon": "📝", "color": "#44AA44", "bg": "#F8FFF8"}
                 }
                 
-                for priority in ["Crítica", "Alta", "Média", "Baixa"]:
-                    announcements_in_priority = priority_groups[priority]
-                    
-                    if announcements_in_priority:
-                        config = priority_configs[priority]
-                        count = len(announcements_in_priority)
-                        
-                        # Header da categoria com estilo executivo
-                        st.markdown(f"""
-                        <div style="
-                            background: linear-gradient(90deg, {config['color']}15, {config['bg_color']});
-                            border-left: 6px solid {config['color']};
-                            padding: 15px 20px;
-                            margin: 20px 0 10px 0;
-                            border-radius: 8px;
-                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                        ">
-                            <h3 style="
-                                color: {config['color']};
-                                margin: 0;
-                                font-weight: bold;
-                                display: flex;
-                                align-items: center;
-                                gap: 10px;
+                # Layout em 2 colunas para blocos compactos
+                col_left, col_right = st.columns(2)
+                
+                # Distribui as prioridades nas colunas
+                priorities_left = ["Crítica", "Média"]
+                priorities_right = ["Alta", "Baixa"]
+                
+                for col, priorities in [(col_left, priorities_left), (col_right, priorities_right)]:
+                    with col:
+                        for priority in priorities:
+                            announcements_in_priority = priority_groups[priority]
+                            config = priority_configs[priority]
+                            count = len(announcements_in_priority)
+                            
+                            # Bloco da prioridade
+                            st.markdown(f"""
+                            <div style="
+                                background: linear-gradient(135deg, {config['bg']}, white);
+                                border: 2px solid {config['color']}40;
+                                border-radius: 12px;
+                                padding: 15px;
+                                margin-bottom: 20px;
+                                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                                min-height: 200px;
                             ">
-                                {config['icon']} PRIORIDADE {priority.upper()} 
-                                <span style="
-                                    background: {config['color']};
-                                    color: white;
-                                    padding: 2px 8px;
-                                    border-radius: 12px;
-                                    font-size: 12px;
-                                    font-weight: normal;
-                                ">{count}</span>
-                            </h3>
-                            <p style="
-                                color: #666;
-                                margin: 5px 0 0 0;
-                                font-style: italic;
-                            ">{config['description']}</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Expandir/colapsar por prioridade (execept crítica que fica sempre aberta)
-                        if priority == "Crítica":
-                            show_section = True
-                        else:
-                            show_section = st.checkbox(
-                                f"Expandir {priority} ({count} anúncios)",
-                                value=(priority in ["Alta"]),  # Alta fica aberta por padrão
-                                key=f"expand_{priority}"
-                            )
-                        
-                        if show_section:
-                            for i, announcement in enumerate(announcements_in_priority):
-                                # Card estilizado para cada anúncio
-                                st.markdown(f"""
                                 <div style="
-                                    background: white;
-                                    border: 1px solid {config['color']}30;
-                                    border-left: 4px solid {config['color']};
-                                    border-radius: 8px;
-                                    padding: 20px;
-                                    margin: 10px 0;
-                                    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: space-between;
+                                    margin-bottom: 15px;
+                                    border-bottom: 2px solid {config['color']}20;
+                                    padding-bottom: 10px;
                                 ">
-                                """, unsafe_allow_html=True)
-                                
-                                # Título com ícone de tipo
-                                type_icon = get_type_icon(announcement.get('type', 'Geral'))
-                                st.markdown(f"#### {type_icon} {announcement.get('title', 'Sem título')}")
-                                
-                                # Informações em linha executiva
-                                info_col1, info_col2, info_col3, info_col4 = st.columns(4)
-                                
-                                with info_col1:
-                                    st.markdown(f"**📁 Tipo:** {announcement.get('type', 'Geral')}")
-                                with info_col2:
-                                    priority_display = announcement.get('priority', 'Baixa')
-                                    st.markdown(f"**🎯 Prioridade:** <span style='color: {config['color']}; font-weight: bold;'>{priority_display}</span>", unsafe_allow_html=True)
-                                with info_col3:
-                                    st.markdown(f"**🏢 Departamento:** {announcement.get('department', 'Todos')}")
-                                with info_col4:
-                                    st.markdown(f"**👤 Autor:** {announcement.get('author', 'Desconhecido')}")
-                                
-                                # Conteúdo com destaque
-                                st.markdown("**📝 Conteúdo:**")
-                                st.markdown(f"<div style='background: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 3px solid {config['color']};'>{announcement.get('content', '')}</div>", unsafe_allow_html=True)
-                                
-                                # Datas em formato executivo
-                                date_col1, date_col2, date_col3 = st.columns(3)
-                                with date_col1:
-                                    st.caption(f"📅 **Criado:** {announcement.get('date', 'Data desconhecida')}")
-                                with date_col2:
+                                    <h3 style="
+                                        color: {config['color']};
+                                        margin: 0;
+                                        font-size: 18px;
+                                        font-weight: bold;
+                                    ">
+                                        {config['icon']} {priority.upper()}
+                                    </h3>
+                                    <span style="
+                                        background: {config['color']};
+                                        color: white;
+                                        padding: 4px 12px;
+                                        border-radius: 20px;
+                                        font-size: 14px;
+                                        font-weight: bold;
+                                    ">{count}</span>
+                                </div>
+                            """, unsafe_allow_html=True)
+                            
+                            if announcements_in_priority:
+                                # Mostrar até 3 anúncios por bloco
+                                for i, announcement in enumerate(announcements_in_priority[:3]):
+                                    type_icon = get_type_icon(announcement.get('type', 'Geral'))
+                                    
+                                    # Calcular status de expiração
                                     expiry = announcement.get('expiry_date', '2099-12-31')
+                                    status_color = "#28a745"
+                                    status_text = "Ativo"
                                     try:
                                         from datetime import datetime
                                         expiry_date = datetime.strptime(expiry, '%Y-%m-%d').date()
                                         days_left = (expiry_date - date.today()).days
                                         if days_left <= 0:
-                                            st.caption("⏰ **Status:** <span style='color: #FF4444; font-weight: bold;'>EXPIRADO</span>", unsafe_allow_html=True)
+                                            status_color = "#dc3545"
+                                            status_text = "EXPIRADO"
                                         elif days_left <= 7:
-                                            st.caption(f"⏰ **Status:** <span style='color: #FF8800; font-weight: bold;'>Expira em {days_left} dias</span>", unsafe_allow_html=True)
-                                        else:
-                                            st.caption(f"⏰ **Expira:** {expiry}")
+                                            status_color = "#fd7e14"
+                                            status_text = f"{days_left}d restantes"
                                     except:
-                                        st.caption(f"⏰ **Expira:** {expiry}")
-                                with date_col3:
-                                    # Ação rápida para executivos
-                                    if priority == "Crítica":
-                                        st.caption("🎯 **Ação:** <span style='color: #FF4444; font-weight: bold;'>REVISAR AGORA</span>", unsafe_allow_html=True)
-                                    elif priority == "Alta":
-                                        st.caption("📋 **Ação:** <span style='color: #FF8800; font-weight: bold;'>Revisar hoje</span>", unsafe_allow_html=True)
-                                    else:
-                                        st.caption("📖 **Status:** Informativo")
+                                        pass
+                                    
+                                    st.markdown(f"""
+                                    <div style="
+                                        background: white;
+                                        border-left: 4px solid {config['color']};
+                                        border-radius: 6px;
+                                        padding: 12px;
+                                        margin: 8px 0;
+                                        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                                    ">
+                                        <div style="
+                                            display: flex;
+                                            justify-content: space-between;
+                                            align-items: flex-start;
+                                            margin-bottom: 8px;
+                                        ">
+                                            <h5 style="
+                                                margin: 0;
+                                                color: #333;
+                                                font-size: 14px;
+                                                font-weight: bold;
+                                                flex: 1;
+                                            ">
+                                                {type_icon} {announcement.get('title', 'Sem título')[:40]}{'...' if len(announcement.get('title', '')) > 40 else ''}
+                                            </h5>
+                                            <span style="
+                                                background: {status_color};
+                                                color: white;
+                                                padding: 2px 6px;
+                                                border-radius: 10px;
+                                                font-size: 10px;
+                                                font-weight: bold;
+                                                margin-left: 8px;
+                                            ">{status_text}</span>
+                                        </div>
+                                        <p style="
+                                            margin: 0;
+                                            color: #666;
+                                            font-size: 12px;
+                                            line-height: 1.4;
+                                        ">
+                                            {announcement.get('content', '')[:80]}{'...' if len(announcement.get('content', '')) > 80 else ''}
+                                        </p>
+                                        <div style="
+                                            display: flex;
+                                            justify-content: space-between;
+                                            align-items: center;
+                                            margin-top: 8px;
+                                            font-size: 10px;
+                                            color: #888;
+                                        ">
+                                            <span>👤 {announcement.get('author', 'Desconhecido')}</span>
+                                            <span>📅 {announcement.get('date', '')}</span>
+                                        </div>
+                                    </div>
+                                    """, unsafe_allow_html=True)
                                 
-                                st.markdown("</div>", unsafe_allow_html=True)
-                                
-                                # Espaçamento entre anúncios
-                                if i < len(announcements_in_priority) - 1:
-                                    st.markdown("<br>", unsafe_allow_html=True)
-                        
-                        # Espaçamento entre categorias
-                        st.markdown("<br>", unsafe_allow_html=True)
+                                # Mostrar indicador se há mais anúncios
+                                if len(announcements_in_priority) > 3:
+                                    remaining = len(announcements_in_priority) - 3
+                                    st.markdown(f"""
+                                    <div style="
+                                        text-align: center;
+                                        color: {config['color']};
+                                        font-size: 12px;
+                                        font-weight: bold;
+                                        margin-top: 10px;
+                                    ">
+                                        + {remaining} mais anúncios
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                            else:
+                                st.markdown(f"""
+                                <div style="
+                                    text-align: center;
+                                    color: #888;
+                                    font-style: italic;
+                                    padding: 20px 0;
+                                ">
+                                    Nenhum anúncio {priority.lower()}
+                                </div>
+                                """, unsafe_allow_html=True)
+                            
+                            st.markdown("</div>", unsafe_allow_html=True)
             
             else:
-                # Vista detalhada tradicional
-                st.subheader("📋 Anúncios Ativos - Vista Detalhada")
+                # Vista em lista tradicional
+                st.subheader("📋 Anúncios Ativos - Importação")
                 
                 # Ordenar por prioridade e data
                 priority_order = {"Crítica": 4, "Alta": 3, "Média": 2, "Baixa": 1}
