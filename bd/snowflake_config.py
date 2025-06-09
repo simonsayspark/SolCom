@@ -141,7 +141,7 @@ def create_tables():
         st.error(f"❄️ Erro ao criar tabelas: {str(e)}")
         return False
 
-def upload_excel_to_snowflake(df, arquivo_nome, usuario="minipa"):
+def upload_excel_to_snowflake(df, arquivo_nome, usuario="minipa", table_type="TIMELINE"):
     """
     Upload Excel data to Snowflake with history tracking
     Returns True if successful, False otherwise
@@ -154,33 +154,60 @@ def upload_excel_to_snowflake(df, arquivo_nome, usuario="minipa"):
         cursor = conn.cursor()
         
         # First, ensure tables exist - create them if they don't
-        st.info("🔧 Verificando/criando tabelas...")
+        st.info(f"🔧 Verificando/criando tabelas para {table_type}...")
         try:
-            # Check if table exists, if not create it
-            cursor.execute("SHOW TABLES LIKE 'PRODUTOS' IN SCHEMA ESTOQUE")
-            result = cursor.fetchall()
-            
-            if not result:
-                st.info("📋 Criando tabela PRODUTOS...")
-                cursor.execute("""
-                CREATE TABLE IF NOT EXISTS ESTOQUE.PRODUTOS (
-                    id INTEGER AUTOINCREMENT PRIMARY KEY,
-                    item VARCHAR(100),
-                    modelo VARCHAR(200),
-                    fornecedor VARCHAR(200),
-                    qtd_atual INTEGER,
-                    preco_unitario DECIMAL(10,2),
-                    estoque_total INTEGER,
-                    in_transit INTEGER,
-                    vendas_medias DECIMAL(10,2),
-                    cbm DECIMAL(8,4),
-                    moq INTEGER,
-                    data_upload TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP(),
-                    usuario VARCHAR(50)
-                )
-                """)
+            if table_type == "TIMELINE":
+                # Check for timeline table
+                cursor.execute("SHOW TABLES LIKE 'PRODUTOS' IN SCHEMA ESTOQUE")
+                result = cursor.fetchall()
                 
-                # Also create the log table
+                if not result:
+                    st.info("📋 Criando tabela PRODUTOS (Timeline)...")
+                    cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS ESTOQUE.PRODUTOS (
+                        id INTEGER AUTOINCREMENT PRIMARY KEY,
+                        item VARCHAR(100),
+                        modelo VARCHAR(200),
+                        fornecedor VARCHAR(200),
+                        qtd_atual INTEGER,
+                        preco_unitario DECIMAL(10,2),
+                        estoque_total INTEGER,
+                        in_transit INTEGER,
+                        vendas_medias DECIMAL(10,2),
+                        cbm DECIMAL(8,4),
+                        moq INTEGER,
+                        data_upload TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP(),
+                        usuario VARCHAR(50),
+                        table_type VARCHAR(20) DEFAULT 'TIMELINE'
+                    )
+                    """)
+                    
+            else:  # ANALYTICS
+                # Check for analytics table
+                cursor.execute("SHOW TABLES LIKE 'ANALYTICS_DATA' IN SCHEMA ESTOQUE")
+                result = cursor.fetchall()
+                
+                if not result:
+                    st.info("📊 Criando tabela ANALYTICS_DATA...")
+                    cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS ESTOQUE.ANALYTICS_DATA (
+                        id INTEGER AUTOINCREMENT PRIMARY KEY,
+                        produto VARCHAR(200),
+                        estoque INTEGER,
+                        consumo_6_meses DECIMAL(10,2),
+                        media_6_meses DECIMAL(10,2),
+                        estoque_cobertura DECIMAL(8,2),
+                        data_upload TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP(),
+                        usuario VARCHAR(50),
+                        table_type VARCHAR(20) DEFAULT 'ANALYTICS'
+                    )
+                    """)
+            
+            # Create log table if it doesn't exist
+            cursor.execute("SHOW TABLES LIKE 'UPLOAD_LOG' IN SCHEMA CONFIG")
+            log_result = cursor.fetchall()
+            
+            if not log_result:
                 cursor.execute("""
                 CREATE TABLE IF NOT EXISTS CONFIG.UPLOAD_LOG (
                     id INTEGER AUTOINCREMENT PRIMARY KEY,
@@ -189,12 +216,13 @@ def upload_excel_to_snowflake(df, arquivo_nome, usuario="minipa"):
                     linhas_processadas INTEGER,
                     data_upload TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP(),
                     usuario VARCHAR(50),
-                    status VARCHAR(20)
+                    status VARCHAR(20),
+                    table_type VARCHAR(20)
                 )
                 """)
-                
-                conn.commit()
-                st.success("✅ Tabelas criadas com sucesso!")
+            
+            conn.commit()
+            st.success(f"✅ Tabelas para {table_type} verificadas/criadas!")
             
         except Exception as table_error:
             st.warning(f"⚠️ Erro ao verificar/criar tabelas: {str(table_error)}")
@@ -210,65 +238,114 @@ def upload_excel_to_snowflake(df, arquivo_nome, usuario="minipa"):
         
         success_count = 0
         
-        # Insert new data row by row
-        for idx, row in df_clean.iterrows():
-            try:
-                # Extract values in the exact order needed for database
-                item = str(row.get('Item', '')) if 'Item' in row.index else ''
-                modelo = str(row.get('Modelo', '')) if 'Modelo' in row.index else ''
-                fornecedor = str(row.get('Fornecedor', '')) if 'Fornecedor' in row.index else ''
-                
-                # Handle numeric values safely
-                def safe_numeric(val, default=0):
-                    if pd.isna(val) or val == '' or str(val).lower() == 'nan':
-                        return default
-                    try:
-                        return int(float(str(val)))
-                    except:
-                        return default
-                
-                def safe_float(val, default=0.0):
-                    if pd.isna(val) or val == '' or str(val).lower() == 'nan':
-                        return default
-                    try:
-                        return float(val)
-                    except:
-                        return default
-                
-                qtd_atual = safe_numeric(row.get('QTD', 0))
-                preco_unitario = safe_float(row.get('Preco_Unitario', 0.0))
-                estoque_total = safe_numeric(row.get('Estoque_Total', 0)) 
-                in_transit = safe_numeric(row.get('In_Transit', 0))
-                vendas_medias = safe_float(row.get('Vendas_Medias', 0.0))
-                cbm = safe_float(row.get('CBM', 0.0))
-                moq = safe_numeric(row.get('MOQ', 0))
-                
-                # Skip completely empty rows
-                if not any([item, modelo, fornecedor]) and all(v == 0 for v in [qtd_atual, estoque_total]):
+        # Insert new data row by row based on table type
+        if table_type == "TIMELINE":
+            # Timeline data insertion
+            for idx, row in df_clean.iterrows():
+                try:
+                    # Extract values for timeline table
+                    item = str(row.get('Item', '')) if 'Item' in row.index else ''
+                    modelo = str(row.get('Modelo', '')) if 'Modelo' in row.index else ''
+                    fornecedor = str(row.get('Fornecedor', '')) if 'Fornecedor' in row.index else ''
+                    
+                    # Handle numeric values safely
+                    def safe_numeric(val, default=0):
+                        if pd.isna(val) or val == '' or str(val).lower() == 'nan':
+                            return default
+                        try:
+                            return int(float(str(val)))
+                        except:
+                            return default
+                    
+                    def safe_float(val, default=0.0):
+                        if pd.isna(val) or val == '' or str(val).lower() == 'nan':
+                            return default
+                        try:
+                            return float(val)
+                        except:
+                            return default
+                    
+                    qtd_atual = safe_numeric(row.get('QTD', 0))
+                    preco_unitario = safe_float(row.get('Preco_Unitario', 0.0))
+                    estoque_total = safe_numeric(row.get('Estoque_Total', 0)) 
+                    in_transit = safe_numeric(row.get('In_Transit', 0))
+                    vendas_medias = safe_float(row.get('Vendas_Medias', 0.0))
+                    cbm = safe_float(row.get('CBM', 0.0))
+                    moq = safe_numeric(row.get('MOQ', 0))
+                    
+                    # Skip completely empty rows
+                    if not any([item, modelo, fornecedor]) and all(v == 0 for v in [qtd_atual, estoque_total]):
+                        continue
+                    
+                    # Insert timeline data
+                    cursor.execute("""
+                    INSERT INTO ESTOQUE.PRODUTOS 
+                    (item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
+                     in_transit, vendas_medias, cbm, moq, usuario, table_type)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
+                          in_transit, vendas_medias, cbm, moq, usuario, table_type))
+                    
+                    success_count += 1
+                    
+                except Exception as row_error:
+                    st.warning(f"⚠️ Erro na linha {idx + 1}: {str(row_error)}")
                     continue
-                
-                # Insert with exactly 11 parameters
-                cursor.execute("""
-                INSERT INTO ESTOQUE.PRODUTOS 
-                (item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
-                 in_transit, vendas_medias, cbm, moq, usuario)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
-                      in_transit, vendas_medias, cbm, moq, usuario))
-                
-                success_count += 1
-                
-            except Exception as row_error:
-                st.warning(f"⚠️ Erro na linha {idx + 1}: {str(row_error)}")
-                continue
+                    
+        else:  # ANALYTICS
+            # Analytics data insertion
+            for idx, row in df_clean.iterrows():
+                try:
+                    # Extract values for analytics table - look for common analytics column names
+                    produto = str(row.get('Produto', ''))
+                    if not produto:  # Try alternative column names
+                        produto = str(row.get('Item', '') or row.get('Modelo', ''))
+                    
+                    def safe_numeric(val, default=0):
+                        if pd.isna(val) or val == '' or str(val).lower() == 'nan':
+                            return default
+                        try:
+                            return int(float(str(val)))
+                        except:
+                            return default
+                    
+                    def safe_float(val, default=0.0):
+                        if pd.isna(val) or val == '' or str(val).lower() == 'nan':
+                            return default
+                        try:
+                            return float(val)
+                        except:
+                            return default
+                    
+                    estoque = safe_numeric(row.get('Estoque', 0))
+                    consumo_6_meses = safe_float(row.get('Consumo 6 Meses', 0.0))
+                    media_6_meses = safe_float(row.get('Média 6 Meses', 0.0))
+                    estoque_cobertura = safe_float(row.get('Estoque Cobertura', 0.0))
+                    
+                    # Skip completely empty rows
+                    if not produto and all(v == 0 for v in [estoque, consumo_6_meses, media_6_meses]):
+                        continue
+                    
+                    # Insert analytics data
+                    cursor.execute("""
+                    INSERT INTO ESTOQUE.ANALYTICS_DATA 
+                    (produto, estoque, consumo_6_meses, media_6_meses, estoque_cobertura, usuario, table_type)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """, (produto, estoque, consumo_6_meses, media_6_meses, estoque_cobertura, usuario, table_type))
+                    
+                    success_count += 1
+                    
+                except Exception as row_error:
+                    st.warning(f"⚠️ Erro na linha {idx + 1}: {str(row_error)}")
+                    continue
         
         # Log the upload (only if CONFIG schema and table exist)
         try:
             cursor.execute("""
             INSERT INTO CONFIG.UPLOAD_LOG 
-            (nome_arquivo, linhas_processadas, usuario, status)
-            VALUES (%s, %s, %s, %s)
-            """, (arquivo_nome, success_count, usuario, 'SUCCESS'))
+            (nome_arquivo, linhas_processadas, usuario, status, table_type)
+            VALUES (%s, %s, %s, %s, %s)
+            """, (arquivo_nome, success_count, usuario, 'SUCCESS', table_type))
         except:
             # If log table doesn't exist, continue without logging
             pass
@@ -391,11 +468,11 @@ def load_data_with_history(usuario="minipa", limit_days=30):
         
         # Simple check if table exists
         try:
-            cursor.execute("SELECT COUNT(*) FROM ESTOQUE.PRODUTOS WHERE usuario = %s", [usuario])
+            cursor.execute("SELECT COUNT(*) FROM ESTOQUE.PRODUTOS WHERE usuario = %s AND table_type = 'TIMELINE'", [usuario])
             total_records = cursor.fetchone()[0]
             
             if total_records == 0:
-                st.info("💡 Nenhum dado encontrado na tabela. Faça um upload primeiro.")
+                st.info("💡 Nenhum dado de timeline encontrado na tabela. Faça um upload de dados de timeline primeiro.")
                 cursor.close()
                 conn.close()
                 return None
@@ -422,6 +499,7 @@ def load_data_with_history(usuario="minipa", limit_days=30):
                ROW_NUMBER() OVER (PARTITION BY item ORDER BY data_upload DESC) as row_num
         FROM ESTOQUE.PRODUTOS 
         WHERE usuario = %s 
+        AND table_type = 'TIMELINE'
         AND data_upload >= DATEADD(day, %s, CURRENT_DATE())
         ORDER BY data_upload DESC
         """
@@ -479,4 +557,79 @@ def test_connection():
         except Exception as e:
             st.error(f"❄️ Erro no teste: {str(e)}")
             return False
-    return False 
+    return False
+
+def load_analytics_data(usuario="minipa", limit_days=30):
+    """
+    Load analytics data from Snowflake for análise de estoque
+    """
+    conn = get_snowflake_connection()
+    if not conn:
+        return None
+        
+    try:
+        # First, check if the analytics table exists and has data
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA WHERE usuario = %s", [usuario])
+            total_records = cursor.fetchone()[0]
+            
+            if total_records == 0:
+                st.info("💡 Nenhum dado de análise encontrado. Faça upload de um arquivo de análise primeiro.")
+                cursor.close()
+                conn.close()
+                return None
+                
+        except Exception as table_error:
+            st.warning(f"⚠️ Tabela de análise pode não existir ainda: {str(table_error)}")
+            cursor.close()
+            conn.close()
+            return None
+        
+        # Load analytics data
+        query = """
+        SELECT produto as "Produto", 
+               estoque as "Estoque", 
+               consumo_6_meses as "Consumo 6 Meses",
+               media_6_meses as "Média 6 Meses", 
+               estoque_cobertura as "Estoque Cobertura",
+               data_upload,
+               ROW_NUMBER() OVER (PARTITION BY produto ORDER BY data_upload DESC) as row_num
+        FROM ESTOQUE.ANALYTICS_DATA 
+        WHERE usuario = %s 
+        AND data_upload >= DATEADD(day, %s, CURRENT_DATE())
+        ORDER BY data_upload DESC
+        """
+        
+        cursor.close()
+        
+        df = pd.read_sql(query, conn, params=[usuario, -limit_days])
+        conn.close()
+        
+        # Check if we got any data
+        if df.empty:
+            st.info(f"💡 Nenhum dado de análise encontrado nos últimos {limit_days} dias.")
+            return None
+        
+        # Filter for latest records only
+        if 'row_num' in df.columns:
+            try:
+                latest_df = df[df['row_num'] == 1].drop('row_num', axis=1)
+                history_count = len(df[df['row_num'] > 1])
+                
+                st.info(f"📊 Dados de análise: {len(latest_df)} produtos | 📈 Histórico: {history_count} registros")
+                
+                return latest_df
+                
+            except Exception as filter_error:
+                st.warning(f"⚠️ Erro ao filtrar histórico: {str(filter_error)}. Retornando todos os dados.")
+                if 'row_num' in df.columns:
+                    df = df.drop('row_num', axis=1)
+                return df
+        
+        return df
+        
+    except Exception as e:
+        st.error(f"❄️ Erro ao carregar dados de análise: {str(e)}")
+        return None 

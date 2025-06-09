@@ -64,12 +64,31 @@ def show_data_upload():
     # File upload section
     st.subheader("📤 Upload de Arquivo")
     
-    uploaded_file = st.file_uploader(
-        "📁 Faça upload do seu arquivo Excel",
-        type=['xlsx', 'xls'],
-        help="Aceita qualquer arquivo Excel - Timeline/MOQ, Analytics, ou outros formatos",
-        key="main_upload"
+    # Create two distinct upload options
+    upload_type = st.radio(
+        "📋 Selecione o tipo de dados:",
+        ["📅 Timeline de Compras (MOQ/Fornecedores)", "📊 Análise de Estoque (Export)"],
+        help="Escolha o tipo correto para que os dados sejam processados adequadamente"
     )
+    
+    if upload_type == "📅 Timeline de Compras (MOQ/Fornecedores)":
+        st.info("📝 **Para Timeline:** Upload com colunas Item, Fornecedor, QTD, Modelo, Preço FOB, MOQ, etc.")
+        table_prefix = "TIMELINE"
+        uploaded_file = st.file_uploader(
+            "📁 Arquivo Excel para Timeline de Compras",
+            type=['xlsx', 'xls'],
+            help="Arquivo com dados de fornecedores, MOQ, preços FOB, etc.",
+            key="timeline_upload"
+        )
+    else:
+        st.info("📊 **Para Análise:** Upload com colunas Produto, Estoque, Média 6 Meses, Estoque Cobertura, etc.")
+        table_prefix = "ANALYTICS"
+        uploaded_file = st.file_uploader(
+            "📁 Arquivo Excel para Análise de Estoque",
+            type=['xlsx', 'xls'],
+            help="Arquivo Export com dados de estoque e consumo",
+            key="analytics_upload"
+        )
     
     if uploaded_file is not None:
         st.subheader("🔍 Análise do Arquivo")
@@ -107,18 +126,28 @@ def show_data_upload():
                                     else:
                                         df_clean[col] = df_clean[col].fillna(0)
                                 
-                                # Upload to Snowflake
-                                success = upload_excel_to_snowflake(df_clean, uploaded_file.name, "minipa")
+                                # Upload to Snowflake with table type
+                                success = upload_excel_to_snowflake(df_clean, uploaded_file.name, "minipa", table_prefix)
                                 
                                 if success:
                                     st.success("🎉 Dados salvos com sucesso na nuvem!")
                                     st.balloons()
+                                    
+                                    # Show different messages based on upload type
+                                    if table_prefix == "TIMELINE":
+                                        st.info("✅ **Dados salvos para Timeline de Compras**")
+                                        st.write("👉 Acesse a página '📅 Timeline de Compras' para ver a análise")
+                                    else:
+                                        st.info("✅ **Dados salvos para Análise de Estoque**") 
+                                        st.write("👉 Acesse a página '📊 Análise de Estoque' para ver os relatórios")
+                                    
                                     st.info(f"""
                                     📈 **Resumo do upload:**
                                     - 📁 Arquivo: {uploaded_file.name}
                                     - 📋 Planilha: {detected_sheet}
                                     - 📊 Cabeçalho: Linha {detected_header + 1}
                                     - 📈 Linhas: {len(df_clean)}
+                                    - 🗂️ Tipo: {upload_type}
                                     - 🕒 Data: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}
                                     """)
                                     st.rerun()
@@ -1102,70 +1131,102 @@ def show_excel_analytics():
     st.title("📊 Análise de Estoque - Sistema MINIPA")
     st.markdown("**Ferramenta prática para gestão de estoque focada em AÇÃO e DECISÃO**")
     
-    # File upload
-    st.subheader("📁 Upload do Arquivo")
-    uploaded_file = st.file_uploader(
-        "Faça upload do arquivo Excel (.xlsx)",
-        type=['xlsx'],
-        help="Arquivo deve conter planilha 'Export' com colunas: Produto, Estoque, Média 6 Meses, Estoque Cobertura, Qtde Tot Compras"
-    )
-    
-    if uploaded_file is not None:
-        try:
-            # Read the Excel file
-            df = pd.read_excel(uploaded_file, sheet_name='Export')
-            
-            # Clean data
-            df = df.dropna(subset=['Produto'])
-            df = df[df['Produto'] != 'nan']
-            df = df[~df['Produto'].str.contains('Filtros aplicados', na=False)]
-            
-            # Convert numeric columns
-            numeric_columns = ['Estoque', 'Média 6 Meses', 'Estoque Cobertura', 'Qtde Tot Compras']
-            for col in numeric_columns:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-            
-            st.success(f"✅ Dados carregados: {len(df)} produtos")
-            
-            # Separate new and existing products
-            produtos_novos = df[(df['Estoque'] == 0) & (df['Média 6 Meses'] == 0) & (df['Qtde Tot Compras'] > 0)]
-            produtos_existentes = df[(df['Estoque'] > 0) | (df['Média 6 Meses'] > 0)]
-            
-            # Show analytics tabs
-            tab1, tab2, tab3, tab4 = st.tabs(["📋 Resumo Executivo", "🚨 Lista de Compras", "📊 Dashboards", "📞 Contatos Urgentes"])
-            
-            with tab1:
-                show_executive_summary(df, produtos_novos, produtos_existentes)
-            
-            with tab2:
-                show_purchase_list(produtos_existentes)
-            
-            with tab3:
-                show_analytics_dashboard(produtos_existentes, produtos_novos)
-            
-            with tab4:
-                show_urgent_contacts(produtos_existentes)
-                
-        except Exception as e:
-            st.error(f"❌ Erro ao processar arquivo: {str(e)}")
-            st.info("💡 Certifique-se de que o arquivo contém uma planilha 'Export' com as colunas necessárias")
-    
-    else:
-        st.info("📁 Faça upload de um arquivo Excel para começar a análise")
+    # Try to load data from Snowflake first
+    try:
+        from bd.snowflake_config import load_analytics_data
+        df = load_analytics_data()
         
-        # Show sample format
-        with st.expander("📋 Formato esperado do arquivo"):
-            st.markdown("""
-            **Planilha: 'Export'**
+        if df is not None and len(df) > 0:
+            st.success(f"✅ Usando dados da nuvem: {len(df)} produtos carregados")
             
-            Colunas necessárias:
-            - `Produto`: Nome do produto
-            - `Estoque`: Quantidade atual em estoque
-            - `Média 6 Meses`: Consumo médio mensal
-            - `Estoque Cobertura`: Cobertura em meses
-            - `Qtde Tot Compras`: Quantidade total para compras (opcional)
-            """)
+            # Check if data_upload column exists before accessing it
+            if 'data_upload' in df.columns:
+                st.info(f"📅 Último upload: {df['data_upload'].max()}")
+            else:
+                st.info("📅 Dados de análise carregados da nuvem")
+                
+        else:
+            st.info("💡 Nenhum dado de análise encontrado na nuvem.")
+            st.markdown("👉 **Vá para 'Upload de Dados' e selecione '📊 Análise de Estoque (Export)' para enviar seus dados primeiro.**")
+            df = None
+            
+    except ImportError:
+        st.warning("⚠️ Snowflake não configurado. Usando upload local temporário.")
+        df = None
+    except Exception as e:
+        st.error(f"❌ Erro ao carregar dados da nuvem: {str(e)}")
+        df = None
+
+    # Fallback to local upload if no cloud data
+    if df is None:
+        st.subheader("📁 Upload Local (Temporário)")
+        st.markdown("⚠️ **Este upload é temporário. Para salvar na nuvem, use 'Upload de Dados' → 'Análise de Estoque'**")
+        
+        uploaded_file = st.file_uploader(
+            "Faça upload do arquivo Excel (.xlsx)",
+            type=['xlsx'],
+            help="Arquivo deve conter planilha 'Export' com colunas: Produto, Estoque, Média 6 Meses, Estoque Cobertura"
+        )
+        
+        if uploaded_file is not None:
+            try:
+                # Read the Excel file
+                df = pd.read_excel(uploaded_file, sheet_name='Export')
+                
+                # Clean data
+                df = df.dropna(subset=['Produto'])
+                df = df[df['Produto'] != 'nan']
+                df = df[~df['Produto'].str.contains('Filtros aplicados', na=False)]
+                
+                # Convert numeric columns
+                numeric_columns = ['Estoque', 'Média 6 Meses', 'Estoque Cobertura', 'Qtde Tot Compras']
+                for col in numeric_columns:
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                
+                st.success(f"✅ Dados carregados: {len(df)} produtos")
+                
+            except Exception as e:
+                st.error(f"❌ Erro ao processar arquivo: {str(e)}")
+                st.info("💡 Certifique-se de que o arquivo contém uma planilha 'Export' com as colunas necessárias")
+                return
+        else:
+            st.info("📁 Faça upload de um arquivo Excel para análise local ou use os dados da nuvem")
+            
+            # Show sample format
+            with st.expander("📋 Formato esperado do arquivo"):
+                st.markdown("""
+                **Planilha: 'Export'**
+                
+                Colunas necessárias:
+                - `Produto`: Nome do produto
+                - `Estoque`: Quantidade atual em estoque
+                - `Média 6 Meses`: Consumo médio mensal
+                - `Estoque Cobertura`: Cobertura em meses
+                - `Qtde Tot Compras`: Quantidade total para compras (opcional)
+                """)
+            return
+
+    # Only show analysis if data is loaded (either from Snowflake or local upload)
+    if df is not None:
+        # Separate new and existing products
+        produtos_novos = df[(df['Estoque'] == 0) & (df['Média 6 Meses'] == 0) & (df.get('Qtde Tot Compras', 0) > 0)]
+        produtos_existentes = df[(df['Estoque'] > 0) | (df['Média 6 Meses'] > 0)]
+        
+        # Show analytics tabs
+        tab1, tab2, tab3, tab4 = st.tabs(["📋 Resumo Executivo", "🚨 Lista de Compras", "📊 Dashboards", "📞 Contatos Urgentes"])
+        
+        with tab1:
+            show_executive_summary(df, produtos_novos, produtos_existentes)
+        
+        with tab2:
+            show_purchase_list(produtos_existentes)
+        
+        with tab3:
+            show_analytics_dashboard(produtos_existentes, produtos_novos)
+        
+        with tab4:
+            show_urgent_contacts(produtos_existentes)
 
 def show_executive_summary(df, produtos_novos, produtos_existentes):
     """Resumo executivo dos dados"""
