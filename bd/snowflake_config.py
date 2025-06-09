@@ -143,7 +143,7 @@ def create_tables():
 
 def upload_excel_to_snowflake(df, arquivo_nome, usuario="minipa"):
     """
-    Upload Excel data to Snowflake
+    Upload Excel data to Snowflake with history tracking
     Returns True if successful, False otherwise
     """
     conn = get_snowflake_connection()
@@ -153,83 +153,125 @@ def upload_excel_to_snowflake(df, arquivo_nome, usuario="minipa"):
     try:
         cursor = conn.cursor()
         
-        # Debug: Show dataframe info
-        st.info(f"🔍 Debug: DataFrame shape: {df.shape}")
-        st.info(f"🔍 Debug: Columns: {list(df.columns)}")
+        # Don't clear existing data - keep for history
+        # Instead, add new data with timestamp
         
-        # Check if required columns exist
-        required_columns = ['Item', 'Modelo', 'Fornecedor', 'QTD', 'Preco_Unitario', 
-                          'Estoque_Total', 'In_Transit', 'Vendas_Medias', 'CBM', 'MOQ']
-        missing_columns = [col for col in required_columns if col not in df.columns]
+        # Clean the dataframe - remove NaN and empty rows
+        df_clean = df.copy()
         
-        if missing_columns:
-            st.error(f"❌ Colunas obrigatórias não encontradas: {missing_columns}")
-            st.info("💡 Certifique-se de que o arquivo Excel foi processado corretamente")
-            return False
+        # Remove completely empty rows
+        df_clean = df_clean.dropna(how='all')
         
-        # Clear existing data (for this demo - in production you might want versioning)
-        cursor.execute("DELETE FROM ESTOQUE.PRODUTOS WHERE usuario = ?", (usuario,))
+        # Get actual column names from the dataframe
+        available_columns = list(df_clean.columns)
+        st.info(f"📊 Colunas encontradas: {available_columns}")
         
-        # Insert new data with better error handling
-        success_count = 0
-        for idx, row in df.iterrows():
-            try:
-                # Convert and validate data
-                item = str(row.get('Item', ''))[:50]  # Limit to 50 chars
-                modelo = str(row.get('Modelo', ''))[:100]  # Limit to 100 chars
-                fornecedor = str(row.get('Fornecedor', ''))[:100]  # Limit to 100 chars
-                
-                # Handle numeric conversions safely
-                qtd_atual = int(float(row.get('QTD', 0))) if pd.notna(row.get('QTD')) else 0
-                preco_unitario = float(row.get('Preco_Unitario', 0)) if pd.notna(row.get('Preco_Unitario')) else 0.0
-                estoque_total = int(float(row.get('Estoque_Total', 0))) if pd.notna(row.get('Estoque_Total')) else 0
-                in_transit = int(float(row.get('In_Transit', 0))) if pd.notna(row.get('In_Transit')) else 0
-                vendas_medias = float(row.get('Vendas_Medias', 0)) if pd.notna(row.get('Vendas_Medias')) else 0.0
-                cbm = float(row.get('CBM', 0)) if pd.notna(row.get('CBM')) else 0.0
-                moq = int(float(row.get('MOQ', 0))) if pd.notna(row.get('MOQ')) else 0
-                
-                cursor.execute("""
-                INSERT INTO ESTOQUE.PRODUTOS 
-                (item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
-                 in_transit, vendas_medias, cbm, moq, usuario)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    item, modelo, fornecedor, qtd_atual, preco_unitario, 
-                    estoque_total, in_transit, vendas_medias, cbm, moq, usuario
-                ))
-                success_count += 1
-                
-            except Exception as row_error:
-                st.warning(f"⚠️ Erro na linha {idx}: {str(row_error)}")
+        # Insert new data - adapting to whatever columns exist
+        for idx, row in df_clean.iterrows():
+            # Skip if all important values are NaN
+            if pd.isna(row).all():
                 continue
+                
+            # Prepare values safely
+            values = []
+            for col in available_columns[:10]:  # Limit to first 10 columns to match table
+                val = row[col] if col in row.index else ''
+                
+                # Handle different data types safely
+                if pd.isna(val) or val == '' or str(val).lower() == 'nan':
+                    if col in ['QTD', 'Estoque_Total', 'In_Transit', 'MOQ']:
+                        values.append(0)  # Numeric defaults to 0
+                    elif col in ['Preco_Unitario', 'Vendas_Medias', 'CBM']:
+                        values.append(0.0)  # Float defaults to 0.0
+                    else:
+                        values.append('')  # String defaults to empty
+                else:
+                    # Convert based on expected type
+                    if col in ['QTD', 'Estoque_Total', 'In_Transit', 'MOQ']:
+                        try:
+                            values.append(int(float(str(val))))
+                        except:
+                            values.append(0)
+                    elif col in ['Preco_Unitario', 'Vendas_Medias', 'CBM']:
+                        try:
+                            values.append(float(str(val)))
+                        except:
+                            values.append(0.0)
+                    else:
+                        values.append(str(val))
+            
+            # Ensure we have exactly 11 values (10 data + 1 user)
+            while len(values) < 10:
+                values.append('')
+            values.append(usuario)  # Add user at the end
+            
+            # Insert with proper parameter binding
+            cursor.execute("""
+            INSERT INTO ESTOQUE.PRODUTOS 
+            (item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
+             in_transit, vendas_medias, cbm, moq, usuario)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, values)
         
         # Log the upload
         cursor.execute("""
         INSERT INTO CONFIG.UPLOAD_LOG 
         (nome_arquivo, linhas_processadas, usuario, status)
         VALUES (?, ?, ?, ?)
-        """, (arquivo_nome, success_count, usuario, 'SUCCESS'))
+        """, (arquivo_nome, len(df_clean), usuario, 'SUCCESS'))
         
         conn.commit()
         cursor.close()
         conn.close()
         
-        if success_count > 0:
-            st.success(f"✅ {success_count} registros inseridos com sucesso!")
-            return True
-        else:
-            st.error("❌ Nenhum registro foi inserido")
-            return False
+        st.success(f"✅ {len(df_clean)} linhas processadas (sem NaN)")
+        return True
         
     except Exception as e:
         st.error(f"❄️ Erro ao fazer upload: {str(e)}")
-        st.error(f"🔍 Tipo do erro: {type(e).__name__}")
+        st.error(f"📊 Detalhes do erro: {type(e).__name__}")
         return False
 
-def load_data_from_snowflake(usuario="minipa"):
+def analyze_excel_structure(uploaded_file):
     """
-    Load data from Snowflake
-    Returns DataFrame or None if failed
+    Analyze Excel file structure and suggest best processing approach
+    """
+    try:
+        # Try to read Excel file and detect structure
+        xl_file = pd.ExcelFile(uploaded_file)
+        sheets = xl_file.sheet_names
+        
+        st.info(f"📋 Planilhas encontradas: {sheets}")
+        
+        # Try different starting rows to find headers
+        for sheet in sheets[:3]:  # Check first 3 sheets
+            st.subheader(f"📊 Análise da planilha: {sheet}")
+            
+            for header_row in [0, 9, 10]:  # Common header positions
+                try:
+                    df_sample = pd.read_excel(uploaded_file, sheet_name=sheet, header=header_row, nrows=5)
+                    if not df_sample.empty and len(df_sample.columns) > 3:
+                        st.success(f"✅ Estrutura detectada em linha {header_row}")
+                        st.dataframe(df_sample)
+                        
+                        # Show column info
+                        st.write("**Colunas detectadas:**")
+                        for i, col in enumerate(df_sample.columns):
+                            st.write(f"{i+1}. `{col}` - Tipo: {df_sample[col].dtype}")
+                        
+                        return sheet, header_row
+                except:
+                    continue
+        
+        return None, 0
+                        
+    except Exception as e:
+        st.error(f"❌ Erro ao analisar Excel: {str(e)}")
+        return None, 0
+
+def load_data_with_history(usuario="minipa", limit_days=30):
+    """
+    Load data from Snowflake with history tracking
     """
     conn = get_snowflake_connection()
     if not conn:
@@ -240,14 +282,26 @@ def load_data_from_snowflake(usuario="minipa"):
         SELECT item, modelo, fornecedor, qtd_atual as QTD, 
                preco_unitario as "Preco_Unitario", estoque_total as "Estoque_Total",
                in_transit as "In_Transit", vendas_medias as "Vendas_Medias",
-               cbm as CBM, moq as MOQ, data_upload
+               cbm as CBM, moq as MOQ, data_upload,
+               ROW_NUMBER() OVER (PARTITION BY item ORDER BY data_upload DESC) as row_num
         FROM ESTOQUE.PRODUTOS 
-        WHERE usuario = ?
+        WHERE usuario = ? 
+        AND data_upload >= DATEADD(day, ?, CURRENT_DATE())
         ORDER BY data_upload DESC
         """
         
-        df = pd.read_sql(query, conn, params=(usuario,))
+        df = pd.read_sql(query, conn, params=(usuario, -limit_days))
         conn.close()
+        
+        # Show history summary
+        if not df.empty:
+            latest_df = df[df['row_num'] == 1].drop('row_num', axis=1)
+            history_count = len(df[df['row_num'] > 1])
+            
+            st.info(f"📅 Dados atuais: {len(latest_df)} produtos | 📈 Histórico: {history_count} registros")
+            
+            return latest_df
+        
         return df
         
     except Exception as e:

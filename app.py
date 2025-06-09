@@ -25,7 +25,7 @@ def show_data_upload():
     
     # Import Snowflake functions
     try:
-        from bd.snowflake_config import upload_excel_to_snowflake, load_data_from_snowflake, test_connection
+        from bd.snowflake_config import upload_excel_to_snowflake, load_data_with_history, test_connection
         snowflake_available = True
     except ImportError:
         snowflake_available = False
@@ -38,7 +38,7 @@ def show_data_upload():
             st.subheader("📊 Status dos Dados")
             
             # Try to load existing data
-            existing_data = load_data_from_snowflake()
+            existing_data = load_data_with_history()
             if existing_data is not None and len(existing_data) > 0:
                 st.success(f"✅ {len(existing_data)} produtos já salvos na nuvem")
                 st.info(f"📅 Último upload: {existing_data['data_upload'].max()}")
@@ -67,48 +67,100 @@ def show_data_upload():
         uploaded_file_timeline = st.file_uploader(
             "Arquivo Excel para Timeline",
             type=['xlsx', 'xls'],
-            help="Deve conter: Item, Modelo, Fornecedor, QTD, Preço FOB Unitário, Estoque Total, In Transit, Avg Sales, CBM, MOQ",
+            help="Qualquer arquivo Excel - o sistema detectará automaticamente a estrutura",
             key="timeline_upload"
         )
         
         if uploaded_file_timeline is not None:
+            # Analyze file structure first
+            st.subheader("🔍 Análise do Arquivo")
+            
             if snowflake_available:
-                if st.button("💾 Salvar na Nuvem", key="save_timeline"):
-                    with st.spinner("📤 Enviando dados para Snowflake..."):
-                        try:
-                            # Process the file
-                            df = pd.read_excel(uploaded_file_timeline, header=9)
-                            df = df.dropna(subset=['Item'])
-                            df = df[df['Item'] != 'Item']
-                            
-                            # Convert numeric columns
-                            colunas_numericas = ['QTD', 'Preço FOB\nUnitário', 'Estoque\nTotal ', 
-                                               'In Transit\nShipt', 'Avg Sales\n', 'CBM', 'MOQ']
-                            
-                            for col in colunas_numericas:
-                                if col in df.columns:
-                                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-                            
-                            # Rename columns
-                            df = df.rename(columns={
-                                'Preço FOB\nUnitário': 'Preco_Unitario',
-                                'Estoque\nTotal ': 'Estoque_Total',
-                                'In Transit\nShipt': 'In_Transit',
-                                'Avg Sales\n': 'Vendas_Medias'
-                            })
-                            
-                            # Upload to Snowflake
-                            success = upload_excel_to_snowflake(df, uploaded_file_timeline.name, "minipa")
-                            
-                            if success:
-                                st.success("🎉 Dados salvos com sucesso na nuvem!")
-                                st.balloons()
-                                st.rerun()
-                            else:
-                                st.error("❌ Erro ao salvar dados na nuvem")
-                                
-                        except Exception as e:
-                            st.error(f"❌ Erro ao processar arquivo: {str(e)}")
+                from bd.snowflake_config import analyze_excel_structure
+                
+                # Analyze structure
+                sheet_name, header_row = analyze_excel_structure(uploaded_file_timeline)
+                
+                if sheet_name is not None:
+                    # Let user choose processing options
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        selected_sheet = st.selectbox(
+                            "📋 Escolha a planilha:",
+                            options=pd.ExcelFile(uploaded_file_timeline).sheet_names,
+                            index=pd.ExcelFile(uploaded_file_timeline).sheet_names.index(sheet_name) if sheet_name in pd.ExcelFile(uploaded_file_timeline).sheet_names else 0
+                        )
+                    
+                    with col2:
+                        selected_header = st.number_input(
+                            "📍 Linha do cabeçalho:",
+                            min_value=0,
+                            max_value=20,
+                            value=header_row,
+                            help="Linha onde estão os nomes das colunas"
+                        )
+                    
+                    # Show preview with selected options
+                    try:
+                        df_preview = pd.read_excel(
+                            uploaded_file_timeline, 
+                            sheet_name=selected_sheet, 
+                            header=selected_header,
+                            nrows=10
+                        )
+                        
+                        st.subheader("👀 Prévia dos dados")
+                        st.dataframe(df_preview)
+                        
+                        # Show data quality info
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            total_rows = len(df_preview)
+                            st.metric("📊 Linhas (prévia)", total_rows)
+                        with col2:
+                            total_cols = len(df_preview.columns)
+                            st.metric("📋 Colunas", total_cols)
+                        with col3:
+                            non_null = df_preview.count().sum()
+                            st.metric("✅ Valores válidos", non_null)
+                        
+                        # Upload button
+                        if st.button("💾 Salvar na Nuvem", key="save_timeline", type="primary"):
+                            with st.spinner("📤 Processando e enviando dados para Snowflake..."):
+                                try:
+                                    # Read full dataset
+                                    df_full = pd.read_excel(
+                                        uploaded_file_timeline,
+                                        sheet_name=selected_sheet,
+                                        header=selected_header
+                                    )
+                                    
+                                    # Upload to Snowflake with new improved function
+                                    success = upload_excel_to_snowflake(df_full, uploaded_file_timeline.name, "minipa")
+                                    
+                                    if success:
+                                        st.success("🎉 Dados salvos com sucesso na nuvem!")
+                                        st.balloons()
+                                        
+                                        # Show summary
+                                        st.info(f"📈 **Resumo do upload:**\n- Arquivo: {uploaded_file_timeline.name}\n- Planilha: {selected_sheet}\n- Linhas processadas: {len(df_full)}\n- Histórico mantido: ✅")
+                                        
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ Erro ao salvar dados na nuvem")
+                                        
+                                except Exception as e:
+                                    st.error(f"❌ Erro ao processar arquivo: {str(e)}")
+                                    st.error(f"🔧 Tente ajustar a linha do cabeçalho ou escolher outra planilha")
+                        
+                    except Exception as e:
+                        st.error(f"❌ Erro ao ler arquivo: {str(e)}")
+                        st.info("💡 Tente ajustar a linha do cabeçalho")
+                        
+                else:
+                    st.warning("⚠️ Não foi possível detectar automaticamente a estrutura do arquivo")
+                    st.info("💡 Tente um arquivo Excel com cabeçalhos claros")
             else:
                 st.warning("⚠️ Snowflake não configurado. Dados serão usados apenas localmente.")
     
@@ -244,12 +296,12 @@ def show_dashboard():
 
 def show_timeline():
     st.title("📅 TIMELINE INTERATIVA DE COMPRAS")
-    st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
+st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
 
     # Try to load data from Snowflake first
     try:
-        from bd.snowflake_config import load_data_from_snowflake
-        df = load_data_from_snowflake()
+        from bd.snowflake_config import load_data_with_history
+        df = load_data_with_history()
         
         if df is not None and len(df) > 0:
             st.success(f"✅ Usando dados da nuvem: {len(df)} produtos carregados")
@@ -774,7 +826,7 @@ def show_announcements():
         
         if filtered_announcements:
             # Estatísticas
-            col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4 = st.columns(4)
             
             with col1:
                 total = len(filtered_announcements)
@@ -1144,7 +1196,7 @@ def show_executive_summary(df, produtos_novos, produtos_existentes):
         if len(produtos_existentes) > 0:
             criticos = len(produtos_existentes[produtos_existentes['Estoque Cobertura'] <= 1])
             st.metric("🚨 Produtos Críticos", criticos)
-        else:
+else:
             st.metric("🚨 Produtos Críticos", 0)
     
     if len(produtos_existentes) > 0:
