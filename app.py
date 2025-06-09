@@ -59,122 +59,214 @@ def show_data_upload():
     # File upload section
     st.subheader("📤 Upload de Arquivo")
     
-    # Create tabs for different upload types
-    tab1, tab2 = st.tabs(["📊 Timeline/MOQ", "📈 Análise de Estoque"])
+    uploaded_file = st.file_uploader(
+        "📁 Faça upload do seu arquivo Excel",
+        type=['xlsx', 'xls'],
+        help="Aceita qualquer arquivo Excel - Timeline/MOQ, Analytics, ou outros formatos",
+        key="main_upload"
+    )
     
-    with tab1:
-        st.markdown("**Para Timeline de Compras e análise MOQ**")
-        uploaded_file_timeline = st.file_uploader(
-            "Arquivo Excel para Timeline",
-            type=['xlsx', 'xls'],
-            help="Qualquer arquivo Excel - o sistema detectará automaticamente a estrutura",
-            key="timeline_upload"
-        )
+    if uploaded_file is not None:
+        # Analyze file structure first
+        st.subheader("🔍 Análise do Arquivo")
         
-        if uploaded_file_timeline is not None:
-            # Analyze file structure first
-            st.subheader("🔍 Análise do Arquivo")
+        if snowflake_available:
+            from bd.snowflake_config import analyze_excel_structure
             
-            if snowflake_available:
-                from bd.snowflake_config import analyze_excel_structure
+            # Analyze structure
+            sheet_name, header_row = analyze_excel_structure(uploaded_file)
+            
+            if sheet_name is not None:
+                # Let user choose processing options
+                col1, col2, col3 = st.columns(3)
                 
-                # Analyze structure
-                sheet_name, header_row = analyze_excel_structure(uploaded_file_timeline)
+                with col1:
+                    selected_sheet = st.selectbox(
+                        "📋 Escolha a planilha:",
+                        options=pd.ExcelFile(uploaded_file).sheet_names,
+                        index=pd.ExcelFile(uploaded_file).sheet_names.index(sheet_name) if sheet_name in pd.ExcelFile(uploaded_file).sheet_names else 0
+                    )
                 
-                if sheet_name is not None:
-                    # Let user choose processing options
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        selected_sheet = st.selectbox(
-                            "📋 Escolha a planilha:",
-                            options=pd.ExcelFile(uploaded_file_timeline).sheet_names,
-                            index=pd.ExcelFile(uploaded_file_timeline).sheet_names.index(sheet_name) if sheet_name in pd.ExcelFile(uploaded_file_timeline).sheet_names else 0
-                        )
-                    
-                    with col2:
-                        selected_header = st.number_input(
-                            "📍 Linha do cabeçalho:",
-                            min_value=0,
-                            max_value=20,
-                            value=header_row,
-                            help="Linha onde estão os nomes das colunas"
-                        )
-                    
-                    # Show preview with selected options
-                    try:
+                with col2:
+                    selected_header = st.number_input(
+                        "📍 Linha do cabeçalho:",
+                        min_value=0,
+                        max_value=20,
+                        value=header_row,
+                        help="Linha onde estão os nomes das colunas (0-indexed)"
+                    )
+                
+                with col3:
+                    # Let user choose file type for better processing
+                    file_type = st.selectbox(
+                        "📊 Tipo de arquivo:",
+                        ["Auto-detectar", "Timeline/MOQ", "Análise de Estoque", "Outros"],
+                        help="Escolha o tipo para melhor processamento"
+                    )
+                
+                # Show preview with selected options
+                try:
+                    if file_type == "Análise de Estoque":
+                        # Try to read as Analytics file (Export sheet)
+                        try:
+                            df_preview = pd.read_excel(
+                                uploaded_file, 
+                                sheet_name='Export' if 'Export' in pd.ExcelFile(uploaded_file).sheet_names else selected_sheet,
+                                nrows=10
+                            )
+                            st.info("📊 Detectado como arquivo de Análise de Estoque")
+                        except:
+                            df_preview = pd.read_excel(
+                                uploaded_file, 
+                                sheet_name=selected_sheet, 
+                                header=selected_header,
+                                nrows=10
+                            )
+                    else:
+                        # Standard reading
                         df_preview = pd.read_excel(
-                            uploaded_file_timeline, 
+                            uploaded_file, 
                             sheet_name=selected_sheet, 
                             header=selected_header,
                             nrows=10
                         )
-                        
-                        st.subheader("👀 Prévia dos dados")
-                        st.dataframe(df_preview)
-                        
-                        # Show data quality info
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            total_rows = len(df_preview)
-                            st.metric("📊 Linhas (prévia)", total_rows)
-                        with col2:
-                            total_cols = len(df_preview.columns)
-                            st.metric("📋 Colunas", total_cols)
-                        with col3:
-                            non_null = df_preview.count().sum()
-                            st.metric("✅ Valores válidos", non_null)
-                        
-                        # Upload button
-                        if st.button("💾 Salvar na Nuvem", key="save_timeline", type="primary"):
-                            with st.spinner("📤 Processando e enviando dados para Snowflake..."):
-                                try:
-                                    # Read full dataset
+                    
+                    st.subheader("👀 Prévia dos dados")
+                    st.dataframe(df_preview)
+                    
+                    # Show data quality info
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        total_rows = len(df_preview)
+                        st.metric("📊 Linhas (prévia)", total_rows)
+                    with col2:
+                        total_cols = len(df_preview.columns)
+                        st.metric("📋 Colunas", total_cols)
+                    with col3:
+                        non_null = df_preview.count().sum()
+                        st.metric("✅ Valores válidos", non_null)
+                    with col4:
+                        file_size = len(uploaded_file.getvalue()) / 1024
+                        st.metric("📁 Tamanho", f"{file_size:.1f} KB")
+                    
+                    # Upload button
+                    if st.button("💾 Salvar na Nuvem", key="save_main", type="primary"):
+                        with st.spinner("📤 Processando e enviando dados para Snowflake..."):
+                            try:
+                                # Read full dataset based on file type
+                                if file_type == "Análise de Estoque":
+                                    try:
+                                        df_full = pd.read_excel(
+                                            uploaded_file,
+                                            sheet_name='Export'
+                                        )
+                                        st.info("📊 Processando como arquivo de Análise de Estoque")
+                                        
+                                        # Clean analytics data
+                                        df_full = df_full.dropna(subset=['Produto'])
+                                        df_full = df_full[df_full['Produto'] != 'nan']
+                                        df_full = df_full[~df_full['Produto'].str.contains('Filtros aplicados', na=False)]
+                                        
+                                        # Convert numeric columns for analytics
+                                        numeric_columns = ['Estoque', 'Média 6 Meses', 'Estoque Cobertura', 'Qtde Tot Compras']
+                                        for col in numeric_columns:
+                                            if col in df_full.columns:
+                                                df_full[col] = pd.to_numeric(df_full[col], errors='coerce').fillna(0)
+                                        
+                                    except:
+                                        df_full = pd.read_excel(
+                                            uploaded_file,
+                                            sheet_name=selected_sheet,
+                                            header=selected_header
+                                        )
+                                else:
+                                    # Timeline/MOQ or other files
                                     df_full = pd.read_excel(
-                                        uploaded_file_timeline,
+                                        uploaded_file,
                                         sheet_name=selected_sheet,
                                         header=selected_header
                                     )
                                     
-                                    # Upload to Snowflake with new improved function
-                                    success = upload_excel_to_snowflake(df_full, uploaded_file_timeline.name, "minipa")
+                                    # Apply original Timeline processing if detected
+                                    if file_type == "Timeline/MOQ" or any(col in str(df_full.columns) for col in ['Item', 'Fornecedor', 'MOQ', 'QTD']):
+                                        st.info("📅 Processando como arquivo de Timeline/MOQ")
+                                        
+                                        # Clean and process like original working code
+                                        df_full = df_full.dropna(subset=['Item'] if 'Item' in df_full.columns else [df_full.columns[0]])
+                                        
+                                        # Convert numeric columns
+                                        numeric_cols = []
+                                        for col in df_full.columns:
+                                            col_str = str(col)
+                                            if any(word in col_str for word in ['QTD', 'Preço', 'Estoque', 'Transit', 'Sales', 'CBM', 'MOQ']):
+                                                numeric_cols.append(col)
+                                        
+                                        for col in numeric_cols:
+                                            df_full[col] = pd.to_numeric(df_full[col], errors='coerce').fillna(0)
+                                
+                                # Upload to Snowflake with improved function
+                                success = upload_excel_to_snowflake(df_full, uploaded_file.name, "minipa")
+                                
+                                if success:
+                                    st.success("🎉 Dados salvos com sucesso na nuvem!")
+                                    st.balloons()
                                     
-                                    if success:
-                                        st.success("🎉 Dados salvos com sucesso na nuvem!")
-                                        st.balloons()
-                                        
-                                        # Show summary
-                                        st.info(f"📈 **Resumo do upload:**\n- Arquivo: {uploaded_file_timeline.name}\n- Planilha: {selected_sheet}\n- Linhas processadas: {len(df_full)}\n- Histórico mantido: ✅")
-                                        
-                                        st.rerun()
-                                    else:
-                                        st.error("❌ Erro ao salvar dados na nuvem")
-                                        
-                                except Exception as e:
-                                    st.error(f"❌ Erro ao processar arquivo: {str(e)}")
-                                    st.error(f"🔧 Tente ajustar a linha do cabeçalho ou escolher outra planilha")
-                        
-                    except Exception as e:
-                        st.error(f"❌ Erro ao ler arquivo: {str(e)}")
-                        st.info("💡 Tente ajustar a linha do cabeçalho")
-                        
-                else:
-                    st.warning("⚠️ Não foi possível detectar automaticamente a estrutura do arquivo")
-                    st.info("💡 Tente um arquivo Excel com cabeçalhos claros")
+                                    # Show detailed summary
+                                    st.info(f"""
+                                    📈 **Resumo do upload:**
+                                    - 📁 Arquivo: {uploaded_file.name}
+                                    - 📋 Planilha: {selected_sheet}
+                                    - 📊 Tipo: {file_type}
+                                    - 📈 Linhas processadas: {len(df_full)}
+                                    - 📅 Histórico mantido: ✅
+                                    - 🕒 Data: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}
+                                    """)
+                                    
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Erro ao salvar dados na nuvem")
+                                    
+                            except Exception as e:
+                                st.error(f"❌ Erro ao processar arquivo: {str(e)}")
+                                st.info("💡 Tente:")
+                                st.write("- Ajustar a linha do cabeçalho")
+                                st.write("- Escolher outra planilha")
+                                st.write("- Verificar se o arquivo não está corrompido")
+                    
+                except Exception as e:
+                    st.error(f"❌ Erro ao ler arquivo: {str(e)}")
+                    st.info("💡 Tente ajustar a linha do cabeçalho ou escolher outra planilha")
+                    
             else:
-                st.warning("⚠️ Snowflake não configurado. Dados serão usados apenas localmente.")
+                st.warning("⚠️ Não foi possível detectar automaticamente a estrutura do arquivo")
+                st.info("💡 Tente um arquivo Excel com cabeçalhos claros ou use as opções manuais acima")
+        else:
+            st.warning("⚠️ Snowflake não configurado. Dados serão usados apenas localmente.")
     
-    with tab2:
-        st.markdown("**Para Análise de Estoque Detalhada**")
-        uploaded_file_analytics = st.file_uploader(
-            "Arquivo Excel para Analytics",
-            type=['xlsx'],
-            help="Deve conter planilha 'Export' com: Produto, Estoque, Média 6 Meses, Estoque Cobertura",
-            key="analytics_upload"
-        )
+    else:
+        # Show supported formats when no file uploaded
+        st.info("📁 Faça upload de um arquivo Excel para começar")
         
-        if uploaded_file_analytics is not None:
-            st.info("📊 Use este arquivo na página 'Análise de Estoque' para visualizar relatórios detalhados")
+        with st.expander("📋 Formatos suportados"):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("""
+                **📅 Timeline/MOQ:**
+                - Item, Fornecedor, QTD
+                - MOQ, Preço FOB, Estoque Total
+                - In Transit, Avg Sales, CBM
+                """)
+            
+            with col2:
+                st.markdown("""
+                **📊 Análise de Estoque:**
+                - Planilha 'Export'
+                - Produto, Estoque, Média 6 Meses
+                - Estoque Cobertura, Qtde Tot Compras
+                """)
+            
+            st.markdown("**✅ O sistema detecta automaticamente o formato e processa adequadamente!**")
 
 def show_dashboard():
     st.title("🏢 DASHBOARD CORPORATIVO")
@@ -296,7 +388,7 @@ def show_dashboard():
 
 def show_timeline():
     st.title("📅 TIMELINE INTERATIVA DE COMPRAS")
-    st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
+st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
 
     # Try to load data from Snowflake first
     try:
@@ -826,7 +918,7 @@ def show_announcements():
         
         if filtered_announcements:
             # Estatísticas
-            col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4 = st.columns(4)
             
             with col1:
                 total = len(filtered_announcements)
@@ -1196,7 +1288,7 @@ def show_executive_summary(df, produtos_novos, produtos_existentes):
         if len(produtos_existentes) > 0:
             criticos = len(produtos_existentes[produtos_existentes['Estoque Cobertura'] <= 1])
             st.metric("🚨 Produtos Críticos", criticos)
-        else:
+else:
             st.metric("🚨 Produtos Críticos", 0)
     
     if len(produtos_existentes) > 0:

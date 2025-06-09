@@ -243,25 +243,73 @@ def analyze_excel_structure(uploaded_file):
         
         st.info(f"📋 Planilhas encontradas: {sheets}")
         
-        # Try different starting rows to find headers
-        for sheet in sheets[:3]:  # Check first 3 sheets
+        # Try different starting rows to find headers - expanded range
+        for sheet in sheets[:5]:  # Check first 5 sheets
             st.subheader(f"📊 Análise da planilha: {sheet}")
             
-            for header_row in [0, 9, 10]:  # Common header positions
+            # Try more header positions, especially around row 8-9 where the user's data is
+            for header_row in [0, 8, 9, 10, 7, 6, 11, 12]:
                 try:
                     df_sample = pd.read_excel(uploaded_file, sheet_name=sheet, header=header_row, nrows=5)
-                    if not df_sample.empty and len(df_sample.columns) > 3:
-                        st.success(f"✅ Estrutura detectada em linha {header_row}")
-                        st.dataframe(df_sample)
+                    
+                    # Check if we found real headers (not None or Unnamed)
+                    valid_columns = 0
+                    real_headers = []
+                    
+                    for col in df_sample.columns:
+                        col_str = str(col).strip()
+                        if (col_str != 'None' and 
+                            not col_str.startswith('Unnamed') and 
+                            col_str != 'nan' and
+                            len(col_str) > 0):
+                            valid_columns += 1
+                            real_headers.append(col_str)
+                    
+                    # We need at least 3 valid columns with meaningful names
+                    if valid_columns >= 3 and len(df_sample) > 0:
+                        # Check if we have data in the rows (not all None)
+                        data_found = False
+                        for _, row in df_sample.iterrows():
+                            non_null_values = row.count()
+                            if non_null_values >= 3:
+                                data_found = True
+                                break
                         
-                        # Show column info
-                        st.write("**Colunas detectadas:**")
-                        for i, col in enumerate(df_sample.columns):
-                            st.write(f"{i+1}. `{col}` - Tipo: {df_sample[col].dtype}")
-                        
-                        return sheet, header_row
-                except:
+                        if data_found:
+                            st.success(f"✅ Estrutura detectada em linha {header_row + 1}")
+                            st.info(f"🔍 Colunas válidas encontradas: {real_headers}")
+                            st.dataframe(df_sample)
+                            
+                            # Show column info
+                            st.write("**Mapeamento de colunas:**")
+                            for i, col in enumerate(df_sample.columns):
+                                col_type = df_sample[col].dtype
+                                sample_val = df_sample[col].iloc[0] if len(df_sample) > 0 else "N/A"
+                                st.write(f"{i+1}. `{col}` - Tipo: {col_type} - Exemplo: {sample_val}")
+                            
+                            return sheet, header_row
+                except Exception as e:
                     continue
+        
+        # If no automatic detection worked, show manual options
+        st.warning("⚠️ Detecção automática não funcionou. Mostrando opções manuais...")
+        
+        # Show raw data for manual inspection
+        for sheet in sheets[:2]:
+            st.write(f"**Dados brutos da planilha '{sheet}':**")
+            try:
+                df_raw = pd.read_excel(uploaded_file, sheet_name=sheet, header=None, nrows=15)
+                st.dataframe(df_raw)
+                
+                # Suggest header row based on where we see most text
+                for row_idx in range(min(15, len(df_raw))):
+                    row_data = df_raw.iloc[row_idx]
+                    text_count = sum(1 for val in row_data if isinstance(val, str) and len(str(val)) > 2)
+                    if text_count >= 3:
+                        st.info(f"💡 Possível cabeçalho na linha {row_idx + 1}: {list(row_data[:5])}")
+                        return sheet, row_idx
+            except:
+                continue
         
         return None, 0
                         
