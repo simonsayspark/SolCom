@@ -67,136 +67,69 @@ def show_data_upload():
     )
     
     if uploaded_file is not None:
-        # Analyze file structure first
         st.subheader("🔍 Análise do Arquivo")
         
         if snowflake_available:
-            from bd.snowflake_config import analyze_excel_structure
-            
-            # Analyze structure
-            sheet_name, header_row = analyze_excel_structure(uploaded_file)
-            
-            if sheet_name is not None:
-                # Let user choose processing options
-                col1, col2, col3 = st.columns(3)
+            try:
+                # Use the improved Excel analysis
+                df_full, detected_sheet, detected_header = analyze_and_process_excel(uploaded_file, "Auto-detectar")
                 
-                with col1:
-                    selected_sheet = st.selectbox(
-                        "📋 Escolha a planilha:",
-                        options=pd.ExcelFile(uploaded_file).sheet_names,
-                        index=pd.ExcelFile(uploaded_file).sheet_names.index(sheet_name) if sheet_name in pd.ExcelFile(uploaded_file).sheet_names else 0
-                    )
-                
-                with col2:
-                    selected_header = st.number_input(
-                        "📍 Linha do cabeçalho:",
-                        min_value=0,
-                        max_value=20,
-                        value=header_row,
-                        help="Linha onde estão os nomes das colunas (0-indexed)"
-                    )
-                
-                with col3:
-                    # Let user choose file type for better processing
-                    file_type = st.selectbox(
-                        "📊 Tipo de arquivo:",
-                        ["Auto-detectar", "Timeline/MOQ", "Análise de Estoque", "Outros"],
-                        help="Escolha o tipo para melhor processamento"
-                    )
-                
-                # Show preview with selected options
-                try:
-                    # Use the new improved Excel analysis function
-                    df_full, detected_sheet, detected_header = analyze_and_process_excel(uploaded_file, file_type)
+                if df_full is not None:
+                    st.success(f"✅ Dados carregados: {len(df_full)} linhas de '{detected_sheet}'")
+                    st.dataframe(df_full.head(10))
                     
-                    if df_full is not None:
-                        st.subheader("👀 Dados Processados")
-                        st.dataframe(df_full.head(10))
-                        
-                        # Show data quality info
-                        col1, col2, col3, col4 = st.columns(4)
-                        with col1:
-                            total_rows = len(df_full)
-                            st.metric("📊 Linhas processadas", total_rows)
-                        with col2:
-                            total_cols = len(df_full.columns)
-                            st.metric("📋 Colunas", total_cols)
-                        with col3:
-                            non_null = df_full.count().sum()
-                            st.metric("✅ Valores válidos", non_null)
-                        with col4:
-                            file_size = len(uploaded_file.getvalue()) / 1024
-                            st.metric("📁 Tamanho", f"{file_size:.1f} KB")
-                        
-                        # Upload button
-                        if st.button("💾 Salvar na Nuvem", key="save_main", type="primary"):
-                            with st.spinner("📤 Processando e enviando dados para Snowflake..."):
-                                try:
-                                    # Upload to Snowflake with improved function
-                                    success = upload_excel_to_snowflake(df_full, uploaded_file.name, "minipa")
-                                    
-                                    if success:
-                                        st.success("🎉 Dados salvos com sucesso na nuvem!")
-                                        st.balloons()
-                                        
-                                        # Show detailed summary
-                                        st.info(f"""
-                                        📈 **Resumo do upload:**
-                                        - 📁 Arquivo: {uploaded_file.name}
-                                        - 📋 Planilha: {detected_sheet}
-                                        - 📊 Linha do cabeçalho: {detected_header + 1}
-                                        - 📈 Linhas processadas: {len(df_full)}
-                                        - 📅 Histórico mantido: ✅
-                                        - 🕒 Data: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}
-                                        """)
-                                        
-                                        st.rerun()
-                                    else:
-                                        st.error("❌ Erro ao salvar dados na nuvem")
-                                        
-                                except Exception as e:
-                                    st.error(f"❌ Erro ao processar arquivo: {str(e)}")
-                                    st.info("💡 Tente:")
-                                    st.write("- Verificar se o arquivo não está corrompido")
-                                    st.write("- Testar com um arquivo menor primeiro")
-                                    st.write("- Verificar a conexão com Snowflake")
-                    else:
-                        st.error("❌ Não foi possível processar o arquivo Excel")
-                        
-                        # Fallback: show raw data for manual inspection
-                        st.subheader("🔍 Inspeção Manual")
-                        selected_sheet = st.selectbox(
-                            "📋 Escolha a planilha:",
-                            options=pd.ExcelFile(uploaded_file).sheet_names
-                        )
-                        selected_header = st.number_input(
-                            "📍 Linha do cabeçalho:",
-                            min_value=0,
-                            max_value=20,
-                            value=9,
-                            help="Linha onde estão os nomes das colunas (0-indexed)"
-                        )
-                        
-                        if st.button("🔄 Tentar novamente com configurações manuais"):
+                    # Show data quality info
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("📊 Linhas", len(df_full))
+                    with col2:
+                        st.metric("📋 Colunas", len(df_full.columns))
+                    with col3:
+                        st.metric("✅ Valores válidos", df_full.count().sum())
+                    with col4:
+                        file_size = len(uploaded_file.getvalue()) / 1024
+                        st.metric("📁 Tamanho", f"{file_size:.1f} KB")
+                    
+                    # Upload button
+                    if st.button("💾 Salvar na Nuvem", type="primary"):
+                        with st.spinner("📤 Processando e enviando dados para Snowflake..."):
                             try:
-                                df_manual = pd.read_excel(
-                                    uploaded_file, 
-                                    sheet_name=selected_sheet, 
-                                    header=selected_header
-                                )
-                                df_manual = df_manual.dropna(how='all')
-                                st.success("✅ Dados carregados manualmente!")
-                                st.dataframe(df_manual.head())
+                                # Clean DataFrame for upload
+                                df_clean = df_full.copy()
+                                for col in df_clean.columns:
+                                    if df_clean[col].dtype == 'object':
+                                        df_clean[col] = df_clean[col].fillna('')
+                                    else:
+                                        df_clean[col] = df_clean[col].fillna(0)
+                                
+                                # Upload to Snowflake
+                                success = upload_excel_to_snowflake(df_clean, uploaded_file.name, "minipa")
+                                
+                                if success:
+                                    st.success("🎉 Dados salvos com sucesso na nuvem!")
+                                    st.balloons()
+                                    st.info(f"""
+                                    📈 **Resumo do upload:**
+                                    - 📁 Arquivo: {uploaded_file.name}
+                                    - 📋 Planilha: {detected_sheet}
+                                    - 📊 Cabeçalho: Linha {detected_header + 1}
+                                    - 📈 Linhas: {len(df_clean)}
+                                    - 🕒 Data: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}
+                                    """)
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Erro ao salvar dados na nuvem")
+                                    
                             except Exception as e:
-                                st.error(f"❌ Erro: {str(e)}")
+                                st.error(f"❌ Erro ao processar: {str(e)}")
+                                st.code(str(e))
+                else:
+                    st.error("❌ Não foi possível processar o arquivo")
+                    st.info("💡 Verifique se o arquivo Excel tem dados válidos")
                     
-                except Exception as e:
-                    st.error(f"❌ Erro ao analisar arquivo: {str(e)}")
-                    st.info("💡 Tente com um arquivo Excel válido")
-                    
-            else:
-                st.warning("⚠️ Não foi possível detectar automaticamente a estrutura do arquivo")
-                st.info("💡 Tente um arquivo Excel com cabeçalhos claros ou use as opções manuais acima")
+            except Exception as e:
+                st.error(f"❌ Erro ao analisar arquivo: {str(e)}")
+                st.info("💡 Tente com um arquivo Excel válido")
         else:
             st.warning("⚠️ Snowflake não configurado. Dados serão usados apenas localmente.")
     
@@ -1706,29 +1639,35 @@ def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
             col_str = str(col).strip().lower()
             
             # Map to standardized names based on content patterns
-            if any(word in col_str for word in ['item', 'codigo', 'produto']):
+            if any(word in col_str for word in ['item', 'codigo', 'produto']) and 'Item' not in column_mapping.values():
                 column_mapping[col] = 'Item'
-            elif any(word in col_str for word in ['fornecedor', 'supplier', 'vendor']):
+            elif any(word in col_str for word in ['fornecedor', 'supplier', 'vendor']) and 'Fornecedor' not in column_mapping.values():
                 column_mapping[col] = 'Fornecedor'
-            elif 'qtd' in col_str and 'total' not in col_str:
+            elif 'qtd' in col_str and 'total' not in col_str and 'QTD' not in column_mapping.values():
                 column_mapping[col] = 'QTD'
-            elif any(word in col_str for word in ['modelo', 'model', 'description']):
+            elif any(word in col_str for word in ['modelo', 'model', 'description']) and 'Modelo' not in column_mapping.values():
                 column_mapping[col] = 'Modelo'
-            elif 'preço' in col_str and 'unitario' in col_str:
+            elif 'preço' in col_str and 'unitario' in col_str and 'Preco_Unitario' not in column_mapping.values():
                 column_mapping[col] = 'Preco_Unitario'
-            elif 'estoque' in col_str and 'total' in col_str:
+            elif 'estoque' in col_str and 'total' in col_str and 'Estoque_Total' not in column_mapping.values():
                 column_mapping[col] = 'Estoque_Total'
-            elif any(word in col_str for word in ['transit', 'transito']):
+            elif any(word in col_str for word in ['transit', 'transito']) and 'shipt' in col_str and 'In_Transit' not in column_mapping.values():
                 column_mapping[col] = 'In_Transit'
-            elif any(word in col_str for word in ['avg', 'sales', 'vendas', 'media']):
+            elif any(word in col_str for word in ['avg', 'sales', 'vendas', 'media']) and 'sales' in col_str and 'Vendas_Medias' not in column_mapping.values():
                 column_mapping[col] = 'Vendas_Medias'
-            elif 'cbm' in col_str:
+            elif 'cbm' in col_str and 'CBM' not in column_mapping.values():
                 column_mapping[col] = 'CBM'
-            elif 'moq' in col_str:
+            elif 'moq' in col_str and 'MOQ' not in column_mapping.values():
                 column_mapping[col] = 'MOQ'
         
-        # Apply the mapping
-        df_mapped = df_full.rename(columns=column_mapping)
+        # Apply the mapping - only rename columns that were mapped
+        df_mapped = df_full.copy()
+        if column_mapping:
+            try:
+                df_mapped = df_full.rename(columns=column_mapping)
+            except Exception as e:
+                st.warning(f"⚠️ Erro no mapeamento de colunas: {str(e)}")
+                df_mapped = df_full.copy()  # Keep original if mapping fails
         
         # Show mapping results
         if column_mapping:
@@ -1741,8 +1680,13 @@ def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
         
         for col in numeric_columns:
             if col in df_mapped.columns:
-                # Convert to numeric, replacing errors with 0
-                df_mapped[col] = pd.to_numeric(df_mapped[col], errors='coerce').fillna(0)
+                try:
+                    # Convert to numeric, replacing errors with 0
+                    df_mapped[col] = pd.to_numeric(df_mapped[col], errors='coerce').fillna(0)
+                except Exception as e:
+                    st.warning(f"⚠️ Não foi possível converter coluna '{col}' para numérico: {str(e)}")
+                    # Keep original data if conversion fails
+                    pass
         
         return df_mapped, best_sheet, best_header_row
         
