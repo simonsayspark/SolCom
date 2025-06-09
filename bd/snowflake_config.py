@@ -445,7 +445,7 @@ def load_data_with_history(usuario="minipa", limit_days=30):
             
         except Exception as filter_error:
             st.warning(f"⚠️ Erro ao filtrar histórico: {str(filter_error)}. Retornando todos os dados.")
-            # Remove row_num column if it exists and return all data
+            # Remove only row_num column if it exists, keep everything else including data_upload
             if 'row_num' in df.columns:
                 df = df.drop('row_num', axis=1)
             return df

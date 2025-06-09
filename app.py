@@ -41,7 +41,12 @@ def show_data_upload():
             existing_data = load_data_with_history()
             if existing_data is not None and len(existing_data) > 0:
                 st.success(f"✅ {len(existing_data)} produtos já salvos na nuvem")
-                st.info(f"📅 Último upload: {existing_data['data_upload'].max()}")
+                
+                # Check if data_upload column exists before accessing it
+                if 'data_upload' in existing_data.columns:
+                    st.info(f"📅 Último upload: {existing_data['data_upload'].max()}")
+                else:
+                    st.info("📅 Dados carregados da nuvem (sem informação de data)")
                 
                 # Show preview
                 with st.expander("👀 Prévia dos dados salvos"):
