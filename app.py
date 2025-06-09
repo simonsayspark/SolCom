@@ -18,6 +18,112 @@ st.set_page_config(page_title="Dashboard Corporativo", page_icon="🏢", layout=
 # Import functions from page files
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+def show_data_upload():
+    """Centralized data upload section"""
+    st.header("📁 Central de Upload de Dados")
+    st.markdown("**Upload seus arquivos Excel aqui. Os dados serão salvos na nuvem e disponíveis para todas as funcionalidades.**")
+    
+    # Import Snowflake functions
+    try:
+        from bd.snowflake_config import upload_excel_to_snowflake, load_data_from_snowflake, test_connection
+        snowflake_available = True
+    except ImportError:
+        snowflake_available = False
+    
+    # Show current data status
+    if snowflake_available:
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.subheader("📊 Status dos Dados")
+            
+            # Try to load existing data
+            existing_data = load_data_from_snowflake()
+            if existing_data is not None and len(existing_data) > 0:
+                st.success(f"✅ {len(existing_data)} produtos já salvos na nuvem")
+                st.info(f"📅 Último upload: {existing_data['data_upload'].max()}")
+                
+                # Show preview
+                with st.expander("👀 Prévia dos dados salvos"):
+                    st.dataframe(existing_data.head(10))
+            else:
+                st.info("💡 Nenhum dado encontrado na nuvem. Faça seu primeiro upload abaixo.")
+        
+        with col2:
+            if st.button("🔄 Testar Conexão", use_container_width=True):
+                if test_connection():
+                    st.success("✅ Snowflake conectado!")
+                else:
+                    st.error("❌ Erro na conexão")
+    
+    # File upload section
+    st.subheader("📤 Upload de Arquivo")
+    
+    # Create tabs for different upload types
+    tab1, tab2 = st.tabs(["📊 Timeline/MOQ", "📈 Análise de Estoque"])
+    
+    with tab1:
+        st.markdown("**Para Timeline de Compras e análise MOQ**")
+        uploaded_file_timeline = st.file_uploader(
+            "Arquivo Excel para Timeline",
+            type=['xlsx', 'xls'],
+            help="Deve conter: Item, Modelo, Fornecedor, QTD, Preço FOB Unitário, Estoque Total, In Transit, Avg Sales, CBM, MOQ",
+            key="timeline_upload"
+        )
+        
+        if uploaded_file_timeline is not None:
+            if snowflake_available:
+                if st.button("💾 Salvar na Nuvem", key="save_timeline"):
+                    with st.spinner("📤 Enviando dados para Snowflake..."):
+                        try:
+                            # Process the file
+                            df = pd.read_excel(uploaded_file_timeline, header=9)
+                            df = df.dropna(subset=['Item'])
+                            df = df[df['Item'] != 'Item']
+                            
+                            # Convert numeric columns
+                            colunas_numericas = ['QTD', 'Preço FOB\nUnitário', 'Estoque\nTotal ', 
+                                               'In Transit\nShipt', 'Avg Sales\n', 'CBM', 'MOQ']
+                            
+                            for col in colunas_numericas:
+                                if col in df.columns:
+                                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                            
+                            # Rename columns
+                            df = df.rename(columns={
+                                'Preço FOB\nUnitário': 'Preco_Unitario',
+                                'Estoque\nTotal ': 'Estoque_Total',
+                                'In Transit\nShipt': 'In_Transit',
+                                'Avg Sales\n': 'Vendas_Medias'
+                            })
+                            
+                            # Upload to Snowflake
+                            success = upload_excel_to_snowflake(df, uploaded_file_timeline.name, "minipa")
+                            
+                            if success:
+                                st.success("🎉 Dados salvos com sucesso na nuvem!")
+                                st.balloons()
+                                st.rerun()
+                            else:
+                                st.error("❌ Erro ao salvar dados na nuvem")
+                                
+                        except Exception as e:
+                            st.error(f"❌ Erro ao processar arquivo: {str(e)}")
+            else:
+                st.warning("⚠️ Snowflake não configurado. Dados serão usados apenas localmente.")
+    
+    with tab2:
+        st.markdown("**Para Análise de Estoque Detalhada**")
+        uploaded_file_analytics = st.file_uploader(
+            "Arquivo Excel para Analytics",
+            type=['xlsx'],
+            help="Deve conter planilha 'Export' com: Produto, Estoque, Média 6 Meses, Estoque Cobertura",
+            key="analytics_upload"
+        )
+        
+        if uploaded_file_analytics is not None:
+            st.info("📊 Use este arquivo na página 'Análise de Estoque' para visualizar relatórios detalhados")
+
 def show_dashboard():
     st.title("🏢 DASHBOARD CORPORATIVO")
     st.markdown("### 📊 Central de Gestão e Comunicação")
@@ -140,47 +246,53 @@ def show_timeline():
     st.title("📅 TIMELINE INTERATIVA DE COMPRAS")
     st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
 
-    with st.expander("ℹ️ Como usar esta aplicação"):
-        st.markdown("""
-        **Para usar esta aplicação:**
-        1. 📁 **Upload:** Faça upload do seu arquivo Excel abaixo
-        2. 📊 **Exemplo:** Ou marque a opção "Usar dados de exemplo" para testar
-        3. 🎛️ **Configure:** Ajuste os parâmetros na barra lateral
-        4. 📈 **Analise:** Visualize os gráficos interativos
+    # Try to load data from Snowflake first
+    try:
+        from bd.snowflake_config import load_data_from_snowflake
+        df = load_data_from_snowflake()
         
-        **Formato do arquivo Excel:**
-        - Deve ter as colunas: Item, Modelo, Fornecedor, QTD, Preço FOB Unitário, Estoque Total, In Transit Shipt, Avg Sales, CBM, MOQ
-        - Os dados devem começar na linha 10 (header=9)
-        """)
-
-    # File upload section - moved to main page
-    st.subheader("📁 Upload de Dados")
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        uploaded_file = st.file_uploader(
-            "Faça upload do seu arquivo Excel:",
-            type=['xlsx', 'xls'],
-            help="Carregue um arquivo Excel com dados de estoque e vendas"
-        )
-    
-    with col2:
-        usar_dados_exemplo = st.checkbox("📊 Usar dados de exemplo", value=False)
-
-    # Load data based on user choice
-    df = None
-    if usar_dados_exemplo:
-        df = criar_dados_exemplo()
-        st.info("📊 Usando dados de exemplo para demonstração")
-    elif uploaded_file is not None:
-        df = carregar_dados(uploaded_file)
-        if df is not None:
-            st.success("✅ Arquivo carregado com sucesso!")
+        if df is not None and len(df) > 0:
+            st.success(f"✅ Usando dados da nuvem: {len(df)} produtos carregados")
+            
+            # Convert data upload column to string for display
+            if 'data_upload' in df.columns:
+                st.info(f"📅 Último upload: {df['data_upload'].max()}")
         else:
-            st.error("❌ Erro ao carregar arquivo. Verifique o formato.")
-    else:
-        st.info("📁 Faça upload de um arquivo Excel ou use os dados de exemplo para começar!")
+            st.info("💡 Nenhum dado encontrado na nuvem.")
+            st.markdown("👉 **Vá para 'Upload de Dados' para enviar seu Excel para a nuvem primeiro.**")
+            df = None
+            
+    except ImportError:
+        st.warning("⚠️ Snowflake não configurado. Usando upload local temporário.")
+        df = None
+    except Exception as e:
+        st.error(f"❌ Erro ao carregar dados da nuvem: {str(e)}")
+        df = None
+
+    # Fallback to local upload if no cloud data
+    if df is None:
+        with st.expander("📁 Upload Local (Temporário)", expanded=True):
+            st.markdown("⚠️ **Este upload é temporário. Para salvar na nuvem, use 'Upload de Dados'**")
+            
+            uploaded_file = st.file_uploader(
+                "Faça upload do seu arquivo Excel:",
+                type=['xlsx', 'xls'],
+                help="Carregue um arquivo Excel com dados de estoque e vendas"
+            )
+            
+            usar_dados_exemplo = st.checkbox("📊 Usar dados de exemplo", value=False)
+            
+            if usar_dados_exemplo:
+                df = criar_dados_exemplo()
+                st.info("📊 Usando dados de exemplo para demonstração")
+            elif uploaded_file is not None:
+                df = carregar_dados(uploaded_file)
+                if df is not None:
+                    st.success("✅ Arquivo carregado com sucesso!")
+                else:
+                    st.error("❌ Erro ao carregar arquivo. Verifique o formato.")
+            else:
+                st.info("📁 Faça upload de um arquivo Excel ou use os dados de exemplo para começar!")
 
     # Only show controls and analysis if data is loaded
     if df is not None:
@@ -1405,6 +1517,10 @@ if st.sidebar.button("🏠 Dashboard", use_container_width=True):
     st.session_state.current_page = "home"
     st.rerun()
 
+if st.sidebar.button("📁 Upload de Dados", use_container_width=True):
+    st.session_state.current_page = "upload"
+    st.rerun()
+
 if st.sidebar.button("📅 Timeline de Compras", use_container_width=True):
     st.session_state.current_page = "timeline"
     st.rerun()
@@ -1424,6 +1540,8 @@ if st.sidebar.button("❄️ Snowflake", use_container_width=True):
 # Show different pages based on navigation
 if st.session_state.current_page == "home":
     show_dashboard()
+elif st.session_state.current_page == "upload":
+    show_data_upload()
 elif st.session_state.current_page == "timeline":
     show_timeline()
 elif st.session_state.current_page == "announcements":
