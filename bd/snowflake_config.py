@@ -205,19 +205,24 @@ def upload_excel_to_snowflake(df, arquivo_nome, usuario="minipa"):
                 values.append('')
             values.append(usuario)  # Add user at the end
             
-            # Insert with proper parameter binding
+            # Insert with proper parameter binding for Snowflake
+            # Ensure we have exactly 11 values for 11 placeholders
+            if len(values) != 11:
+                st.warning(f"⚠️ Linha {idx}: esperado 11 valores, encontrado {len(values)}")
+                continue
+                
             cursor.execute("""
             INSERT INTO ESTOQUE.PRODUTOS 
             (item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
              in_transit, vendas_medias, cbm, moq, usuario)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, values)
         
         # Log the upload
         cursor.execute("""
         INSERT INTO CONFIG.UPLOAD_LOG 
         (nome_arquivo, linhas_processadas, usuario, status)
-        VALUES (?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s)
         """, (arquivo_nome, len(df_clean), usuario, 'SUCCESS'))
         
         conn.commit()
@@ -333,12 +338,12 @@ def load_data_with_history(usuario="minipa", limit_days=30):
                cbm as CBM, moq as MOQ, data_upload,
                ROW_NUMBER() OVER (PARTITION BY item ORDER BY data_upload DESC) as row_num
         FROM ESTOQUE.PRODUTOS 
-        WHERE usuario = ? 
-        AND data_upload >= DATEADD(day, ?, CURRENT_DATE())
+        WHERE usuario = %s 
+        AND data_upload >= DATEADD(day, %s, CURRENT_DATE())
         ORDER BY data_upload DESC
         """
         
-        df = pd.read_sql(query, conn, params=(usuario, -limit_days))
+        df = pd.read_sql(query, conn, params=[usuario, -limit_days])
         conn.close()
         
         # Show history summary
