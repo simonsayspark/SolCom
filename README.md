@@ -1,4 +1,4 @@
-# 📅 Timeline Interativa de Compras - MINIPA
+# 📅 Timeline Interativa de Compras 
 
 Uma aplicação Streamlit para visualização interativa e otimização de compras com base em MOQ (Minimum Order Quantity).
 
