@@ -143,7 +143,7 @@ def show_timeline():
     with st.expander("ℹ️ Como usar esta aplicação"):
         st.markdown("""
         **Para usar esta aplicação:**
-        1. 📁 **Upload:** Faça upload do seu arquivo Excel na barra lateral
+        1. 📁 **Upload:** Faça upload do seu arquivo Excel abaixo
         2. 📊 **Exemplo:** Ou marque a opção "Usar dados de exemplo" para testar
         3. 🎛️ **Configure:** Ajuste os parâmetros na barra lateral
         4. 📈 **Analise:** Visualize os gráficos interativos
@@ -152,6 +152,80 @@ def show_timeline():
         - Deve ter as colunas: Item, Modelo, Fornecedor, QTD, Preço FOB Unitário, Estoque Total, In Transit Shipt, Avg Sales, CBM, MOQ
         - Os dados devem começar na linha 10 (header=9)
         """)
+
+    # File upload section - moved to main page
+    st.subheader("📁 Upload de Dados")
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        uploaded_file = st.file_uploader(
+            "Faça upload do seu arquivo Excel:",
+            type=['xlsx', 'xls'],
+            help="Carregue um arquivo Excel com dados de estoque e vendas"
+        )
+    
+    with col2:
+        usar_dados_exemplo = st.checkbox("📊 Usar dados de exemplo", value=False)
+
+    # Load data based on user choice
+    df = None
+    if usar_dados_exemplo:
+        df = criar_dados_exemplo()
+        st.info("📊 Usando dados de exemplo para demonstração")
+    elif uploaded_file is not None:
+        df = carregar_dados(uploaded_file)
+        if df is not None:
+            st.success("✅ Arquivo carregado com sucesso!")
+        else:
+            st.error("❌ Erro ao carregar arquivo. Verifique o formato.")
+    else:
+        st.info("📁 Faça upload de um arquivo Excel ou use os dados de exemplo para começar!")
+
+    # Only show controls and analysis if data is loaded
+    if df is not None:
+        # Sidebar controls
+        st.sidebar.header("🎛️ Controles")
+        meta_meses = st.sidebar.slider("🎯 Meta (meses)", 3, 12, 6)
+        
+        # Calculate timeline data
+        timeline_data = calcular_timeline(df, meta_meses)
+        
+        if timeline_data:
+            urgencias = ["Todos"] + sorted(list(set(item['Urgencia'] for item in timeline_data)))
+            filtro = st.sidebar.selectbox("🔍 Filtrar", urgencias)
+            
+            # Show metrics
+            col1, col2, col3, col4 = st.columns(4)
+            criticos = len([x for x in timeline_data if x['Urgencia'] == 'CRÍTICO'])
+            medios = len([x for x in timeline_data if x['Urgencia'] == 'MÉDIO'])
+            atencao = len([x for x in timeline_data if x['Urgencia'] == 'ATENÇÃO'])
+            ok = len([x for x in timeline_data if x['Urgencia'] == 'OK'])
+            
+            col1.metric("🔴 Críticos", criticos)
+            col2.metric("🟠 Médios", medios)
+            col3.metric("🟡 Atenção", atencao)
+            col4.metric("🟢 OK", ok)
+            
+            # Show total investment
+            valor_total = sum(item['Valor_Pedido'] for item in timeline_data)
+            st.metric("💰 Investimento Total", f"R$ {valor_total:,.0f}")
+            
+            # Create and display chart
+            fig = criar_grafico_interativo(timeline_data, filtro)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.markdown("""
+                **💡 Como usar:**
+                - 🖱️ **Zoom**: Ferramentas no canto superior direito
+                - 👆 **Hover**: Passe o mouse para ver detalhes
+                - 🔍 **Filtrar**: Use a sidebar
+                """)
+            else:
+                st.warning("📊 Nenhum dado válido encontrado para o filtro selecionado.")
+        else:
+            st.warning("📊 Nenhum dado válido encontrado para criar o timeline.")
 
 @st.cache_data
 def carregar_dados(uploaded_file=None):
@@ -202,32 +276,6 @@ def criar_dados_exemplo():
     }
     return pd.DataFrame(dados_exemplo)
 
-# Timeline sidebar controls
-st.sidebar.header("📁 Upload de Dados")
-uploaded_file = st.sidebar.file_uploader(
-    "Faça upload do seu arquivo Excel:",
-    type=['xlsx', 'xls'],
-    help="Carregue um arquivo Excel com dados de estoque e vendas"
-)
-
-usar_dados_exemplo = st.sidebar.checkbox("📊 Usar dados de exemplo", value=False)
-
-if usar_dados_exemplo:
-    df = criar_dados_exemplo()
-    st.info("📊 Usando dados de exemplo para demonstração")
-elif uploaded_file is not None:
-    df = carregar_dados(uploaded_file)
-    st.success("✅ Arquivo carregado com sucesso!")
-else:
-    df = carregar_dados()
-    if df is None:
-        st.warning("📁 Faça upload de um arquivo Excel ou use os dados de exemplo para começar!")
-
-if df is not None:
-    st.sidebar.header("🎛️ Controles")
-    
-    meta_meses = st.sidebar.slider("🎯 Meta (meses)", 3, 12, 6)
-
 def otimizar_quantidade_moq(vendas_mensais, moq, meta_meses=6):
     if vendas_mensais <= 0:
         return moq if moq > 0 else 0
@@ -244,6 +292,7 @@ def otimizar_quantidade_moq(vendas_mensais, moq, meta_meses=6):
     return multiplos * moq
 
 def calcular_timeline(df, meta_meses=6):
+    from datetime import datetime, timedelta
     hoje = datetime.now()
     timeline_data = []
     
@@ -368,43 +417,6 @@ def criar_grafico_interativo(timeline_data, filtro_urgencia="Todos"):
     fig.update_xaxes(title_text="Quantidade", row=2, col=1)
     
     return fig
-    
-    timeline_data = calcular_timeline(df, meta_meses)
-    
-    if timeline_data:
-        urgencias = ["Todos"] + sorted(list(set(item['Urgencia'] for item in timeline_data)))
-        filtro = st.sidebar.selectbox("🔍 Filtrar", urgencias)
-        
-        # Métricas
-        col1, col2, col3, col4 = st.columns(4)
-        criticos = len([x for x in timeline_data if x['Urgencia'] == 'CRÍTICO'])
-        medios = len([x for x in timeline_data if x['Urgencia'] == 'MÉDIO'])
-        atencao = len([x for x in timeline_data if x['Urgencia'] == 'ATENÇÃO'])
-        ok = len([x for x in timeline_data if x['Urgencia'] == 'OK'])
-        
-        col1.metric("🔴 Críticos", criticos)
-        col2.metric("🟠 Médios", medios)
-        col3.metric("🟡 Atenção", atencao)
-        col4.metric("🟢 OK", ok)
-        
-        valor_total = sum(item['Valor_Pedido'] for item in timeline_data)
-        st.metric("💰 Investimento Total", f"R$ {valor_total:,.0f}")
-        
-        # Gráfico
-        fig = criar_grafico_interativo(timeline_data, filtro)
-        if fig:
-            st.plotly_chart(fig, use_container_width=True)
-            
-            st.markdown("""
-            **💡 Como usar:**
-            - 🖱️ **Zoom**: Ferramentas no canto superior direito
-            - 👆 **Hover**: Passe o mouse para ver detalhes
-            - 🔍 **Filtrar**: Use a sidebar
-            """)
-        else:
-            st.warning("📊 Nenhum dado válido encontrado para criar o timeline.")
-    else:
-        st.info("📤 Aguardando upload de dados...")
 
 def show_announcements():
     import pandas as pd
