@@ -28,8 +28,7 @@ with col1:
     - 📈 Gráficos interativos
     - 💰 Análise financeira
     """)
-    if st.button("🚀 Acessar Timeline", use_container_width=True):
-        st.switch_page("pages/1_Timeline.py")
+    st.info("📍 Use a navegação lateral para acessar o Timeline de Compras")
 
 with col2:
     st.markdown("""
@@ -42,8 +41,7 @@ with col2:
     - ⚡ Níveis de prioridade
     - 📊 Dashboard analítico
     """)
-    if st.button("🚀 Acessar Anúncios", use_container_width=True):
-        st.switch_page("pages/2_Announcements.py")
+    st.info("📍 Use a navegação lateral para acessar os Anúncios")
 
 with col3:
     st.markdown("""
