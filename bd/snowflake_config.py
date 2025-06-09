@@ -28,20 +28,21 @@ def get_snowflake_connection():
     """
     try:
         # Check if secrets are configured
-        if not hasattr(st, 'secrets') or "snowflake" not in st.secrets:
+        if not hasattr(st, 'secrets') or "connections" not in st.secrets or "snowflake" not in st.secrets.connections:
             st.error("❄️ Snowflake não configurado. Configure em .streamlit/secrets.toml")
             st.info("💡 Verifique se o arquivo .streamlit/secrets.toml está configurado corretamente.")
             return None
             
-        # Create connection
+        # Create connection using the same format as st.connection
+        snowflake_config = st.secrets.connections.snowflake
         conn = snowflake.connector.connect(
-            account=st.secrets.snowflake.account,
-            user=st.secrets.snowflake.user,
-            password=st.secrets.snowflake.password,
-            role=st.secrets.snowflake.role,
-            warehouse=st.secrets.snowflake.warehouse,
-            database=st.secrets.snowflake.database,
-            schema=st.secrets.snowflake.schema
+            account=snowflake_config.account,
+            user=snowflake_config.user,
+            password=snowflake_config.password,
+            role=snowflake_config.role,
+            warehouse=snowflake_config.warehouse,
+            database=snowflake_config.database,
+            schema=snowflake_config.schema
         )
         return conn
     except Exception as e:
@@ -54,17 +55,18 @@ def get_snowpark_session():
     Get Snowpark session for advanced operations
     """
     try:
-        if "snowflake" not in st.secrets:
+        if "connections" not in st.secrets or "snowflake" not in st.secrets.connections:
             return None
             
+        snowflake_config = st.secrets.connections.snowflake
         connection_parameters = {
-            "ACCOUNT": st.secrets.snowflake.account,
-            "USER": st.secrets.snowflake.user,
-            "PASSWORD": st.secrets.snowflake.password,
-            "ROLE": st.secrets.snowflake.role,
-            "WAREHOUSE": st.secrets.snowflake.warehouse,
-            "DATABASE": st.secrets.snowflake.database,
-            "SCHEMA": st.secrets.snowflake.schema
+            "ACCOUNT": snowflake_config.account,
+            "USER": snowflake_config.user,
+            "PASSWORD": snowflake_config.password,
+            "ROLE": snowflake_config.role,
+            "WAREHOUSE": snowflake_config.warehouse,
+            "DATABASE": snowflake_config.database,
+            "SCHEMA": snowflake_config.schema
         }
         
         session = Session.builder.configs(connection_parameters).create()
