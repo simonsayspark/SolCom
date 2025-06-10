@@ -248,8 +248,8 @@ def create_new_version(empresa, table_type, description="", created_by="minipa",
     try:
         cursor = conn.cursor()
         
-        # First, mark all previous versions as inactive for this company/table_type
-                    cursor.execute("""
+                # First, mark all previous versions as inactive for this company/table_type
+        cursor.execute("""
         UPDATE CONFIG.VERSIONS 
         SET is_active = FALSE 
         WHERE empresa = %s AND table_type = %s
@@ -300,7 +300,7 @@ def get_upload_versions(empresa, table_type=None, limit=50):
             LIMIT %s
             """
             cursor.execute(query, (empresa, table_type, limit))
-                else:
+        else:
             query = """
             SELECT empresa, upload_version, version_id, table_type, is_active, 
                    upload_date, created_by, description, arquivo_origem, linhas_processadas, status
@@ -353,7 +353,7 @@ def set_active_version(empresa, upload_version, table_type):
         """, (empresa, table_type))
         
         # Activate the specified version
-                    cursor.execute("""
+        cursor.execute("""
         UPDATE CONFIG.VERSIONS 
         SET is_active = TRUE 
         WHERE empresa = %s AND upload_version = %s AND table_type = %s
@@ -398,7 +398,7 @@ def get_version_by_id(empresa, version_id, table_type):
         
     try:
         cursor = conn.cursor()
-                cursor.execute("""
+        cursor.execute("""
         SELECT empresa, upload_version, version_id, table_type, is_active, 
                upload_date, created_by, description, arquivo_origem, linhas_processadas, status
         FROM CONFIG.VERSIONS 
@@ -478,21 +478,21 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
         error_count = 0
         
         # Helper functions for safe data conversion
-                    def safe_numeric(val, default=0):
-                        if pd.isna(val) or val == '' or str(val).lower() == 'nan':
-                            return default
-                        try:
-                            return int(float(str(val)))
-                        except:
-                            return default
-                    
-                    def safe_float(val, default=0.0):
-                        if pd.isna(val) or val == '' or str(val).lower() == 'nan':
-                            return default
-                        try:
-                            return float(val)
-                        except:
-                            return default
+        def safe_numeric(val, default=0):
+            if pd.isna(val) or val == '' or str(val).lower() == 'nan':
+                return default
+            try:
+                return int(float(str(val)))
+            except:
+                return default
+        
+        def safe_float(val, default=0.0):
+            if pd.isna(val) or val == '' or str(val).lower() == 'nan':
+                return default
+            try:
+                return float(val)
+            except:
+                return default
         
         # Insert new data row by row based on table type
         if table_type == "TIMELINE":
@@ -518,8 +518,8 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
                         continue
                     
                     # Insert timeline data with versioning
-                        cursor.execute("""
-                        INSERT INTO ESTOQUE.PRODUTOS 
+        cursor.execute("""
+                    INSERT INTO ESTOQUE.PRODUTOS 
                     (empresa, upload_version, version_id, is_active, item, modelo, fornecedor, 
                      qtd_atual, preco_unitario, estoque_total, in_transit, vendas_medias, 
                      cbm, moq, usuario, table_type, version_description, created_by)
@@ -533,7 +533,7 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
                 except Exception as row_error:
                     error_count += 1
                     if error_count <= 5:  # Show only first 5 errors
-                    st.warning(f"⚠️ Erro na linha {idx + 1}: {str(row_error)}")
+                        st.warning(f"⚠️ Erro na linha {idx + 1}: {str(row_error)}")
                     continue
                     
         else:  # ANALYTICS
@@ -556,7 +556,7 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
                         continue
                     
                     # Insert analytics data with versioning
-                    cursor.execute("""
+        cursor.execute("""
                     INSERT INTO ESTOQUE.ANALYTICS_DATA 
                     (empresa, upload_version, version_id, is_active, produto, estoque, 
                      consumo_6_meses, media_6_meses, estoque_cobertura, usuario, table_type, 
@@ -571,7 +571,7 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
                 except Exception as row_error:
                     error_count += 1
                     if error_count <= 5:  # Show only first 5 errors
-                    st.warning(f"⚠️ Erro na linha {idx + 1}: {str(row_error)}")
+                        st.warning(f"⚠️ Erro na linha {idx + 1}: {str(row_error)}")
                     continue
         
         # Calculate processing time
@@ -589,9 +589,9 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
             st.warning(f"⚠️ Erro ao atualizar registro de versão: {str(version_update_error)}")
         
         # Log the upload
-            try:
-                cursor.execute("""
-                INSERT INTO CONFIG.UPLOAD_LOG 
+        try:
+            cursor.execute("""
+            INSERT INTO CONFIG.UPLOAD_LOG 
             (empresa, upload_version, version_id, nome_arquivo, linhas_processadas, 
              usuario, status, table_type, processing_time_seconds)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -619,6 +619,7 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
             - ⚠️ Erros: {error_count} linhas
             - ⏱️ Tempo: {processing_time}s
             """)
+        if success_count > 0:
         return True
         else:
             st.error("❌ Nenhuma linha foi processada com sucesso")
@@ -1181,7 +1182,7 @@ def migrate_to_multi_company_versioned():
                 
                 # Check if table has empresa column (new structure)
                 try:
-                    cursor.execute(f"DESCRIBE TABLE {table_full_name}")
+        cursor.execute(f"DESCRIBE TABLE {table_full_name}")
                     columns = cursor.fetchall()
                     column_names = [col[0].upper() for col in columns]
                     has_empresa = 'EMPRESA' in column_names
@@ -1222,11 +1223,11 @@ def migrate_to_multi_company_versioned():
             if table_full_name in existing_data:
                 try:
                     # Backup existing data
-                    cursor.execute(f"SELECT * FROM {table_full_name}")
+        cursor.execute(f"SELECT * FROM {table_full_name}")
                     backup_data[table_full_name] = cursor.fetchall()
                     
                     # Get column names for backup
-                    cursor.execute(f"DESCRIBE TABLE {table_full_name}")
+        cursor.execute(f"DESCRIBE TABLE {table_full_name}")
                     columns = cursor.fetchall()
                     backup_data[f"{table_full_name}_columns"] = [col[0] for col in columns]
                     
@@ -1476,7 +1477,7 @@ def migrate_to_multi_company_versioned():
                             st.info(f"📊 {table_full_name}: tabela criada (vazia)")
                     except Exception as count_error:
                         st.warning(f"⚠️ Não foi possível contar registros em {table_full_name}: {str(count_error)}")
-                else:
+        else:
                     st.error(f"❌ {table_full_name}: coluna EMPRESA não encontrada")
                     verification_passed = False
                     
@@ -1490,6 +1491,7 @@ def migrate_to_multi_company_versioned():
         if verification_passed:
             st.success("🎉 Migração concluída com sucesso!")
             st.info("🔄 Recarregue a página para ver as novas funcionalidades multi-empresa")
+        if success_count > 0:
             return True
         else:
             st.error("❌ Migração falhou na verificação")
@@ -1665,19 +1667,19 @@ def clear_entire_database():
             if st.button("💥 DELETAR TODA A BASE DE DADOS", type="primary", key="nuclear_button"):
                 try:
                     # Clear all data tables
-                    cursor.execute("DELETE FROM ESTOQUE.PRODUTOS")
+        cursor.execute("DELETE FROM ESTOQUE.PRODUTOS")
                     produtos_deleted = cursor.rowcount
                     
-                    cursor.execute("DELETE FROM ESTOQUE.ANALYTICS_DATA")
+        cursor.execute("DELETE FROM ESTOQUE.ANALYTICS_DATA")
                     analytics_deleted = cursor.rowcount
                     
-                    cursor.execute("DELETE FROM TIMELINE.ANALISES")
+        cursor.execute("DELETE FROM TIMELINE.ANALISES")
                     timeline_deleted = cursor.rowcount
                     
-                    cursor.execute("DELETE FROM CONFIG.VERSIONS")
+        cursor.execute("DELETE FROM CONFIG.VERSIONS")
                     versions_deleted = cursor.rowcount
                     
-                    cursor.execute("DELETE FROM CONFIG.UPLOAD_LOG")
+        cursor.execute("DELETE FROM CONFIG.UPLOAD_LOG")
                     logs_deleted = cursor.rowcount
                     
                     conn.commit()
@@ -1739,25 +1741,25 @@ def get_database_statistics():
             # Company statistics
             for empresa in ["MINIPA", "MINIPA_INDUSTRIA"]:
                 try:
-                    cursor.execute("SELECT COUNT(*) FROM ESTOQUE.PRODUTOS WHERE empresa = %s", (empresa,))
+        cursor.execute("SELECT COUNT(*) FROM ESTOQUE.PRODUTOS WHERE empresa = %s", (empresa,))
                     produtos_count = cursor.fetchone()[0]
         except:
                     produtos_count = 0
                 
                 try:
-                    cursor.execute("SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA WHERE empresa = %s", (empresa,))
+        cursor.execute("SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA WHERE empresa = %s", (empresa,))
                     analytics_count = cursor.fetchone()[0]
                 except:
                     analytics_count = 0
                 
                 try:
-                    cursor.execute("SELECT COUNT(*) FROM CONFIG.VERSIONS WHERE empresa = %s", (empresa,))
+        cursor.execute("SELECT COUNT(*) FROM CONFIG.VERSIONS WHERE empresa = %s", (empresa,))
                     versions_count = cursor.fetchone()[0]
                 except:
                     versions_count = 0
                 
                 try:
-                    cursor.execute("SELECT COUNT(*) FROM CONFIG.UPLOAD_LOG WHERE empresa = %s", (empresa,))
+        cursor.execute("SELECT COUNT(*) FROM CONFIG.UPLOAD_LOG WHERE empresa = %s", (empresa,))
                     uploads_count = cursor.fetchone()[0]
                 except:
                     uploads_count = 0
