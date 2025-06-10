@@ -82,7 +82,7 @@ def get_upload_versions(empresa, table_type=None, limit=50):
         if table_type:
             query = """
             SELECT upload_version, version_id, table_type, upload_date, 
-                   description, arquivo_origem, linhas_processadas, status, created_by
+                   description, arquivo_origem, linhas_processadas, status, created_by, is_active
             FROM CONFIG.VERSIONS 
             WHERE empresa = %s AND table_type = %s
             ORDER BY upload_date DESC
@@ -92,7 +92,7 @@ def get_upload_versions(empresa, table_type=None, limit=50):
         else:
             query = """
             SELECT upload_version, version_id, table_type, upload_date, 
-                   description, arquivo_origem, linhas_processadas, status, created_by
+                   description, arquivo_origem, linhas_processadas, status, created_by, is_active
             FROM CONFIG.VERSIONS 
             WHERE empresa = %s
             ORDER BY upload_date DESC
@@ -114,7 +114,8 @@ def get_upload_versions(empresa, table_type=None, limit=50):
                 'arquivo_origem': row[5] or "",
                 'linhas_processadas': row[6] or 0,
                 'status': row[7] or "UNKNOWN",
-                'created_by': row[8] or ""
+                'created_by': row[8] or "",
+                'is_active': row[9] or False
             })
         
         cursor.close()
