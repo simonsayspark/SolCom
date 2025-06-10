@@ -1842,3 +1842,199 @@ def get_database_statistics():
     except Exception as e:
         st.error(f"❌ Erro ao carregar estatísticas: {str(e)}")
         return None 
+
+def check_database_structure():
+    """
+    Check current database structure and return detailed information
+    """
+    conn = get_snowflake_connection()
+    if not conn:
+        return None
+        
+    try:
+        cursor = conn.cursor()
+        
+        structure_info = {}
+        
+        # Check each table
+        tables_to_check = [
+            ('ESTOQUE', 'PRODUTOS'),
+            ('ESTOQUE', 'ANALYTICS_DATA'), 
+            ('CONFIG', 'VERSIONS'),
+            ('CONFIG', 'UPLOAD_LOG')
+        ]
+        
+        for schema, table in tables_to_check:
+            table_full_name = f"{schema}.{table}"
+            
+            try:
+                # Check if table exists
+                cursor.execute(f"SELECT COUNT(*) FROM {table_full_name}")
+                count = cursor.fetchone()[0]
+                
+                # Get column information
+                cursor.execute(f"DESCRIBE TABLE {table_full_name}")
+                columns = cursor.fetchall()
+                column_names = [col[0] for col in columns]
+                
+                structure_info[table_full_name] = {
+                    'exists': True,
+                    'count': count,
+                    'columns': column_names,
+                    'has_empresa': 'EMPRESA' in [col.upper() for col in column_names],
+                    'has_table_type': 'TABLE_TYPE' in [col.upper() for col in column_names],
+                    'has_upload_version': 'UPLOAD_VERSION' in [col.upper() for col in column_names]
+                }
+                
+            except Exception as e:
+                structure_info[table_full_name] = {
+                    'exists': False,
+                    'error': str(e),
+                    'count': 0,
+                    'columns': []
+                }
+        
+        cursor.close()
+        conn.close()
+        return structure_info
+        
+    except Exception as e:
+        st.error(f"❌ Erro ao verificar estrutura: {str(e)}")
+        return None
+
+def force_create_new_structure():
+    """
+    Force create the new multi-company structure from scratch
+    This will drop existing tables and create new ones
+    """
+    conn = get_snowflake_connection()
+    if not conn:
+        return False
+        
+    try:
+        cursor = conn.cursor()
+        
+        st.warning("⚠️ **ATENÇÃO**: Esta operação irá recriar todas as tabelas!")
+        st.info("🔄 Criando estrutura completamente nova...")
+        
+        # Step 1: Create schemas
+        st.info("🔧 Criando schemas...")
+        cursor.execute("CREATE SCHEMA IF NOT EXISTS ESTOQUE")
+        cursor.execute("CREATE SCHEMA IF NOT EXISTS CONFIG")
+        conn.commit()
+        
+        # Step 2: Drop existing tables (if they exist)
+        tables_to_drop = [
+            'ESTOQUE.PRODUTOS',
+            'ESTOQUE.ANALYTICS_DATA',
+            'CONFIG.VERSIONS', 
+            'CONFIG.UPLOAD_LOG'
+        ]
+        
+        for table in tables_to_drop:
+            try:
+                cursor.execute(f"DROP TABLE IF EXISTS {table}")
+                st.info(f"🗑️ Removida tabela antiga: {table}")
+            except:
+                pass  # Table might not exist
+        
+        conn.commit()
+        
+        # Step 3: Create new tables with complete structure
+        st.info("🔧 Criando tabelas com estrutura nova...")
+        
+        # PRODUTOS table
+        cursor.execute("""
+        CREATE TABLE ESTOQUE.PRODUTOS (
+            item VARCHAR(500),
+            modelo VARCHAR(500),
+            fornecedor VARCHAR(500),
+            qtd_atual NUMBER(10,2),
+            preco_unitario NUMBER(10,2),
+            estoque_total NUMBER(10,2),
+            in_transit NUMBER(10,2),
+            vendas_medias NUMBER(10,2),
+            cbm NUMBER(10,4),
+            moq NUMBER(10,2),
+            table_type VARCHAR(50) DEFAULT 'TIMELINE',
+            data_upload TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
+            empresa VARCHAR(50) NOT NULL DEFAULT 'MINIPA',
+            upload_version VARCHAR(200),
+            version_id NUMBER,
+            is_active BOOLEAN DEFAULT TRUE,
+            usuario VARCHAR(100),
+            version_description TEXT,
+            created_by VARCHAR(100)
+        )
+        """)
+        st.success("✅ Criada: ESTOQUE.PRODUTOS")
+        
+        # ANALYTICS_DATA table
+        cursor.execute("""
+        CREATE TABLE ESTOQUE.ANALYTICS_DATA (
+            produto VARCHAR(500),
+            estoque NUMBER(10,2),
+            consumo_6_meses NUMBER(10,2),
+            media_6_meses NUMBER(10,2),
+            estoque_cobertura NUMBER(10,2),
+            data_upload TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
+            empresa VARCHAR(50) NOT NULL DEFAULT 'MINIPA',
+            upload_version VARCHAR(200),
+            version_id NUMBER,
+            is_active BOOLEAN DEFAULT TRUE,
+            usuario VARCHAR(100),
+            table_type VARCHAR(50) DEFAULT 'ANALYTICS',
+            version_description TEXT,
+            created_by VARCHAR(100)
+        )
+        """)
+        st.success("✅ Criada: ESTOQUE.ANALYTICS_DATA")
+        
+        # VERSIONS table
+        cursor.execute("""
+        CREATE TABLE CONFIG.VERSIONS (
+            empresa VARCHAR(50) NOT NULL,
+            upload_version VARCHAR(200) PRIMARY KEY,
+            version_id NUMBER,
+            table_type VARCHAR(50) NOT NULL,
+            is_active BOOLEAN DEFAULT TRUE,
+            upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
+            created_by VARCHAR(100),
+            description TEXT,
+            arquivo_origem VARCHAR(500),
+            linhas_processadas NUMBER DEFAULT 0,
+            status VARCHAR(50) DEFAULT 'SUCCESS'
+        )
+        """)
+        st.success("✅ Criada: CONFIG.VERSIONS")
+        
+        # UPLOAD_LOG table
+        cursor.execute("""
+        CREATE TABLE CONFIG.UPLOAD_LOG (
+            empresa VARCHAR(50) NOT NULL,
+            upload_version VARCHAR(200),
+            version_id NUMBER,
+            nome_arquivo VARCHAR(500),
+            linhas_processadas NUMBER DEFAULT 0,
+            usuario VARCHAR(100),
+            status VARCHAR(50) DEFAULT 'SUCCESS',
+            table_type VARCHAR(50),
+            processing_time_seconds NUMBER DEFAULT 0,
+            error_details TEXT,
+            upload_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
+        )
+        """)
+        st.success("✅ Criada: CONFIG.UPLOAD_LOG")
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        st.success("🎉 Estrutura nova criada com sucesso!")
+        st.info("💡 Agora você pode fazer uploads normalmente")
+        return True
+        
+    except Exception as e:
+        st.error(f"❌ Erro ao criar estrutura nova: {str(e)}")
+        return False 

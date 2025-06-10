@@ -1955,6 +1955,66 @@ def show_snowflake():
         if st.button("🔍 Diagnóstico", use_container_width=True):
             run_snowflake_diagnostics()
     
+    # Database Structure section
+    st.subheader("🔍 Estrutura do Banco de Dados")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("🔍 Verificar Estrutura", use_container_width=True):
+            from bd.snowflake_config import check_database_structure
+            
+            with st.spinner("Verificando estrutura das tabelas..."):
+                structure_info = check_database_structure()
+                
+                if structure_info:
+                    st.write("**📋 Estrutura Atual das Tabelas:**")
+                    
+                    for table_name, info in structure_info.items():
+                        if info['exists']:
+                            # Check if it has the new multi-company structure
+                            if info['has_empresa'] and info['has_table_type'] and info['has_upload_version']:
+                                st.success(f"✅ {table_name}: Estrutura nova OK ({info['count']} registros)")
+                            elif info['has_empresa']:
+                                st.warning(f"⚠️ {table_name}: Estrutura parcial ({info['count']} registros)")
+                            else:
+                                st.error(f"❌ {table_name}: Estrutura antiga ({info['count']} registros)")
+                            
+                            # Show columns
+                            with st.expander(f"Colunas de {table_name}"):
+                                st.write(", ".join(info['columns']))
+                        else:
+                            st.info(f"💡 {table_name}: Não existe")
+                else:
+                    st.error("❌ Erro ao verificar estrutura")
+    
+    with col2:
+        if st.button("🔧 Recriar Estrutura", use_container_width=True):
+            from bd.snowflake_config import force_create_new_structure
+            
+            st.warning("⚠️ **ATENÇÃO**: Isso irá recriar todas as tabelas com a estrutura nova!")
+            
+            confirm = st.checkbox("✅ Confirmo que quero recriar a estrutura", key="confirm_recreate")
+            
+            if confirm:
+                with st.spinner("Recriando estrutura completa..."):
+                    if force_create_new_structure():
+                        st.success("🎉 Estrutura recriada com sucesso!")
+                        st.balloons()
+                        st.info("💡 Agora você pode fazer uploads normalmente")
+                    else:
+                        st.error("❌ Erro ao recriar estrutura")
+            else:
+                st.info("💡 Marque a confirmação para prosseguir")
+    
+    with col3:
+        st.info("""
+        **🎯 Use estas ferramentas se:**
+        - Está recebendo erros de "invalid identifier"
+        - Upload não funciona
+        - Estrutura antiga precisa ser atualizada
+        """)
+    
     # Migration section for existing users
     st.subheader("🔄 Migração Multi-Empresa")
     
