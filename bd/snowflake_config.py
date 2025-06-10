@@ -317,6 +317,13 @@ def get_upload_versions(empresa, table_type=None, limit=50):
         versions = []
         for row in results:
             version_dict = dict(zip(columns, row))
+            
+            # Ensure all required fields are present with fallbacks
+            version_dict['is_active'] = version_dict.get('is_active', version_dict.get('IS_ACTIVE', True))
+            version_dict['version_id'] = version_dict.get('version_id', version_dict.get('VERSION_ID', 'N/A'))
+            version_dict['upload_date'] = version_dict.get('upload_date', version_dict.get('UPLOAD_DATE', 'N/A'))
+            version_dict['description'] = version_dict.get('description', version_dict.get('DESCRIPTION', 'Sem descrição'))
+            
             versions.append(version_dict)
         
         cursor.close()
@@ -402,6 +409,13 @@ def get_version_by_id(empresa, version_id, table_type):
         if result:
             columns = [desc[0] for desc in cursor.description]
             version_dict = dict(zip(columns, result))
+            
+            # Ensure all required fields are present with fallbacks
+            version_dict['is_active'] = version_dict.get('is_active', version_dict.get('IS_ACTIVE', True))
+            version_dict['version_id'] = version_dict.get('version_id', version_dict.get('VERSION_ID', 'N/A'))
+            version_dict['upload_date'] = version_dict.get('upload_date', version_dict.get('UPLOAD_DATE', 'N/A'))
+            version_dict['description'] = version_dict.get('description', version_dict.get('DESCRIPTION', 'Sem descrição'))
+            
             cursor.close()
             conn.close()
             return version_dict
