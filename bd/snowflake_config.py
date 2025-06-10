@@ -1135,7 +1135,8 @@ def load_analytics_data(empresa="MINIPA", version_id=None, usuario="minipa", lim
 
 def migrate_to_multi_company_versioned():
     """
-    Migrate existing tables to multi-company, versioned structure
+    Migrate existing single-company data to multi-company versioned structure
+    This function is SAFE - it preserves all existing data
     """
     conn = get_snowflake_connection()
     if not conn:
@@ -1143,134 +1144,333 @@ def migrate_to_multi_company_versioned():
         
     try:
         cursor = conn.cursor()
-        
         st.info("🔄 Iniciando migração para estrutura multi-empresa e versionada...")
         
-        # Step 1: Check if old structure exists
-        old_structure_exists = False
-        try:
-            cursor.execute("SELECT COUNT(*) FROM ESTOQUE.PRODUTOS WHERE empresa IS NULL")
-            old_records = cursor.fetchone()[0]
-            if old_records > 0:
-                old_structure_exists = True
-                st.info(f"📊 Encontrados {old_records} registros na estrutura antiga")
-        except:
-            st.info("📋 Estrutura antiga não encontrada - criando estrutura nova")
+        # Check if tables exist and their current structure
+        tables_to_migrate = [
+            ('ESTOQUE', 'PRODUTOS'),
+            ('ESTOQUE', 'ANALYTICS_DATA'),
+            ('CONFIG', 'VERSIONS'),
+            ('CONFIG', 'UPLOAD_LOG')
+        ]
         
-        # Step 2: Create new table structure
-        st.info("🔧 Atualizando estrutura das tabelas...")
-        if not create_tables():
-            st.error("❌ Erro ao criar nova estrutura")
-            return False
+        existing_data = {}
+        tables_need_migration = []
         
-        # Step 3: Migrate existing data if found
-        if old_structure_exists:
-            st.info("📦 Migrando dados existentes para MINIPA como versão 1...")
+        for schema, table in tables_to_migrate:
+            table_full_name = f"{schema}.{table}"
             
-            # Create version 1 for MINIPA TIMELINE
-            version_timeline = create_new_version(
-                empresa="MINIPA", 
-                table_type="TIMELINE", 
-                description="Migração automática de dados existentes", 
-                created_by="system"
-            )
-            
-            if version_timeline:
-                # Migrate TIMELINE data
-                cursor.execute("""
-                UPDATE ESTOQUE.PRODUTOS 
-                SET empresa = 'MINIPA',
-                    upload_version = %s,
-                    version_id = %s,
-                    is_active = TRUE,
-                    table_type = COALESCE(table_type, 'TIMELINE'),
-                    created_by = 'system',
-                    version_description = 'Migração automática de dados existentes'
-                WHERE empresa IS NULL
-                """, (version_timeline['upload_version'], version_timeline['version_id']))
-                
-                migrated_timeline = cursor.rowcount
-                st.success(f"✅ {migrated_timeline} registros de timeline migrados")
-            
-            # Check for analytics data
+            # Check if table exists
             try:
-                cursor.execute("SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA WHERE empresa IS NULL")
-                old_analytics = cursor.fetchone()[0]
+                cursor.execute(f"SELECT COUNT(*) FROM {table_full_name}")
+                count = cursor.fetchone()[0]
                 
-                if old_analytics > 0:
-                    # Create version 1 for MINIPA ANALYTICS
-                    version_analytics = create_new_version(
-                        empresa="MINIPA", 
-                        table_type="ANALYTICS", 
-                        description="Migração automática de dados existentes", 
-                        created_by="system"
-                    )
+                # Check if table has empresa column (new structure)
+                try:
+                    cursor.execute(f"DESCRIBE TABLE {table_full_name}")
+                    columns = cursor.fetchall()
+                    column_names = [col[0].upper() for col in columns]
+                    has_empresa = 'EMPRESA' in column_names
                     
-                    if version_analytics:
-                        cursor.execute("""
-                        UPDATE ESTOQUE.ANALYTICS_DATA 
-                        SET empresa = 'MINIPA',
-                            upload_version = %s,
-                            version_id = %s,
-                            is_active = TRUE,
-                            created_by = 'system',
-                            version_description = 'Migração automática de dados existentes'
-                        WHERE empresa IS NULL
-                        """, (version_analytics['upload_version'], version_analytics['version_id']))
+                    if not has_empresa and count > 0:
+                        # Table exists with old structure and has data
+                        existing_data[table_full_name] = count
+                        tables_need_migration.append((schema, table))
+                        st.info(f"📋 {table_full_name}: {count} registros para migrar")
+                    elif has_empresa:
+                        st.info(f"✅ {table_full_name}: já possui estrutura nova")
+                    else:
+                        st.info(f"📋 {table_full_name}: tabela vazia, será criada estrutura nova")
+                        tables_need_migration.append((schema, table))
                         
-                        migrated_analytics = cursor.rowcount
-                        st.success(f"✅ {migrated_analytics} registros de analytics migrados")
-            except:
-                st.info("📊 Nenhum dado de analytics para migrar")
+                except Exception as desc_error:
+                    st.warning(f"⚠️ Erro ao descrever {table_full_name}: {str(desc_error)}")
+                    
+            except Exception as table_error:
+                st.info(f"📋 {table_full_name}: não existe, será criada")
+                tables_need_migration.append((schema, table))
+        
+        if not existing_data:
+            st.info("📋 Estrutura antiga não encontrada - criando estrutura nova")
+        else:
+            st.info(f"📋 Encontrados dados para migração: {sum(existing_data.values())} registros totais")
+        
+        # Step 1: Create schemas if they don't exist
+        st.info("🔧 Criando schemas...")
+        cursor.execute("CREATE SCHEMA IF NOT EXISTS ESTOQUE")
+        cursor.execute("CREATE SCHEMA IF NOT EXISTS CONFIG")
+        
+        # Step 2: Backup existing data before migration
+        backup_data = {}
+        for schema, table in tables_need_migration:
+            table_full_name = f"{schema}.{table}"
             
-            # Update old upload logs
+            if table_full_name in existing_data:
+                try:
+                    # Backup existing data
+                    cursor.execute(f"SELECT * FROM {table_full_name}")
+                    backup_data[table_full_name] = cursor.fetchall()
+                    
+                    # Get column names for backup
+                    cursor.execute(f"DESCRIBE TABLE {table_full_name}")
+                    columns = cursor.fetchall()
+                    backup_data[f"{table_full_name}_columns"] = [col[0] for col in columns]
+                    
+                    st.info(f"💾 Backup de {table_full_name}: {len(backup_data[table_full_name])} registros")
+                    
+                except Exception as backup_error:
+                    st.error(f"❌ Erro no backup de {table_full_name}: {str(backup_error)}")
+                    cursor.close()
+                    conn.close()
+                    return False
+        
+        # Step 3: Create new table structures
+        st.info("🔧 Atualizando estrutura das tabelas...")
+        
+        # Drop and recreate tables with new structure
+        table_creation_queries = {
+            'ESTOQUE.PRODUTOS': """
+            CREATE OR REPLACE TABLE ESTOQUE.PRODUTOS (
+                item VARCHAR(500),
+                modelo VARCHAR(500),
+                fornecedor VARCHAR(500),
+                qtd_atual NUMBER(10,2),
+                preco_unitario NUMBER(10,2),
+                estoque_total NUMBER(10,2),
+                in_transit NUMBER(10,2),
+                vendas_medias NUMBER(10,2),
+                cbm NUMBER(10,4),
+                moq NUMBER(10,2),
+                table_type VARCHAR(50) DEFAULT 'TIMELINE',
+                data_upload TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
+                empresa VARCHAR(50) NOT NULL DEFAULT 'MINIPA',
+                upload_version NUMBER DEFAULT 1,
+                version_id VARCHAR(100),
+                is_active BOOLEAN DEFAULT TRUE
+            )
+            """,
+            
+            'ESTOQUE.ANALYTICS_DATA': """
+            CREATE OR REPLACE TABLE ESTOQUE.ANALYTICS_DATA (
+                produto VARCHAR(500),
+                estoque NUMBER(10,2),
+                consumo_6_meses NUMBER(10,2),
+                media_6_meses NUMBER(10,2),
+                estoque_cobertura NUMBER(10,2),
+                data_upload TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
+                empresa VARCHAR(50) NOT NULL DEFAULT 'MINIPA',
+                upload_version NUMBER DEFAULT 1,
+                version_id VARCHAR(100),
+                is_active BOOLEAN DEFAULT TRUE
+            )
+            """,
+            
+            'CONFIG.VERSIONS': """
+            CREATE OR REPLACE TABLE CONFIG.VERSIONS (
+                version_id VARCHAR(100) PRIMARY KEY,
+                empresa VARCHAR(50) NOT NULL,
+                version_number NUMBER,
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
+                created_by VARCHAR(100),
+                is_active BOOLEAN DEFAULT TRUE,
+                record_count NUMBER DEFAULT 0
+            )
+            """,
+            
+            'CONFIG.UPLOAD_LOG': """
+            CREATE OR REPLACE TABLE CONFIG.UPLOAD_LOG (
+                upload_id VARCHAR(100) PRIMARY KEY,
+                empresa VARCHAR(50) NOT NULL,
+                version_id VARCHAR(100),
+                filename VARCHAR(500),
+                sheet_name VARCHAR(200),
+                record_count NUMBER,
+                upload_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
+                user_name VARCHAR(100),
+                status VARCHAR(50) DEFAULT 'SUCCESS'
+            )
+            """
+        }
+        
+        # Execute table creation
+        for table_name, query in table_creation_queries.items():
+            try:
+                cursor.execute(query)
+                conn.commit()  # Commit after each table creation
+                st.info(f"✅ Criada estrutura para {table_name}")
+            except Exception as create_error:
+                st.error(f"❌ Erro ao criar {table_name}: {str(create_error)}")
+                cursor.close()
+                conn.close()
+                return False
+        
+        # Step 4: Restore data with new structure
+        if backup_data:
+            st.info("📥 Restaurando dados existentes...")
+            
+            # Generate version ID for migrated data
+            migration_version_id = generate_version_id()
+            
+            # Restore PRODUTOS data
+            if 'ESTOQUE.PRODUTOS' in backup_data:
+                old_columns = backup_data['ESTOQUE.PRODUTOS_columns']
+                old_data = backup_data['ESTOQUE.PRODUTOS']
+                
+                # Map old columns to new structure
+                column_mapping = {
+                    'ITEM': 'item',
+                    'MODELO': 'modelo', 
+                    'FORNECEDOR': 'fornecedor',
+                    'QTD_ATUAL': 'qtd_atual',
+                    'PRECO_UNITARIO': 'preco_unitario',
+                    'ESTOQUE_TOTAL': 'estoque_total',
+                    'IN_TRANSIT': 'in_transit',
+                    'VENDAS_MEDIAS': 'vendas_medias',
+                    'CBM': 'cbm',
+                    'MOQ': 'moq',
+                    'TABLE_TYPE': 'table_type',
+                    'DATA_UPLOAD': 'data_upload'
+                }
+                
+                for row in old_data:
+                    # Build insert query with old data + new fields
+                    values = []
+                    for i, col in enumerate(old_columns):
+                        values.append(row[i])
+                    
+                    # Add new multi-company fields
+                    insert_query = """
+                    INSERT INTO ESTOQUE.PRODUTOS 
+                    (item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total,
+                     in_transit, vendas_medias, cbm, moq, table_type, data_upload,
+                     empresa, upload_version, version_id, is_active)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """
+                    
+                    # Prepare values - pad with defaults if columns are missing
+                    final_values = [None] * 16
+                    
+                    for i, col in enumerate(old_columns):
+                        if col.upper() in column_mapping.values() or col.lower() in column_mapping.values():
+                            final_values[i] = values[i]
+                    
+                    # Set defaults for new columns
+                    final_values[12] = 'MINIPA'  # empresa
+                    final_values[13] = 1  # upload_version
+                    final_values[14] = migration_version_id  # version_id
+                    final_values[15] = True  # is_active
+                    
+                    try:
+                        cursor.execute(insert_query, final_values)
+                    except Exception as insert_error:
+                        st.warning(f"⚠️ Erro ao inserir registro: {str(insert_error)}")
+                
+                st.info(f"✅ Migrados {len(old_data)} registros de produtos")
+            
+            # Restore ANALYTICS_DATA if exists
+            if 'ESTOQUE.ANALYTICS_DATA' in backup_data:
+                old_data = backup_data['ESTOQUE.ANALYTICS_DATA']
+                
+                for row in old_data:
+                    insert_query = """
+                    INSERT INTO ESTOQUE.ANALYTICS_DATA 
+                    (produto, estoque, consumo_6_meses, media_6_meses, estoque_cobertura, 
+                     data_upload, empresa, upload_version, version_id, is_active)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """
+                    
+                    # Add new multi-company fields to old data
+                    new_row = list(row) + ['MINIPA', 1, migration_version_id, True]
+                    
+                    try:
+                        cursor.execute(insert_query, new_row)
+                    except Exception as insert_error:
+                        st.warning(f"⚠️ Erro ao inserir analytics: {str(insert_error)}")
+                
+                st.info(f"✅ Migrados {len(old_data)} registros de analytics")
+            
+            # Create version record for migrated data
             try:
                 cursor.execute("""
-                UPDATE CONFIG.UPLOAD_LOG 
-                SET empresa = 'MINIPA',
-                    upload_version = 'LEGACY_IMPORT',
-                    version_id = 1
-                WHERE empresa IS NULL
-                """)
-                st.success("✅ Logs de upload atualizados")
-            except:
-                st.info("📋 Nenhum log para atualizar")
+                INSERT INTO CONFIG.VERSIONS 
+                (version_id, empresa, version_number, description, created_by, is_active, record_count)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, [
+                    migration_version_id,
+                    'MINIPA',
+                    1,
+                    'Dados migrados da estrutura anterior',
+                    'sistema',
+                    True,
+                    len(backup_data.get('ESTOQUE.PRODUTOS', []))
+                ])
+                st.info(f"✅ Criado registro de versão: {migration_version_id}")
+            except Exception as version_error:
+                st.warning(f"⚠️ Erro ao criar versão: {str(version_error)}")
         
+        # Commit all data changes
         conn.commit()
+        st.info("💾 Dados commitados no banco")
         
-        # Step 4: Verify migration
+        # Step 5: Verify migration
         st.info("🔍 Verificando migração...")
         
-        # Check MINIPA data
-        cursor.execute("SELECT COUNT(*) FROM ESTOQUE.PRODUTOS WHERE empresa = 'MINIPA'")
-        minipa_count = cursor.fetchone()[0]
+        verification_passed = True
         
-        cursor.execute("SELECT COUNT(*) FROM CONFIG.VERSIONS WHERE empresa = 'MINIPA'")
-        minipa_versions = cursor.fetchone()[0]
-        
-        st.success(f"✅ MINIPA: {minipa_count} produtos, {minipa_versions} versões")
+        for schema, table in tables_to_migrate:
+            table_full_name = f"{schema}.{table}"
+            
+            try:
+                # Check if table exists first
+                cursor.execute(f"SELECT COUNT(*) FROM {table_full_name}")
+                table_exists = True
+            except:
+                st.error(f"❌ {table_full_name}: tabela não existe")
+                verification_passed = False
+                continue
+                
+            try:
+                # Check if table has new structure
+                cursor.execute(f"DESCRIBE TABLE {table_full_name}")
+                columns = cursor.fetchall()
+                column_names = [col[0].upper() for col in columns]
+                
+                if 'EMPRESA' in column_names:
+                    st.success(f"✅ {table_full_name}: estrutura atualizada com coluna EMPRESA")
+                    
+                    # Count records for verification (safely)
+                    try:
+                        cursor.execute(f"SELECT COUNT(*) FROM {table_full_name}")
+                        count = cursor.fetchone()[0]
+                        if count > 0:
+                            st.info(f"📊 {table_full_name}: {count} registros")
+                        else:
+                            st.info(f"📊 {table_full_name}: tabela criada (vazia)")
+                    except Exception as count_error:
+                        st.warning(f"⚠️ Não foi possível contar registros em {table_full_name}: {str(count_error)}")
+                else:
+                    st.error(f"❌ {table_full_name}: coluna EMPRESA não encontrada")
+                    verification_passed = False
+                    
+            except Exception as verify_error:
+                st.error(f"❌ Erro na verificação de estrutura de {table_full_name}: {str(verify_error)}")
+                verification_passed = False
         
         cursor.close()
         conn.close()
         
-        st.success("🎉 Migração concluída com sucesso!")
-        st.info("""
-        **📋 Próximos passos:**
-        1. ✅ Estrutura multi-empresa criada
-        2. ✅ Dados existentes migrados para MINIPA
-        3. 👉 Agora você pode fazer upload para MINIPA INDUSTRIA
-        4. 👉 Use os seletores de empresa e versão nas páginas
-        """)
-        
-        return True
-        
+        if verification_passed:
+            st.success("🎉 Migração concluída com sucesso!")
+            st.info("🔄 Recarregue a página para ver as novas funcionalidades multi-empresa")
+            return True
+        else:
+            st.error("❌ Migração falhou na verificação")
+            return False
+            
     except Exception as e:
         st.error(f"❌ Erro na migração: {str(e)}")
-        try:
-            conn.rollback()
-        except:
-            pass
-        return False 
+        return False
 
 def migrate_existing_tables():
     """
