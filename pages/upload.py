@@ -198,9 +198,8 @@ def show_data_upload():
         
         if snowflake_available:
             try:
-                # Simple Excel processing for now
-                df_full = pd.read_excel(uploaded_file, header=0)
-                df_full = df_full.dropna(how='all')
+                # Use sophisticated Excel analysis to handle different header positions
+                df_full, detected_sheet, detected_header = analyze_and_process_excel(uploaded_file)
                 
                 if df_full is not None and len(df_full) > 0:
                     st.success(f"✅ Dados carregados: {len(df_full)} linhas")

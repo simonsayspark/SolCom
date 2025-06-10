@@ -5,12 +5,74 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 
+def detect_excel_headers(uploaded_file):
+    """Smart detection of Excel headers for different file formats"""
+    try:
+        # Read the Excel file to understand structure
+        xl_file = pd.ExcelFile(uploaded_file)
+        sheets = xl_file.sheet_names
+        
+        # Try different sheets and header positions
+        best_sheet = None
+        best_header_row = 9  # Default for MINIPA
+        best_df = None
+        best_score = 0
+        
+        # Try different starting rows to find headers
+        for sheet in sheets[:3]:  # Check first 3 sheets
+            for header_row in [0, 8, 9, 10, 7, 6, 11, 12]:
+                try:
+                    df_sample = pd.read_excel(uploaded_file, sheet_name=sheet, header=header_row, nrows=20)
+                    
+                    # Check if we found real headers (not None or Unnamed)
+                    valid_columns = 0
+                    real_headers = []
+                    
+                    for col in df_sample.columns:
+                        col_str = str(col).strip()
+                        if (col_str != 'None' and 
+                            not col_str.startswith('Unnamed') and 
+                            col_str != 'nan' and
+                            len(col_str) > 0):
+                            valid_columns += 1
+                            real_headers.append(col_str)
+                    
+                    # Score this attempt (prioritize files with expected timeline columns)
+                    expected_cols = ['Item', 'Modelo', 'Fornecedor', 'QTD', 'MOQ', 'Estoque']
+                    timeline_score = sum(1 for expected in expected_cols if any(expected.lower() in col.lower() for col in real_headers))
+                    data_rows = len(df_sample.dropna(how='all'))
+                    score = valid_columns * data_rows + timeline_score * 10
+                    
+                    if score > best_score and valid_columns >= 3 and data_rows >= 3:
+                        best_score = score
+                        best_sheet = sheet
+                        best_header_row = header_row
+                        best_df = df_sample
+                        
+                except Exception as e:
+                    continue
+        
+        if best_df is not None:
+            # Load the full dataset
+            df_full = pd.read_excel(uploaded_file, sheet_name=best_sheet, header=best_header_row)
+            df_full = df_full.dropna(how='all')  # Remove completely empty rows
+            st.info(f"🔍 Header detectado: planilha '{best_sheet}', linha {best_header_row + 1}")
+            return df_full
+        else:
+            st.warning("⚠️ Usando detecção padrão: linha 10")
+            return pd.read_excel(uploaded_file, header=9)
+                        
+    except Exception as e:
+        st.error(f"❌ Erro na detecção: {str(e)}")
+        # Fallback to default
+        return pd.read_excel(uploaded_file, header=9)
+
 @st.cache_data
 def carregar_dados(uploaded_file=None):
     """Load data from uploaded file"""
     try:
         if uploaded_file is not None:
-            df = pd.read_excel(uploaded_file, header=9)
+            df = detect_excel_headers(uploaded_file)
         else:
             return None
         
