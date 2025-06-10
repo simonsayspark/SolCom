@@ -1244,9 +1244,12 @@ def migrate_to_multi_company_versioned():
                 table_type VARCHAR(50) DEFAULT 'TIMELINE',
                 data_upload TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
                 empresa VARCHAR(50) NOT NULL DEFAULT 'MINIPA',
-                upload_version NUMBER DEFAULT 1,
-                version_id VARCHAR(100),
-                is_active BOOLEAN DEFAULT TRUE
+                upload_version VARCHAR(200),
+                version_id NUMBER,
+                is_active BOOLEAN DEFAULT TRUE,
+                usuario VARCHAR(100),
+                version_description TEXT,
+                created_by VARCHAR(100)
             )
             """,
             
@@ -1259,36 +1262,46 @@ def migrate_to_multi_company_versioned():
                 estoque_cobertura NUMBER(10,2),
                 data_upload TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
                 empresa VARCHAR(50) NOT NULL DEFAULT 'MINIPA',
-                upload_version NUMBER DEFAULT 1,
-                version_id VARCHAR(100),
-                is_active BOOLEAN DEFAULT TRUE
+                upload_version VARCHAR(200),
+                version_id NUMBER,
+                is_active BOOLEAN DEFAULT TRUE,
+                usuario VARCHAR(100),
+                table_type VARCHAR(50) DEFAULT 'ANALYTICS',
+                version_description TEXT,
+                created_by VARCHAR(100)
             )
             """,
             
             'CONFIG.VERSIONS': """
             CREATE OR REPLACE TABLE CONFIG.VERSIONS (
-                version_id VARCHAR(100) PRIMARY KEY,
                 empresa VARCHAR(50) NOT NULL,
-                version_number NUMBER,
-                description TEXT,
+                upload_version VARCHAR(200) PRIMARY KEY,
+                version_id NUMBER,
+                table_type VARCHAR(50) NOT NULL,
+                is_active BOOLEAN DEFAULT TRUE,
+                upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
                 created_by VARCHAR(100),
-                is_active BOOLEAN DEFAULT TRUE,
-                record_count NUMBER DEFAULT 0
+                description TEXT,
+                arquivo_origem VARCHAR(500),
+                linhas_processadas NUMBER DEFAULT 0,
+                status VARCHAR(50) DEFAULT 'SUCCESS'
             )
             """,
             
             'CONFIG.UPLOAD_LOG': """
             CREATE OR REPLACE TABLE CONFIG.UPLOAD_LOG (
-                upload_id VARCHAR(100) PRIMARY KEY,
                 empresa VARCHAR(50) NOT NULL,
-                version_id VARCHAR(100),
-                filename VARCHAR(500),
-                sheet_name VARCHAR(200),
-                record_count NUMBER,
-                upload_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
-                user_name VARCHAR(100),
-                status VARCHAR(50) DEFAULT 'SUCCESS'
+                upload_version VARCHAR(200),
+                version_id NUMBER,
+                nome_arquivo VARCHAR(500),
+                linhas_processadas NUMBER DEFAULT 0,
+                usuario VARCHAR(100),
+                status VARCHAR(50) DEFAULT 'SUCCESS',
+                table_type VARCHAR(50),
+                processing_time_seconds NUMBER DEFAULT 0,
+                error_details TEXT,
+                upload_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
             )
             """
         }
