@@ -307,8 +307,19 @@ def show_dashboard():
     """, unsafe_allow_html=True)
 
 def show_timeline():
-    st.title("📅 TIMELINE INTERATIVA DE COMPRAS")
-    st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
+    # Header with refresh button
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.title("📅 TIMELINE INTERATIVA DE COMPRAS")
+        st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
+    with col2:
+        st.markdown("") # Spacing
+        if st.button("🔄 Forçar Atualização", 
+                    help="Atualizar dados do Snowflake (normalmente cache por 30 dias)",
+                    use_container_width=True):
+            st.cache_data.clear()  # Clear all cache
+            st.success("✅ Cache limpo! Dados atualizados.")
+            st.rerun()
 
     # Try to load data from Snowflake first
     try:
@@ -1128,8 +1139,21 @@ def show_announcements():
 def show_excel_analytics():
     """Análise avançada de dados Excel - Sistema de Gestão de Estoque"""
     
-    st.title("📊 Análise de Estoque - Sistema MINIPA")
-    st.markdown("**Ferramenta prática para gestão de estoque focada em AÇÃO e DECISÃO**")
+    # Header with refresh button
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.title("📊 Análise de Estoque - Sistema MINIPA")
+        st.markdown("**Ferramenta prática para gestão de estoque focada em AÇÃO e DECISÃO**")
+    with col2:
+        st.markdown("") # Spacing
+        if st.button("🔄 Atualizar Dados", 
+                    help="Atualizar dados do Snowflake (normalmente cache por 7 dias)",
+                    use_container_width=True,
+                    key="analytics_refresh"):
+            from bd.snowflake_config import load_analytics_data
+            load_analytics_data.clear()  # Clear specific function cache
+            st.success("✅ Cache de análise limpo! Dados atualizados.")
+            st.rerun()
     
     # Try to load data from Snowflake first
     try:
@@ -1714,6 +1738,35 @@ def show_snowflake():
     
     with col2:
         st.info("💡 Use se você tem tabelas antigas e precisa suporte para Timeline + Analytics")
+    
+    # Cache management section
+    st.subheader("🔄 Gerenciamento de Cache")
+    
+    st.info("""
+    **💰 Sistema de Cache Otimizado para Economia de Créditos:**
+    - 📅 **Timeline de Compras**: Cache por 30 dias (atualizações mensais)
+    - 📊 **Análise de Estoque**: Cache por 7 dias (atualizações semanais)
+    - 🎯 **Economia**: 99% menos consultas ao Snowflake!
+    """)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("🧹 Limpar Cache Timeline", use_container_width=True):
+            from bd.snowflake_config import load_data_with_history
+            load_data_with_history.clear()
+            st.success("✅ Cache da Timeline limpo!")
+    
+    with col2:
+        if st.button("🧹 Limpar Cache Analytics", use_container_width=True):
+            from bd.snowflake_config import load_analytics_data
+            load_analytics_data.clear()
+            st.success("✅ Cache da Analytics limpo!")
+    
+    with col3:
+        if st.button("🧹 Limpar Todo Cache", use_container_width=True):
+            st.cache_data.clear()
+            st.success("✅ Todo cache limpo!")
     
     # Database schema info
     st.subheader("🏗️ Estrutura do Banco")

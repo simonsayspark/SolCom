@@ -488,9 +488,12 @@ def analyze_excel_structure(uploaded_file):
         st.error(f"❌ Erro ao analisar Excel: {str(e)}")
         return None, 0
 
+# Timeline de Compras - Monthly updates
+@st.cache_data(ttl=2592000, show_spinner="🔄 Carregando Timeline (atualização mensal)...")  # 30 days
 def load_data_with_history(usuario="minipa", limit_days=30):
     """
     Load data from Snowflake with history tracking
+    CACHED for 30 DAYS (monthly updates) - Massive credit savings!
     """
     conn = get_snowflake_connection()
     if not conn:
@@ -624,9 +627,12 @@ def test_connection():
             return False
     return False
 
+# Análise de Estoque - Weekly updates  
+@st.cache_data(ttl=604800, show_spinner="🔄 Carregando Análise (atualização semanal)...")  # 7 days
 def load_analytics_data(usuario="minipa", limit_days=30):
     """
     Load analytics data from Snowflake for análise de estoque
+    CACHED for 7 DAYS (weekly updates) - Major credit savings!
     """
     conn = get_snowflake_connection()
     if not conn:
