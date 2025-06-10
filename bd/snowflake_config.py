@@ -733,6 +733,7 @@ def load_data_with_history(empresa="MINIPA", version_id=None, usuario="minipa", 
     """
     Load data from Snowflake with multi-company versioning support
     CACHED for 30 DAYS (monthly updates) - Massive credit savings!
+    Backward compatible with old table structure.
     
     Args:
         empresa: Company name (MINIPA, MINIPA_INDUSTRIA)
@@ -747,17 +748,98 @@ def load_data_with_history(empresa="MINIPA", version_id=None, usuario="minipa", 
     try:
         cursor = conn.cursor()
         
+        # Check if table has new structure (empresa column)
+        has_empresa_column = False
+        try:
+            cursor.execute("DESCRIBE TABLE ESTOQUE.PRODUTOS")
+            columns = cursor.fetchall()
+            column_names = [col[0].upper() for col in columns]
+            has_empresa_column = 'EMPRESA' in column_names
+        except:
+            st.warning("⚠️ Tabela PRODUTOS não encontrada")
+            cursor.close()
+            conn.close()
+            return None
+        
+        if not has_empresa_column:
+            # Old structure - load all data as MINIPA
+            st.warning("⚠️ Estrutura antiga detectada. Para multi-empresa, execute a migração.")
+            
+            if empresa != "MINIPA":
+                st.info(f"💡 Nenhum dado para {empresa} na estrutura antiga.")
+                cursor.close()
+                conn.close()
+                return None
+                
+            try:
+                # Use old query structure
+                query = """
+                SELECT item as "Item", 
+                       modelo as "Modelo", 
+                       fornecedor as "Fornecedor", 
+                       qtd_atual as "QTD", 
+                       preco_unitario as "Preco_Unitario", 
+                       estoque_total as "Estoque_Total",
+                       in_transit as "In_Transit", 
+                       vendas_medias as "Vendas_Medias",
+                       cbm as "CBM", 
+                       moq as "MOQ", 
+                       data_upload
+                FROM ESTOQUE.PRODUTOS 
+                WHERE table_type = 'TIMELINE' OR table_type IS NULL
+                ORDER BY data_upload DESC
+                """
+                
+                cursor.close()
+                df = pd.read_sql(query, conn, params=[])
+                conn.close()
+                
+                if not df.empty:
+                    st.info(f"📅 Estrutura antiga - {len(df)} produtos carregados como MINIPA")
+                
+                return df
+                
+            except Exception as old_query_error:
+                # Even older structure without table_type
+                try:
+                    query = """
+                    SELECT item as "Item", 
+                           modelo as "Modelo", 
+                           fornecedor as "Fornecedor", 
+                           qtd_atual as "QTD", 
+                           preco_unitario as "Preco_Unitario", 
+                           estoque_total as "Estoque_Total",
+                           in_transit as "In_Transit", 
+                           vendas_medias as "Vendas_Medias",
+                           cbm as "CBM", 
+                           moq as "MOQ", 
+                           data_upload
+                    FROM ESTOQUE.PRODUTOS 
+                    ORDER BY data_upload DESC
+                    """
+                    
+                    df = pd.read_sql(query, conn, params=[])
+                    conn.close()
+                    
+                    if not df.empty:
+                        st.info(f"📅 Estrutura muito antiga - {len(df)} produtos carregados")
+                    
+                    return df
+                    
+                except Exception as very_old_error:
+                    st.error(f"❌ Erro na estrutura antiga: {str(very_old_error)}")
+                    cursor.close()
+                    conn.close()
+                    return None
+        
+        # New multi-company structure
         # Determine which version to load
         if version_id is None:
-            # Load active version
-            version_filter = "is_active = TRUE"
-            version_params = [empresa, 'TIMELINE']
             st.info(f"📊 Carregando versão ativa para {empresa}")
+            version_params = [empresa, 'TIMELINE']
         else:
-            # Load specific version
-            version_filter = "version_id = %s"
-            version_params = [empresa, 'TIMELINE', version_id]
             st.info(f"📊 Carregando versão {version_id} para {empresa}")
+            version_params = [empresa, 'TIMELINE', version_id]
         
         # Check if the table exists and has data for this company
         try:
@@ -843,7 +925,7 @@ def load_data_with_history(empresa="MINIPA", version_id=None, usuario="minipa", 
             return None
         
         # Show data summary
-        version_info = df['version_id'].iloc[0] if not df.empty else "N/A"
+        version_info = df['version_id'].iloc[0] if 'version_id' in df.columns and not df.empty else "N/A"
         upload_date = df['data_upload'].max() if 'data_upload' in df.columns else "N/A"
         
         st.info(f"📅 {empresa} - Timeline v{version_info} | {len(df)} produtos | Upload: {upload_date}")
@@ -884,6 +966,7 @@ def load_analytics_data(empresa="MINIPA", version_id=None, usuario="minipa", lim
     """
     Load analytics data from Snowflake with multi-company versioning support
     CACHED for 7 DAYS (weekly updates) - Major credit savings!
+    Backward compatible with old table structure.
     
     Args:
         empresa: Company name (MINIPA, MINIPA_INDUSTRIA)
@@ -898,6 +981,61 @@ def load_analytics_data(empresa="MINIPA", version_id=None, usuario="minipa", lim
     try:
         cursor = conn.cursor()
         
+        # Check if analytics table exists and has new structure
+        has_empresa_column = False
+        table_exists = False
+        try:
+            cursor.execute("DESCRIBE TABLE ESTOQUE.ANALYTICS_DATA")
+            columns = cursor.fetchall()
+            column_names = [col[0].upper() for col in columns]
+            has_empresa_column = 'EMPRESA' in column_names
+            table_exists = True
+        except:
+            # Table doesn't exist yet
+            st.info("💡 Tabela de analytics não existe ainda. Faça upload de dados de análise primeiro.")
+            cursor.close()
+            conn.close()
+            return None
+        
+        if not has_empresa_column:
+            # Old structure - load all data as MINIPA
+            st.warning("⚠️ Estrutura antiga de analytics detectada. Para multi-empresa, execute a migração.")
+            
+            if empresa != "MINIPA":
+                st.info(f"💡 Nenhum dado de análise para {empresa} na estrutura antiga.")
+                cursor.close()
+                conn.close()
+                return None
+                
+            try:
+                # Use old query structure
+                query = """
+                SELECT produto as "Produto", 
+                       estoque as "Estoque", 
+                       consumo_6_meses as "Consumo 6 Meses",
+                       media_6_meses as "Média 6 Meses", 
+                       estoque_cobertura as "Estoque Cobertura",
+                       data_upload
+                FROM ESTOQUE.ANALYTICS_DATA 
+                ORDER BY data_upload DESC
+                """
+                
+                cursor.close()
+                df = pd.read_sql(query, conn, params=[])
+                conn.close()
+                
+                if not df.empty:
+                    st.info(f"📊 Estrutura antiga - {len(df)} produtos de análise carregados como MINIPA")
+                
+                return df
+                
+            except Exception as old_query_error:
+                st.error(f"❌ Erro na estrutura antiga de analytics: {str(old_query_error)}")
+                cursor.close()
+                conn.close()
+                return None
+        
+        # New multi-company structure
         # Determine which version to load
         if version_id is None:
             st.info(f"📊 Carregando análise ativa para {empresa}")
@@ -980,7 +1118,7 @@ def load_analytics_data(empresa="MINIPA", version_id=None, usuario="minipa", lim
             return None
         
         # Show data summary
-        version_info = df['version_id'].iloc[0] if not df.empty else "N/A"
+        version_info = df['version_id'].iloc[0] if 'version_id' in df.columns and not df.empty else "N/A"
         upload_date = df['data_upload'].max() if 'data_upload' in df.columns else "N/A"
         
         st.info(f"📊 {empresa} - Análise v{version_info} | {len(df)} produtos | Upload: {upload_date}")
@@ -1345,6 +1483,7 @@ def clear_entire_database():
 def get_database_statistics():
     """
     Get comprehensive database statistics for monitoring costs and usage
+    Backward compatible with old and new table structures
     """
     conn = get_snowflake_connection()
     if not conn:
@@ -1355,40 +1494,124 @@ def get_database_statistics():
         
         stats = {}
         
-        # Company statistics
-        for empresa in ["MINIPA", "MINIPA_INDUSTRIA"]:
-            cursor.execute("SELECT COUNT(*) FROM ESTOQUE.PRODUTOS WHERE empresa = %s", (empresa,))
-            produtos_count = cursor.fetchone()[0]
+        # First, check if tables have the new structure (empresa column)
+        has_empresa_column = False
+        try:
+            cursor.execute("DESCRIBE TABLE ESTOQUE.PRODUTOS")
+            columns = cursor.fetchall()
+            column_names = [col[0] for col in columns]
+            has_empresa_column = 'EMPRESA' in [col.upper() for col in column_names]
+        except:
+            # Table might not exist yet
+            pass
+        
+        if has_empresa_column:
+            # New multi-company structure
+            st.info("📊 Usando estrutura multi-empresa")
             
-            cursor.execute("SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA WHERE empresa = %s", (empresa,))
-            analytics_count = cursor.fetchone()[0]
+            # Company statistics
+            for empresa in ["MINIPA", "MINIPA_INDUSTRIA"]:
+                try:
+                    cursor.execute("SELECT COUNT(*) FROM ESTOQUE.PRODUTOS WHERE empresa = %s", (empresa,))
+                    produtos_count = cursor.fetchone()[0]
+                except:
+                    produtos_count = 0
+                
+                try:
+                    cursor.execute("SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA WHERE empresa = %s", (empresa,))
+                    analytics_count = cursor.fetchone()[0]
+                except:
+                    analytics_count = 0
+                
+                try:
+                    cursor.execute("SELECT COUNT(*) FROM CONFIG.VERSIONS WHERE empresa = %s", (empresa,))
+                    versions_count = cursor.fetchone()[0]
+                except:
+                    versions_count = 0
+                
+                try:
+                    cursor.execute("SELECT COUNT(*) FROM CONFIG.UPLOAD_LOG WHERE empresa = %s", (empresa,))
+                    uploads_count = cursor.fetchone()[0]
+                except:
+                    uploads_count = 0
+                
+                stats[empresa] = {
+                    'produtos': produtos_count,
+                    'analytics': analytics_count, 
+                    'versions': versions_count,
+                    'uploads': uploads_count,
+                    'total': produtos_count + analytics_count + versions_count + uploads_count
+                }
+        else:
+            # Old single-company structure - treat as MINIPA
+            st.warning("⚠️ Usando estrutura antiga - execute migração para multi-empresa")
             
-            cursor.execute("SELECT COUNT(*) FROM CONFIG.VERSIONS WHERE empresa = %s", (empresa,))
-            versions_count = cursor.fetchone()[0]
+            try:
+                cursor.execute("SELECT COUNT(*) FROM ESTOQUE.PRODUTOS")
+                produtos_count = cursor.fetchone()[0]
+            except:
+                produtos_count = 0
             
-            cursor.execute("SELECT COUNT(*) FROM CONFIG.UPLOAD_LOG WHERE empresa = %s", (empresa,))
-            uploads_count = cursor.fetchone()[0]
+            try:
+                cursor.execute("SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA")
+                analytics_count = cursor.fetchone()[0]
+            except:
+                analytics_count = 0
             
-            stats[empresa] = {
+            try:
+                cursor.execute("SELECT COUNT(*) FROM CONFIG.VERSIONS")
+                versions_count = cursor.fetchone()[0]
+            except:
+                versions_count = 0
+            
+            try:
+                cursor.execute("SELECT COUNT(*) FROM CONFIG.UPLOAD_LOG")
+                uploads_count = cursor.fetchone()[0]
+            except:
+                uploads_count = 0
+            
+            # Assign all data to MINIPA (old structure)
+            stats['MINIPA'] = {
                 'produtos': produtos_count,
                 'analytics': analytics_count, 
                 'versions': versions_count,
                 'uploads': uploads_count,
                 'total': produtos_count + analytics_count + versions_count + uploads_count
             }
+            
+            # Empty stats for MINIPA_INDUSTRIA
+            stats['MINIPA_INDUSTRIA'] = {
+                'produtos': 0,
+                'analytics': 0,
+                'versions': 0,
+                'uploads': 0,
+                'total': 0
+            }
         
         # Overall statistics
-        cursor.execute("SELECT COUNT(*) FROM ESTOQUE.PRODUTOS")
-        total_produtos = cursor.fetchone()[0]
+        try:
+            cursor.execute("SELECT COUNT(*) FROM ESTOQUE.PRODUTOS")
+            total_produtos = cursor.fetchone()[0]
+        except:
+            total_produtos = 0
         
-        cursor.execute("SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA")
-        total_analytics = cursor.fetchone()[0]
+        try:
+            cursor.execute("SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA")
+            total_analytics = cursor.fetchone()[0]
+        except:
+            total_analytics = 0
         
-        cursor.execute("SELECT COUNT(*) FROM CONFIG.VERSIONS")
-        total_versions = cursor.fetchone()[0]
+        try:
+            cursor.execute("SELECT COUNT(*) FROM CONFIG.VERSIONS")
+            total_versions = cursor.fetchone()[0]
+        except:
+            total_versions = 0
         
-        cursor.execute("SELECT COUNT(*) FROM CONFIG.UPLOAD_LOG")
-        total_uploads = cursor.fetchone()[0]
+        try:
+            cursor.execute("SELECT COUNT(*) FROM CONFIG.UPLOAD_LOG")
+            total_uploads = cursor.fetchone()[0]
+        except:
+            total_uploads = 0
         
         stats['TOTAL'] = {
             'produtos': total_produtos,
