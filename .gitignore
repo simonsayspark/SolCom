@@ -120,3 +120,5 @@ RemoveLater/
 # ✅ README.md
 # ✅ .gitignore (this file)
 # ============================================================================= 
+.streamlit/secrets.toml.template
+README_REFACTOR.md
