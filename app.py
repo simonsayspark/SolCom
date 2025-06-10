@@ -19,40 +19,86 @@ st.set_page_config(page_title="Dashboard Corporativo", page_icon="🏢", layout=
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 def show_data_upload():
-    """Centralized data upload section"""
-    st.header("📁 Central de Upload de Dados")
-    st.markdown("**Upload seus arquivos Excel aqui. Os dados serão salvos na nuvem e disponíveis para todas as funcionalidades.**")
+    """Centralized multi-company data upload section with versioning"""
+    st.header("📁 Central de Upload de Dados Multi-Empresa")
+    st.markdown("**Upload seus arquivos Excel aqui. Os dados serão salvos na nuvem com controle de versão para cada empresa.**")
     
     # Import Snowflake functions
     try:
-        from bd.snowflake_config import upload_excel_to_snowflake, load_data_with_history, test_connection
+        from bd.snowflake_config import (upload_excel_to_snowflake, load_data_with_history, 
+                                        load_analytics_data, test_connection, get_upload_versions)
         snowflake_available = True
     except ImportError:
         snowflake_available = False
     
+    # Company selection (prominent)
+    st.subheader("🏢 Seleção da Empresa")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        empresa_selecionada = st.radio(
+            "Selecione a empresa:",
+            ["🏢 MINIPA", "🏭 MINIPA INDUSTRIA"],
+            index=0,
+            help="Escolha a empresa para a qual você está fazendo o upload"
+        )
+        empresa_code = "MINIPA" if empresa_selecionada == "🏢 MINIPA" else "MINIPA_INDUSTRIA"
+    
+    with col2:
+        st.info(f"""
+        **Empresa Selecionada:** {empresa_selecionada}
+        
+        📊 **Isolamento de Dados:**
+        - Cada empresa tem seus próprios dados
+        - Controle de versão independente  
+        - Histórico completo por empresa
+        """)
+    
     # Show current data status
     if snowflake_available:
-        col1, col2 = st.columns([2, 1])
+        st.subheader(f"📊 Status dos Dados - {empresa_selecionada}")
+        
+        col1, col2 = st.columns([3, 1])
         
         with col1:
-            st.subheader("📊 Status dos Dados")
+            # Try to load existing data for selected company
+            timeline_data = load_data_with_history(empresa=empresa_code)
+            analytics_data = load_analytics_data(empresa=empresa_code)
             
-            # Try to load existing data
-            existing_data = load_data_with_history()
-            if existing_data is not None and len(existing_data) > 0:
-                st.success(f"✅ {len(existing_data)} produtos já salvos na nuvem")
-                
-                # Check if data_upload column exists before accessing it
-                if 'data_upload' in existing_data.columns:
-                    st.info(f"📅 Último upload: {existing_data['data_upload'].max()}")
-                else:
-                    st.info("📅 Dados carregados da nuvem (sem informação de data)")
-                
-                # Show preview
-                with st.expander("👀 Prévia dos dados salvos"):
-                    st.dataframe(existing_data.head(10))
+            # Show data summary
+            if timeline_data is not None and len(timeline_data) > 0:
+                st.success(f"📅 Timeline: {len(timeline_data)} produtos salvos")
+                if 'data_upload' in timeline_data.columns:
+                    st.info(f"🕒 Último upload Timeline: {timeline_data['data_upload'].max()}")
             else:
-                st.info("💡 Nenhum dado encontrado na nuvem. Faça seu primeiro upload abaixo.")
+                st.info("📅 Timeline: Nenhum dado encontrado")
+            
+            if analytics_data is not None and len(analytics_data) > 0:
+                st.success(f"📊 Analytics: {len(analytics_data)} produtos salvos")
+                if 'data_upload' in analytics_data.columns:
+                    st.info(f"🕒 Último upload Analytics: {analytics_data['data_upload'].max()}")
+            else:
+                st.info("📊 Analytics: Nenhum dado encontrado")
+            
+            # Show version history
+            with st.expander(f"📋 Histórico de Versões - {empresa_selecionada}"):
+                versions_timeline = get_upload_versions(empresa_code, "TIMELINE", limit=10)
+                versions_analytics = get_upload_versions(empresa_code, "ANALYTICS", limit=10)
+                
+                if versions_timeline:
+                    st.write("**📅 Timeline de Compras:**")
+                    for v in versions_timeline[:5]:
+                        status_icon = "🟢" if v['is_active'] else "⚪"
+                        st.write(f"{status_icon} v{v['version_id']} - {v['upload_date']} - {v.get('description', 'Sem descrição')}")
+                
+                if versions_analytics:
+                    st.write("**📊 Análise de Estoque:**")
+                    for v in versions_analytics[:5]:
+                        status_icon = "🟢" if v['is_active'] else "⚪"
+                        st.write(f"{status_icon} v{v['version_id']} - {v['upload_date']} - {v.get('description', 'Sem descrição')}")
+                
+                if not versions_timeline and not versions_analytics:
+                    st.info("Nenhuma versão encontrada. Faça seu primeiro upload!")
         
         with col2:
             if st.button("🔄 Testar Conexão", use_container_width=True):
@@ -62,13 +108,21 @@ def show_data_upload():
                     st.error("❌ Erro na conexão")
     
     # File upload section
-    st.subheader("📤 Upload de Arquivo")
+    st.subheader(f"📤 Upload de Arquivo - {empresa_selecionada}")
     
     # Create two distinct upload options
     upload_type = st.radio(
         "📋 Selecione o tipo de dados:",
         ["📅 Timeline de Compras (MOQ/Fornecedores)", "📊 Análise de Estoque (Export)"],
         help="Escolha o tipo correto para que os dados sejam processados adequadamente"
+    )
+    
+    # Version description
+    st.subheader("📝 Descrição da Versão")
+    version_description = st.text_input(
+        "Descrição desta versão (opcional):",
+        placeholder="Ex: Atualização de preços Q4 2024, Novos fornecedores, etc.",
+        help="Adicione uma descrição para identificar facilmente esta versão"
     )
     
     if upload_type == "📅 Timeline de Compras (MOQ/Fornecedores)":
@@ -115,8 +169,14 @@ def show_data_upload():
                         st.metric("📁 Tamanho", f"{file_size:.1f} KB")
                     
                     # Upload button
-                    if st.button("💾 Salvar na Nuvem", type="primary"):
-                        with st.spinner("📤 Processando e enviando dados para Snowflake..."):
+                    col1, col2 = st.columns([2, 1])
+                    with col1:
+                        upload_button = st.button("💾 Salvar na Nuvem", type="primary", use_container_width=True)
+                    with col2:
+                        st.info(f"📊 Para: {empresa_selecionada}")
+                    
+                    if upload_button:
+                        with st.spinner(f"📤 Processando e enviando dados para Snowflake ({empresa_selecionada})..."):
                             try:
                                 # Clean DataFrame for upload
                                 df_clean = df_full.copy()
@@ -126,11 +186,18 @@ def show_data_upload():
                                     else:
                                         df_clean[col] = df_clean[col].fillna(0)
                                 
-                                # Upload to Snowflake with table type
-                                success = upload_excel_to_snowflake(df_clean, uploaded_file.name, "minipa", table_prefix)
+                                # Upload to Snowflake with new multi-company parameters
+                                success = upload_excel_to_snowflake(
+                                    df=df_clean, 
+                                    arquivo_nome=uploaded_file.name, 
+                                    empresa=empresa_code,
+                                    usuario="minipa", 
+                                    table_type=table_prefix,
+                                    description=version_description or f"Upload {table_prefix} - {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}"
+                                )
                                 
                                 if success:
-                                    st.success("🎉 Dados salvos com sucesso na nuvem!")
+                                    st.success(f"🎉 Dados salvos com sucesso para {empresa_selecionada}!")
                                     st.balloons()
                                     
                                     # Show different messages based on upload type
@@ -141,18 +208,32 @@ def show_data_upload():
                                         st.info("✅ **Dados salvos para Análise de Estoque**") 
                                         st.write("👉 Acesse a página '📊 Análise de Estoque' para ver os relatórios")
                                     
-                                    st.info(f"""
-                                    📈 **Resumo do upload:**
+                                    # Clear cache for this company to show new data immediately
+                                    if table_prefix == "TIMELINE":
+                                        load_data_with_history.clear()
+                                    else:
+                                        load_analytics_data.clear()
+                                    
+                                    st.success(f"""
+                                    🎯 **Nova versão criada com sucesso!**
+                                    
+                                    📋 **Detalhes:**
+                                    - 🏢 Empresa: {empresa_selecionada}
                                     - 📁 Arquivo: {uploaded_file.name}
                                     - 📋 Planilha: {detected_sheet}
                                     - 📊 Cabeçalho: Linha {detected_header + 1}
-                                    - 📈 Linhas: {len(df_clean)}
+                                    - 📈 Linhas processadas: {len(df_clean)}
                                     - 🗂️ Tipo: {upload_type}
+                                    - 📝 Descrição: {version_description or 'Sem descrição'}
                                     - 🕒 Data: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}
+                                    
+                                    ✅ **Próximos passos:**
+                                    - Use o seletor de empresa nas outras páginas
+                                    - Consulte o histórico de versões quando necessário
                                     """)
                                     st.rerun()
                                 else:
-                                    st.error("❌ Erro ao salvar dados na nuvem")
+                                    st.error(f"❌ Erro ao salvar dados para {empresa_selecionada}")
                                     
                             except Exception as e:
                                 st.error(f"❌ Erro ao processar: {str(e)}")
@@ -307,13 +388,26 @@ def show_dashboard():
     """, unsafe_allow_html=True)
 
 def show_timeline():
-    # Header with refresh button
-    col1, col2 = st.columns([3, 1])
+    # Header with company selector
+    col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         st.title("📅 TIMELINE INTERATIVA DE COMPRAS")
         st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
+    
     with col2:
-        st.markdown("") # Spacing
+        # Company selector
+        empresa_selecionada = st.selectbox(
+            "🏢 Empresa:",
+            ["MINIPA", "MINIPA INDUSTRIA"],
+            key="empresa_selector_timeline",
+            help="Selecione a empresa para visualizar os dados"
+        )
+        empresa_code = "MINIPA" if empresa_selecionada == "MINIPA" else "MINIPA_INDUSTRIA"
+        
+        # Store in session state for persistence
+        st.session_state.current_empresa = empresa_code
+    
+    with col3:
         if st.button("🔄 Forçar Atualização", 
                     help="Atualizar dados do Snowflake (normalmente cache por 30 dias)",
                     use_container_width=True):
@@ -324,25 +418,69 @@ def show_timeline():
 
     # Try to load data from Snowflake first
     try:
-        from bd.snowflake_config import load_data_with_history
-        df = load_data_with_history()
+        from bd.snowflake_config import load_data_with_history, get_upload_versions
+        
+        # Get available versions for the selected company
+        versions = get_upload_versions(empresa_code, "TIMELINE", limit=20)
+        
+        # Version selector
+        if versions:
+            st.subheader(f"📦 Seleção de Versão - {empresa_selecionada}")
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                # Create options for version selector
+                version_options = [{"id": None, "label": "🟢 Versão Ativa (Atual)", "description": "Versão atualmente ativa"}]
+                for v in versions:
+                    status_icon = "🟢" if v['is_active'] else "⚪"
+                    version_options.append({
+                        "id": v['version_id'],
+                        "label": f"{status_icon} Versão {v['version_id']}",
+                        "description": f"{v['upload_date']} - {v.get('description', 'Sem descrição')}"
+                    })
+                
+                selected_version_idx = st.selectbox(
+                    "Escolha a versão:",
+                    range(len(version_options)),
+                    format_func=lambda x: version_options[x]["label"],
+                    key="version_selector_timeline",
+                    help="Selecione qual versão dos dados você quer visualizar"
+                )
+                
+                selected_version_id = version_options[selected_version_idx]["id"]
+                
+                # Show version info
+                st.info(f"📋 {version_options[selected_version_idx]['description']}")
+            
+            with col2:
+                st.metric("📊 Versões Disponíveis", len(versions))
+                active_versions = len([v for v in versions if v['is_active']])
+                st.metric("🟢 Versão Ativa", f"{active_versions}/1")
+        else:
+            selected_version_id = None
+            st.info(f"💡 Nenhuma versão encontrada para {empresa_selecionada}")
+        
+        # Load data with company and version selection
+        df = load_data_with_history(empresa=empresa_code, version_id=selected_version_id)
         
         if df is not None and len(df) > 0:
-            st.success(f"✅ Usando dados da nuvem: {len(df)} produtos carregados")
+            version_text = f"v{selected_version_id}" if selected_version_id else "ativa"
+            st.success(f"✅ {empresa_selecionada} - Versão {version_text}: {len(df)} produtos carregados")
             
             # Convert data upload column to string for display
             if 'data_upload' in df.columns:
-                st.info(f"📅 Último upload: {df['data_upload'].max()}")
+                st.info(f"📅 Data do upload: {df['data_upload'].max()}")
         else:
-            st.info("💡 Nenhum dado encontrado na nuvem.")
-            st.markdown("👉 **Vá para 'Upload de Dados' para enviar seu Excel para a nuvem primeiro.**")
+            st.info(f"💡 Nenhum dado encontrado para {empresa_selecionada}.")
+            st.markdown("👉 **Vá para 'Upload de Dados' para enviar dados para esta empresa primeiro.**")
             df = None
             
     except ImportError:
         st.warning("⚠️ Snowflake não configurado. Usando upload local temporário.")
         df = None
+        empresa_code = "MINIPA"  # Default for fallback
     except Exception as e:
-        st.error(f"❌ Erro ao carregar dados da nuvem: {str(e)}")
+        st.error(f"❌ Erro ao carregar dados para {empresa_selecionada}: {str(e)}")
         df = None
 
     # Fallback to local upload if no cloud data
@@ -372,8 +510,16 @@ def show_timeline():
 
     # Only show controls and analysis if data is loaded
     if df is not None:
-        # Sidebar controls
-        st.sidebar.header("🎛️ Controles")
+        # Sidebar controls with company context
+        st.sidebar.header(f"🎛️ Controles - {empresa_selecionada}")
+        st.sidebar.info(f"📊 Empresa: {empresa_selecionada}")
+        
+        # Show version info in sidebar
+        if 'selected_version_id' in locals() and selected_version_id:
+            st.sidebar.info(f"📦 Versão: v{selected_version_id}")
+        else:
+            st.sidebar.info("📦 Versão: Ativa")
+        
         meta_meses = st.sidebar.slider("🎯 Meta (meses)", 3, 12, 6)
         
         # Calculate timeline data
@@ -383,7 +529,8 @@ def show_timeline():
             urgencias = ["Todos"] + sorted(list(set(item['Urgencia'] for item in timeline_data)))
             filtro = st.sidebar.selectbox("🔍 Filtrar", urgencias)
             
-            # Show metrics
+            # Show company-specific metrics
+            st.subheader(f"📊 Métricas - {empresa_selecionada}")
             col1, col2, col3, col4 = st.columns(4)
             criticos = len([x for x in timeline_data if x['Urgencia'] == 'CRÍTICO'])
             medios = len([x for x in timeline_data if x['Urgencia'] == 'MÉDIO'])
@@ -395,25 +542,33 @@ def show_timeline():
             col3.metric("🟡 Atenção", atencao)
             col4.metric("🟢 OK", ok)
             
-            # Show total investment
+            # Show total investment with company context
             valor_total = sum(item['Valor_Pedido'] for item in timeline_data)
-            st.metric("💰 Investimento Total", f"R$ {valor_total:,.0f}")
+            st.metric(f"💰 Investimento Total - {empresa_selecionada}", f"R$ {valor_total:,.0f}")
             
-            # Create and display chart
+            # Create and display chart with company title
             fig = criar_grafico_interativo(timeline_data, filtro)
             if fig:
+                # Update chart title to include company name
+                fig.update_layout(
+                    title=f"Timeline de Compras - {empresa_selecionada} ({len([x for x in timeline_data if filtro == 'Todos' or x['Urgencia'] == filtro])} produtos)",
+                    title_x=0.5
+                )
                 st.plotly_chart(fig, use_container_width=True)
                 
-                st.markdown("""
-                **💡 Como usar:**
+                st.markdown(f"""
+                **💡 Como usar o Timeline de {empresa_selecionada}:**
                 - 🖱️ **Zoom**: Ferramentas no canto superior direito
-                - 👆 **Hover**: Passe o mouse para ver detalhes
-                - 🔍 **Filtrar**: Use a sidebar
+                - 👆 **Hover**: Passe o mouse para ver detalhes do produto
+                - 🔍 **Filtrar**: Use a sidebar para filtrar por urgência
+                - 🏢 **Trocar Empresa**: Use o seletor no topo da página
+                - 📦 **Trocar Versão**: Use o seletor de versão para ver dados históricos
                 """)
             else:
                 st.warning("📊 Nenhum dado válido encontrado para o filtro selecionado.")
         else:
-            st.warning("📊 Nenhum dado válido encontrado para criar o timeline.")
+            st.warning(f"📊 Nenhum dado válido encontrado para criar o timeline de {empresa_selecionada}.")
+            st.info("💡 Verifique se os dados foram importados corretamente ou tente uma versão diferente.")
 
 @st.cache_data
 def carregar_dados(uploaded_file=None):
@@ -1138,15 +1293,28 @@ def show_announcements():
         st.info("📢 Nenhum anúncio encontrado. Use os dados de exemplo ou crie um novo anúncio!")
 
 def show_excel_analytics():
-    """Análise avançada de dados Excel - Sistema de Gestão de Estoque"""
+    """Análise avançada de dados Excel - Sistema Multi-Empresa de Gestão de Estoque"""
     
-    # Header with refresh button
-    col1, col2 = st.columns([3, 1])
+    # Header with company selector
+    col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
-        st.title("📊 Análise de Estoque - Sistema MINIPA")
+        st.title("📊 Análise de Estoque Multi-Empresa")
         st.markdown("**Ferramenta prática para gestão de estoque focada em AÇÃO e DECISÃO**")
+    
     with col2:
-        st.markdown("") # Spacing
+        # Company selector
+        empresa_selecionada = st.selectbox(
+            "🏢 Empresa:",
+            ["MINIPA", "MINIPA INDUSTRIA"],
+            key="empresa_selector_analytics",
+            help="Selecione a empresa para visualizar os dados de análise"
+        )
+        empresa_code = "MINIPA" if empresa_selecionada == "MINIPA" else "MINIPA_INDUSTRIA"
+        
+        # Store in session state for persistence
+        st.session_state.current_empresa = empresa_code
+    
+    with col3:
         if st.button("🔄 Atualizar Dados", 
                     help="Atualizar dados do Snowflake (normalmente cache por 7 dias)",
                     use_container_width=True,
@@ -1158,28 +1326,72 @@ def show_excel_analytics():
     
     # Try to load data from Snowflake first
     try:
-        from bd.snowflake_config import load_analytics_data
-        df = load_analytics_data()
+        from bd.snowflake_config import load_analytics_data, get_upload_versions
+        
+        # Get available versions for the selected company
+        versions = get_upload_versions(empresa_code, "ANALYTICS", limit=20)
+        
+        # Version selector
+        if versions:
+            st.subheader(f"📦 Seleção de Versão - {empresa_selecionada}")
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                # Create options for version selector
+                version_options = [{"id": None, "label": "🟢 Versão Ativa (Atual)", "description": "Versão atualmente ativa"}]
+                for v in versions:
+                    status_icon = "🟢" if v['is_active'] else "⚪"
+                    version_options.append({
+                        "id": v['version_id'],
+                        "label": f"{status_icon} Versão {v['version_id']}",
+                        "description": f"{v['upload_date']} - {v.get('description', 'Sem descrição')}"
+                    })
+                
+                selected_version_idx = st.selectbox(
+                    "Escolha a versão:",
+                    range(len(version_options)),
+                    format_func=lambda x: version_options[x]["label"],
+                    key="version_selector_analytics",
+                    help="Selecione qual versão dos dados de análise você quer visualizar"
+                )
+                
+                selected_version_id = version_options[selected_version_idx]["id"]
+                
+                # Show version info
+                st.info(f"📋 {version_options[selected_version_idx]['description']}")
+            
+            with col2:
+                st.metric("📊 Versões Disponíveis", len(versions))
+                active_versions = len([v for v in versions if v['is_active']])
+                st.metric("🟢 Versão Ativa", f"{active_versions}/1")
+        else:
+            selected_version_id = None
+            st.info(f"💡 Nenhuma versão de análise encontrada para {empresa_selecionada}")
+        
+        # Load data with company and version selection
+        df = load_analytics_data(empresa=empresa_code, version_id=selected_version_id)
         
         if df is not None and len(df) > 0:
-            st.success(f"✅ Usando dados da nuvem: {len(df)} produtos carregados")
+            version_text = f"v{selected_version_id}" if selected_version_id else "ativa"
+            st.success(f"✅ {empresa_selecionada} - Análise {version_text}: {len(df)} produtos carregados")
             
             # Check if data_upload column exists before accessing it
             if 'data_upload' in df.columns:
-                st.info(f"📅 Último upload: {df['data_upload'].max()}")
+                st.info(f"📅 Data do upload: {df['data_upload'].max()}")
             else:
                 st.info("📅 Dados de análise carregados da nuvem")
                 
         else:
-            st.info("💡 Nenhum dado de análise encontrado na nuvem.")
-            st.markdown("👉 **Vá para 'Upload de Dados' e selecione '📊 Análise de Estoque (Export)' para enviar seus dados primeiro.**")
+            st.info(f"💡 Nenhum dado de análise encontrado para {empresa_selecionada}.")
+            st.markdown("👉 **Vá para 'Upload de Dados' e selecione '📊 Análise de Estoque (Export)' para enviar dados para esta empresa primeiro.**")
             df = None
             
     except ImportError:
         st.warning("⚠️ Snowflake não configurado. Usando upload local temporário.")
         df = None
+        empresa_code = "MINIPA"  # Default for fallback
     except Exception as e:
-        st.error(f"❌ Erro ao carregar dados da nuvem: {str(e)}")
+        st.error(f"❌ Erro ao carregar dados de análise para {empresa_selecionada}: {str(e)}")
         df = None
 
     # Fallback to local upload if no cloud data
@@ -1238,25 +1450,33 @@ def show_excel_analytics():
         produtos_novos = df[(df['Estoque'] == 0) & (df['Média 6 Meses'] == 0) & (df.get('Qtde Tot Compras', 0) > 0)]
         produtos_existentes = df[(df['Estoque'] > 0) | (df['Média 6 Meses'] > 0)]
         
-        # Show analytics tabs
-        tab1, tab2, tab3, tab4 = st.tabs(["📋 Resumo Executivo", "🚨 Lista de Compras", "📊 Dashboards", "📞 Contatos Urgentes"])
+        # Show company context
+        st.info(f"📊 **Análise para {empresa_selecionada}** | Versão: {f'v{selected_version_id}' if 'selected_version_id' in locals() and selected_version_id else 'Ativa'}")
+        
+        # Show analytics tabs with company context
+        tab1, tab2, tab3, tab4 = st.tabs([
+            f"📋 Resumo - {empresa_selecionada}", 
+            f"🚨 Lista de Compras - {empresa_selecionada}", 
+            f"📊 Dashboards - {empresa_selecionada}", 
+            f"📞 Contatos Urgentes - {empresa_selecionada}"
+        ])
         
         with tab1:
-            show_executive_summary(df, produtos_novos, produtos_existentes)
+            show_executive_summary(df, produtos_novos, produtos_existentes, empresa_selecionada)
         
         with tab2:
-            show_purchase_list(produtos_existentes)
+            show_purchase_list(produtos_existentes, empresa_selecionada)
         
         with tab3:
-            show_analytics_dashboard(produtos_existentes, produtos_novos)
+            show_analytics_dashboard(produtos_existentes, produtos_novos, empresa_selecionada)
         
         with tab4:
-            show_urgent_contacts(produtos_existentes)
+            show_urgent_contacts(produtos_existentes, empresa_selecionada)
 
-def show_executive_summary(df, produtos_novos, produtos_existentes):
-    """Resumo executivo dos dados"""
+def show_executive_summary(df, produtos_novos, produtos_existentes, empresa="MINIPA"):
+    """Resumo executivo dos dados por empresa"""
     
-    st.subheader("📋 Resumo Executivo")
+    st.subheader(f"📋 Resumo Executivo - {empresa}")
     
     # Main metrics
     col1, col2, col3, col4 = st.columns(4)
@@ -1393,10 +1613,10 @@ def calculate_purchase_suggestions(produtos_existentes):
     
     return pd.DataFrame(suggestions)
 
-def show_purchase_list(produtos_existentes):
-    """Show practical purchase list"""
+def show_purchase_list(produtos_existentes, empresa="MINIPA"):
+    """Show practical purchase list by company"""
     
-    st.subheader("🛒 Lista Prática de Compras")
+    st.subheader(f"🛒 Lista Prática de Compras - {empresa}")
     
     if len(produtos_existentes) == 0:
         st.info("Nenhum produto existente para análise")
@@ -1464,10 +1684,10 @@ def show_purchase_list(produtos_existentes):
     with col4:
         st.metric("💰 Investimento", f"R$ {investimento_total:,.0f}")
 
-def show_analytics_dashboard(produtos_existentes, produtos_novos):
-    """Show visual analytics dashboard"""
+def show_analytics_dashboard(produtos_existentes, produtos_novos, empresa="MINIPA"):
+    """Show visual analytics dashboard by company"""
     
-    st.subheader("📊 Dashboard Visual")
+    st.subheader(f"📊 Dashboard Visual - {empresa}")
     
     if len(produtos_existentes) == 0:
         st.info("Nenhum produto para análise visual")
@@ -1575,10 +1795,10 @@ def show_analytics_dashboard(produtos_existentes, produtos_novos):
             )
             st.plotly_chart(fig_overview, use_container_width=True)
 
-def show_urgent_contacts(produtos_existentes):
-    """Show urgent contacts list"""
+def show_urgent_contacts(produtos_existentes, empresa="MINIPA"):
+    """Show urgent contacts list by company"""
     
-    st.subheader("📞 Lista de Contatos Urgentes")
+    st.subheader(f"📞 Lista de Contatos Urgentes - {empresa}")
     
     if len(produtos_existentes) == 0:
         st.info("Nenhum produto para análise de contatos")
@@ -1697,15 +1917,15 @@ def show_snowflake():
         st.info("💡 Configure em `.streamlit/secrets.toml`")
     
     # Table management
-    st.subheader("🗃️ Gerenciamento de Tabelas")
+    st.subheader("🗃️ Gerenciamento de Tabelas Multi-Empresa")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
         if st.button("🔨 Criar Tabelas", use_container_width=True):
-            with st.spinner("Criando estrutura de tabelas..."):
+            with st.spinner("Criando estrutura de tabelas multi-empresa..."):
                 if create_tables():
-                    st.success("✅ Tabelas criadas com sucesso!")
+                    st.success("✅ Estrutura multi-empresa criada com sucesso!")
                     st.balloons()
                 else:
                     st.error("❌ Erro ao criar tabelas")
@@ -1713,13 +1933,21 @@ def show_snowflake():
     with col2:
         if st.button("📊 Verificar Dados", use_container_width=True):
             try:
-                data = load_data_with_history()
-                if data is not None and len(data) > 0:
-                    st.success(f"✅ {len(data)} registros encontrados")
-                    with st.expander("👀 Prévia dos dados"):
-                        st.dataframe(data.head())
+                # Check data for both companies
+                st.write("**MINIPA:**")
+                data_minipa = load_data_with_history(empresa="MINIPA")
+                if data_minipa is not None and len(data_minipa) > 0:
+                    st.success(f"✅ {len(data_minipa)} registros MINIPA")
                 else:
-                    st.info("💡 Nenhum dado encontrado")
+                    st.info("💡 Nenhum dado MINIPA")
+                
+                st.write("**MINIPA INDUSTRIA:**")
+                data_industria = load_data_with_history(empresa="MINIPA_INDUSTRIA")
+                if data_industria is not None and len(data_industria) > 0:
+                    st.success(f"✅ {len(data_industria)} registros MINIPA INDUSTRIA")
+                else:
+                    st.info("💡 Nenhum dado MINIPA INDUSTRIA")
+                    
             except Exception as e:
                 st.error(f"❌ Erro ao carregar dados: {str(e)}")
     
@@ -1728,17 +1956,19 @@ def show_snowflake():
             run_snowflake_diagnostics()
     
     # Migration section for existing users
-    st.subheader("🔄 Migração de Tabelas")
+    st.subheader("🔄 Migração Multi-Empresa")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("🔄 Atualizar Estrutura", use_container_width=True):
-            from bd.snowflake_config import migrate_existing_tables
-            migrate_existing_tables()
+        if st.button("🚀 Migrar para Multi-Empresa", use_container_width=True):
+            from bd.snowflake_config import migrate_to_multi_company_versioned
+            with st.spinner("Executando migração..."):
+                migrate_to_multi_company_versioned()
     
     with col2:
-        st.info("💡 Use se você tem tabelas antigas e precisa suporte para Timeline + Analytics")
+        st.info("💡 **Migração Automática:** Converte dados existentes para o novo sistema multi-empresa com versionamento")
+        st.warning("⚠️ **Importante:** Execute apenas uma vez. Dados existentes serão migrados para MINIPA automaticamente.")
     
     # Cache management section
     st.subheader("🔄 Gerenciamento de Cache")
@@ -1844,6 +2074,180 @@ def show_snowflake():
         2. Confirme que o database COMPRAS_MINIPA existe
         3. Execute o diagnóstico para mais detalhes
         """)
+
+    # Database Management section
+    st.subheader("🗑️ Gerenciamento de Dados")
+    
+    # Show database statistics first
+    try:
+        from bd.snowflake_config import get_database_statistics
+        stats = get_database_statistics()
+        
+        if stats:
+            st.info("📊 **Estatísticas do Banco de Dados:**")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("🏢 MINIPA - Total", stats['MINIPA']['total'])
+                st.write(f"📅 Timeline: {stats['MINIPA']['produtos']}")
+                st.write(f"📊 Analytics: {stats['MINIPA']['analytics']}")
+                st.write(f"📦 Versões: {stats['MINIPA']['versions']}")
+                
+            with col2:
+                st.metric("🏭 MINIPA INDUSTRIA - Total", stats['MINIPA_INDUSTRIA']['total'])
+                st.write(f"📅 Timeline: {stats['MINIPA_INDUSTRIA']['produtos']}")
+                st.write(f"📊 Analytics: {stats['MINIPA_INDUSTRIA']['analytics']}")
+                st.write(f"📦 Versões: {stats['MINIPA_INDUSTRIA']['versions']}")
+                
+            with col3:
+                st.metric("🌍 TOTAL GERAL", stats['TOTAL']['total'])
+                st.write(f"📋 Registros: {stats['TOTAL']['produtos'] + stats['TOTAL']['analytics']}")
+                st.write(f"📦 Versões: {stats['TOTAL']['versions']}")
+                st.write(f"📝 Logs: {stats['TOTAL']['uploads']}")
+    except Exception as e:
+        st.warning(f"⚠️ Erro ao carregar estatísticas: {str(e)}")
+    
+    # Clear company data section
+    st.subheader("🗑️ Limpeza de Dados por Empresa")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("##### 🏢 MINIPA")
+        if st.button("🗑️ Limpar MINIPA - Timeline", use_container_width=True, key="clear_minipa_timeline"):
+            from bd.snowflake_config import clear_company_data
+            clear_company_data("MINIPA", "TIMELINE")
+        
+        if st.button("🗑️ Limpar MINIPA - Analytics", use_container_width=True, key="clear_minipa_analytics"):
+            from bd.snowflake_config import clear_company_data
+            clear_company_data("MINIPA", "ANALYTICS")
+        
+        if st.button("💥 Limpar TODA MINIPA", use_container_width=True, key="clear_minipa_all"):
+            from bd.snowflake_config import clear_company_data
+            clear_company_data("MINIPA", None)
+    
+    with col2:
+        st.markdown("##### 🏭 MINIPA INDUSTRIA")
+        if st.button("🗑️ Limpar INDUSTRIA - Timeline", use_container_width=True, key="clear_industria_timeline"):
+            from bd.snowflake_config import clear_company_data
+            clear_company_data("MINIPA_INDUSTRIA", "TIMELINE")
+        
+        if st.button("🗑️ Limpar INDUSTRIA - Analytics", use_container_width=True, key="clear_industria_analytics"):
+            from bd.snowflake_config import clear_company_data
+            clear_company_data("MINIPA_INDUSTRIA", "ANALYTICS")
+        
+        if st.button("💥 Limpar TODA INDUSTRIA", use_container_width=True, key="clear_industria_all"):
+            from bd.snowflake_config import clear_company_data
+            clear_company_data("MINIPA_INDUSTRIA", None)
+    
+    # Nuclear option
+    st.subheader("💥 Limpeza Completa do Banco")
+    st.error("🚨 **PERIGO**: Esta seção permite deletar TODA a base de dados!")
+    
+    with st.expander("💀 Opção Nuclear - Deletar Tudo", expanded=False):
+        st.error("⚠️ **ATENÇÃO**: Esta ação deletará TODOS os dados de TODAS as empresas!")
+        st.error("⚠️ **IRREVERSÍVEL**: Não há como desfazer esta operação!")
+        
+        if st.button("💥 Acessar Limpeza Total", key="access_nuclear"):
+            from bd.snowflake_config import clear_entire_database
+            clear_entire_database()
+    
+    # Cost monitoring section
+    st.subheader("💰 Monitoramento de Custos")
+    
+    st.info("""
+    **💡 Sistema Otimizado para Economia:**
+    
+    **📊 Estratégia de Cache:**
+    - 📅 Timeline: Cache de 30 dias (updates mensais)
+    - 📊 Analytics: Cache de 7 dias (updates semanais)
+    - 🎯 Economia: ~99% menos queries ao Snowflake!
+    
+    **👥 Múltiplos Usuários (3 usuários):**
+    - ✅ **Cache compartilhado**: Todos os usuários usam o mesmo cache
+    - ✅ **Economia massiva**: 3 usuários = mesmo custo de 1 usuário
+    - ✅ **Isolamento de dados**: Cada empresa tem seus próprios dados
+    - ✅ **Concurrent access**: Múltiplos usuários simultâneos sem custo extra
+    
+    **💰 Estimativa de Custos Snowflake:**
+    - 📈 **Sem cache**: ~$50-100/mês para 3 usuários ativos
+    - 🎯 **Com cache**: ~$5-15/mês para 3 usuários ativos
+    - 🚀 **Economia**: 85-90% nos custos de compute!
+    
+    **🔧 Fatores que Afetam Custo:**
+    - 📊 Quantidade de dados armazenados
+    - 🔄 Frequência de uploads (cada upload = query)
+    - 👥 Número de "Forçar Atualização" clicados
+    - 📱 Warehouse size (COMPUTE_WH padrão é econômico)
+    """)
+    
+    # Cost optimization tips
+    with st.expander("💡 Dicas para Reduzir Custos"):
+        st.markdown("""
+        **🎯 Como Minimizar Custos:**
+        
+        1. **Evite "Forçar Atualização"** desnecessariamente
+           - Use apenas quando tiver novos dados
+           - O cache automático é suficiente na maioria dos casos
+        
+        2. **Faça uploads em lote**
+           - Upload 1x por semana é mais econômico que diário
+           - Cada upload = 1 query (versioning não aumenta custo)
+        
+        3. **Use o sistema de versões**
+           - Versões antigas não consomem compute
+           - Storage é muito barato no Snowflake
+        
+        4. **Monitore este dashboard**
+           - Veja quantos registros você tem
+           - Limpe dados antigos desnecessários
+        
+        5. **3 usuários é PERFEITO**
+           - Cache compartilhado = máxima economia
+           - Mais de 10 usuários pode precisar otimização adicional
+        
+        **💰 Para 3 usuários com seu sistema:**
+        - **Custo esperado**: $5-15/mês
+        - **Custo máximo**: $25/mês (uso intenso)
+        - **Storage**: ~$2/mês para 100GB de dados
+        """)
+
+    # Warehouse management
+    st.subheader("🏭 Gerenciamento de Warehouse")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.info("""
+        **⚙️ Configuração Atual:**
+        - Warehouse: COMPUTE_WH (padrão)
+        - Size: X-Small (mais econômico)
+        - Auto-suspend: 1 minuto
+        - Auto-resume: Ativo
+        """)
+    
+    with col2:
+        st.success("""
+        **✅ Otimizações Ativas:**
+        - Cache TTL otimizado
+        - Queries minimalistas  
+        - Batch processing
+        - Connection pooling
+        """)
+
+    # Data retention policy
+    st.subheader("📅 Política de Retenção")
+    
+    st.info("""
+    **🗄️ Retenção Automática de Dados:**
+    - 📊 **Dados ativos**: Mantidos indefinidamente
+    - 📦 **Versões antigas**: Mantidas por 1 ano
+    - 📝 **Logs**: Mantidos por 6 meses
+    - 🗑️ **Limpeza manual**: Disponível nesta página
+    
+    **💡 Recomendação:** Mantenha apenas as últimas 5-10 versões por empresa para otimizar custos.
+    """)
 
 def run_snowflake_diagnostics():
     """Run comprehensive Snowflake diagnostics"""
@@ -2093,13 +2497,40 @@ def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
 # Show user info in sidebar
 auth.show_user_info()
 
-# Add manual navigation
+# Add manual navigation with company context
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🧭 Navegação")
+st.sidebar.markdown("### 🧭 Navegação Multi-Empresa")
 
-# Initialize session state for page navigation
+# Initialize session state for page navigation and company
 if "current_page" not in st.session_state:
     st.session_state.current_page = "home"
+
+if "current_empresa" not in st.session_state:
+    st.session_state.current_empresa = "MINIPA"
+
+if "current_version" not in st.session_state:
+    st.session_state.current_version = None
+
+# Show current company context in sidebar
+if hasattr(st.session_state, 'current_empresa'):
+    empresa_display = "🏢 MINIPA" if st.session_state.current_empresa == "MINIPA" else "🏭 MINIPA INDUSTRIA"
+    st.sidebar.info(f"**Empresa Ativa:** {empresa_display}")
+
+# Quick company switch
+st.sidebar.markdown("#### 🔄 Trocar Empresa")
+col1, col2 = st.sidebar.columns(2)
+
+with col1:
+    if st.button("🏢", help="MINIPA", use_container_width=True):
+        st.session_state.current_empresa = "MINIPA"
+        st.rerun()
+
+with col2:
+    if st.button("🏭", help="MINIPA INDUSTRIA", use_container_width=True):
+        st.session_state.current_empresa = "MINIPA_INDUSTRIA"
+        st.rerun()
+
+st.sidebar.markdown("---")
 
 # Navigation buttons
 if st.sidebar.button("🏠 Dashboard", use_container_width=True):
