@@ -157,9 +157,35 @@ def load_page():
 
     # Only show analysis if data is loaded (either from Snowflake or local upload)
     if df is not None:
+        # Handle different column name formats (timeline vs analytics)
+        df_processed = df.copy()
+        
+        # Map timeline columns to analytics columns if needed
+        column_mapping = {
+            'Item': 'Produto',
+            'Modelo': 'Produto', 
+            'Estoque_Total': 'Estoque',
+            'Vendas_Medias': 'Média 6 Meses'
+        }
+        
+        for old_col, new_col in column_mapping.items():
+            if old_col in df.columns and new_col not in df.columns:
+                df_processed[new_col] = df[old_col]
+        
+        # Calculate Estoque Cobertura if missing
+        if 'Estoque Cobertura' not in df_processed.columns:
+            if 'Estoque' in df_processed.columns and 'Média 6 Meses' in df_processed.columns:
+                df_processed['Estoque Cobertura'] = df_processed.apply(
+                    lambda row: row['Estoque'] / row['Média 6 Meses'] if row['Média 6 Meses'] > 0 else 999, 
+                    axis=1
+                )
+        
+        # Use processed dataframe
+        df = df_processed
+        
         # Separate new and existing products
-        produtos_novos = df[(df['Estoque'] == 0) & (df['Média 6 Meses'] == 0) & (df.get('Qtde Tot Compras', 0) > 0)]
-        produtos_existentes = df[(df['Estoque'] > 0) | (df['Média 6 Meses'] > 0)]
+        produtos_novos = df[(df.get('Estoque', 0) == 0) & (df.get('Média 6 Meses', 0) == 0) & (df.get('Qtde Tot Compras', 0) > 0)]
+        produtos_existentes = df[(df.get('Estoque', 0) > 0) | (df.get('Média 6 Meses', 0) > 0)]
         
         # Show company context
         st.info(f"📊 **Análise para {empresa_selecionada}** | Versão: {f'v{selected_version_id}' if 'selected_version_id' in locals() and selected_version_id else 'Ativa'}")

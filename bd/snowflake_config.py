@@ -249,7 +249,7 @@ def create_new_version(empresa, table_type, description="", created_by="minipa",
         cursor = conn.cursor()
         
         # First, mark all previous versions as inactive for this company/table_type
-        cursor.execute("""
+                    cursor.execute("""
         UPDATE CONFIG.VERSIONS 
         SET is_active = FALSE 
         WHERE empresa = %s AND table_type = %s
@@ -300,7 +300,7 @@ def get_upload_versions(empresa, table_type=None, limit=50):
             LIMIT %s
             """
             cursor.execute(query, (empresa, table_type, limit))
-        else:
+                else:
             query = """
             SELECT empresa, upload_version, version_id, table_type, is_active, 
                    upload_date, created_by, description, arquivo_origem, linhas_processadas, status
@@ -353,7 +353,7 @@ def set_active_version(empresa, upload_version, table_type):
         """, (empresa, table_type))
         
         # Activate the specified version
-        cursor.execute("""
+                    cursor.execute("""
         UPDATE CONFIG.VERSIONS 
         SET is_active = TRUE 
         WHERE empresa = %s AND upload_version = %s AND table_type = %s
@@ -398,7 +398,7 @@ def get_version_by_id(empresa, version_id, table_type):
         
     try:
         cursor = conn.cursor()
-        cursor.execute("""
+                cursor.execute("""
         SELECT empresa, upload_version, version_id, table_type, is_active, 
                upload_date, created_by, description, arquivo_origem, linhas_processadas, status
         FROM CONFIG.VERSIONS 
@@ -478,21 +478,21 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
         error_count = 0
         
         # Helper functions for safe data conversion
-        def safe_numeric(val, default=0):
-            if pd.isna(val) or val == '' or str(val).lower() == 'nan':
-                return default
-            try:
-                return int(float(str(val)))
-            except:
-                return default
-        
-        def safe_float(val, default=0.0):
-            if pd.isna(val) or val == '' or str(val).lower() == 'nan':
-                return default
-            try:
-                return float(val)
-            except:
-                return default
+                    def safe_numeric(val, default=0):
+                        if pd.isna(val) or val == '' or str(val).lower() == 'nan':
+                            return default
+                        try:
+                            return int(float(str(val)))
+                        except:
+                            return default
+                    
+                    def safe_float(val, default=0.0):
+                        if pd.isna(val) or val == '' or str(val).lower() == 'nan':
+                            return default
+                        try:
+                            return float(val)
+                        except:
+                            return default
         
         # Insert new data row by row based on table type
         if table_type == "TIMELINE":
@@ -518,8 +518,8 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
                         continue
                     
                     # Insert timeline data with versioning
-                    cursor.execute("""
-                    INSERT INTO ESTOQUE.PRODUTOS 
+                        cursor.execute("""
+                        INSERT INTO ESTOQUE.PRODUTOS 
                     (empresa, upload_version, version_id, is_active, item, modelo, fornecedor, 
                      qtd_atual, preco_unitario, estoque_total, in_transit, vendas_medias, 
                      cbm, moq, usuario, table_type, version_description, created_by)
@@ -533,7 +533,7 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
                 except Exception as row_error:
                     error_count += 1
                     if error_count <= 5:  # Show only first 5 errors
-                        st.warning(f"⚠️ Erro na linha {idx + 1}: {str(row_error)}")
+                    st.warning(f"⚠️ Erro na linha {idx + 1}: {str(row_error)}")
                     continue
                     
         else:  # ANALYTICS
@@ -571,7 +571,7 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
                 except Exception as row_error:
                     error_count += 1
                     if error_count <= 5:  # Show only first 5 errors
-                        st.warning(f"⚠️ Erro na linha {idx + 1}: {str(row_error)}")
+                    st.warning(f"⚠️ Erro na linha {idx + 1}: {str(row_error)}")
                     continue
         
         # Calculate processing time
@@ -589,9 +589,9 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
             st.warning(f"⚠️ Erro ao atualizar registro de versão: {str(version_update_error)}")
         
         # Log the upload
-        try:
-            cursor.execute("""
-            INSERT INTO CONFIG.UPLOAD_LOG 
+            try:
+                cursor.execute("""
+                INSERT INTO CONFIG.UPLOAD_LOG 
             (empresa, upload_version, version_id, nome_arquivo, linhas_processadas, 
              usuario, status, table_type, processing_time_seconds)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -619,7 +619,7 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
             - ⚠️ Erros: {error_count} linhas
             - ⏱️ Tempo: {processing_time}s
             """)
-            return True
+        return True
         else:
             st.error("❌ Nenhuma linha foi processada com sucesso")
             return False
@@ -868,13 +868,13 @@ def load_data_with_history(empresa="MINIPA", version_id=None, usuario="minipa", 
                 WHERE empresa = %s AND table_type = %s AND version_id = %s
                 """, version_params)
             
-            total_records = cursor.fetchone()[0]
+                total_records = cursor.fetchone()[0]
             
-        except Exception as table_error:
+            except Exception as table_error:
             st.warning(f"⚠️ Erro ao verificar dados para {empresa}: {str(table_error)}")
-            cursor.close()
-            conn.close()
-            return None
+                cursor.close()
+                conn.close()
+                return None
         
         if total_records == 0:
             st.info(f"💡 Nenhum dado de timeline encontrado para {empresa}. Faça um upload primeiro.")
@@ -1089,20 +1089,20 @@ def load_analytics_data(empresa="MINIPA", version_id=None, usuario="minipa", lim
         
         # Build the query based on version selection
         if version_id is None:
-            query = """
-            SELECT produto as "Produto", 
-                   estoque as "Estoque", 
-                   consumo_6_meses as "Consumo 6 Meses",
-                   media_6_meses as "Média 6 Meses", 
-                   estoque_cobertura as "Estoque Cobertura",
-                   data_upload,
+        query = """
+        SELECT produto as "Produto", 
+               estoque as "Estoque", 
+               consumo_6_meses as "Consumo 6 Meses",
+               media_6_meses as "Média 6 Meses", 
+               estoque_cobertura as "Estoque Cobertura",
+               data_upload,
                    upload_version,
                    version_id
-            FROM ESTOQUE.ANALYTICS_DATA 
+        FROM ESTOQUE.ANALYTICS_DATA 
             WHERE empresa = %s 
             AND is_active = TRUE
-            ORDER BY data_upload DESC
-            """
+        ORDER BY data_upload DESC
+        """
             query_params = [empresa]
         else:
             query = """
@@ -1494,7 +1494,7 @@ def migrate_to_multi_company_versioned():
         else:
             st.error("❌ Migração falhou na verificação")
             return False
-            
+        
     except Exception as e:
         st.error(f"❌ Erro na migração: {str(e)}")
         return False
@@ -1741,7 +1741,7 @@ def get_database_statistics():
                 try:
                     cursor.execute("SELECT COUNT(*) FROM ESTOQUE.PRODUTOS WHERE empresa = %s", (empresa,))
                     produtos_count = cursor.fetchone()[0]
-                except:
+        except:
                     produtos_count = 0
                 
                 try:
@@ -1984,8 +1984,8 @@ def force_create_new_structure():
         st.success("✅ Criada: ESTOQUE.PRODUTOS")
         
         # ANALYTICS_DATA table
-        cursor.execute("""
-        CREATE TABLE ESTOQUE.ANALYTICS_DATA (
+                cursor.execute("""
+                CREATE TABLE ESTOQUE.ANALYTICS_DATA (
             produto VARCHAR(500),
             estoque NUMBER(10,2),
             consumo_6_meses NUMBER(10,2),
@@ -2000,8 +2000,8 @@ def force_create_new_structure():
             table_type VARCHAR(50) DEFAULT 'ANALYTICS',
             version_description TEXT,
             created_by VARCHAR(100)
-        )
-        """)
+                )
+                """)
         st.success("✅ Criada: ESTOQUE.ANALYTICS_DATA")
         
         # VERSIONS table

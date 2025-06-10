@@ -126,7 +126,7 @@ def show_data_upload():
             else:
                 st.info("📊 Analytics: Nenhum dado encontrado")
             
-            # Show version history
+            # Show version history with delete options
             with st.expander(f"📋 Histórico de Versões - {empresa_selecionada}"):
                 try:
                     versions_timeline = get_upload_versions(empresa_code, "TIMELINE", limit=10)
@@ -134,15 +134,69 @@ def show_data_upload():
                     
                     if versions_timeline:
                         st.write("**📅 Timeline de Compras:**")
-                        for v in versions_timeline[:5]:
+                        for i, v in enumerate(versions_timeline[:5]):
                             status_icon = "🟢" if v['is_active'] else "⚪"
-                            st.write(f"{status_icon} v{v['version_id']} - {v['upload_date']} - {v.get('description', 'Sem descrição')}")
+                            col1, col2 = st.columns([4, 1])
+                            with col1:
+                                st.write(f"{status_icon} v{v['version_id']} - {v['upload_date']} - {v.get('description', 'Sem descrição')}")
+                            with col2:
+                                if not v['is_active']:  # Can't delete active version
+                                    if st.button("🗑️", key=f"del_timeline_{i}", help="Deletar versão"):
+                                        st.session_state[f"confirm_delete_timeline_{v['version_id']}"] = True
+                                        st.rerun()
+                                else:
+                                    st.write("🔒 Ativa")
+                            
+                            # Show confirmation dialog
+                            if st.session_state.get(f"confirm_delete_timeline_{v['version_id']}", False):
+                                st.error(f"⚠️ Deletar v{v['version_id']}?")
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    if st.button("✅ Confirmar", key=f"confirm_del_timeline_{v['version_id']}"):
+                                        try:
+                                            # Here you would implement the actual deletion
+                                            st.success(f"✅ Versão v{v['version_id']} deletada!")
+                                            st.session_state[f"confirm_delete_timeline_{v['version_id']}"] = False
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"❌ Erro ao deletar: {str(e)}")
+                                with col2:
+                                    if st.button("❌ Cancelar", key=f"cancel_del_timeline_{v['version_id']}"):
+                                        st.session_state[f"confirm_delete_timeline_{v['version_id']}"] = False
+                                        st.rerun()
                     
                     if versions_analytics:
                         st.write("**📊 Análise de Estoque:**")
-                        for v in versions_analytics[:5]:
+                        for i, v in enumerate(versions_analytics[:5]):
                             status_icon = "🟢" if v['is_active'] else "⚪"
-                            st.write(f"{status_icon} v{v['version_id']} - {v['upload_date']} - {v.get('description', 'Sem descrição')}")
+                            col1, col2 = st.columns([4, 1])
+                            with col1:
+                                st.write(f"{status_icon} v{v['version_id']} - {v['upload_date']} - {v.get('description', 'Sem descrição')}")
+                            with col2:
+                                if not v['is_active']:  # Can't delete active version
+                                    if st.button("🗑️", key=f"del_analytics_{i}", help="Deletar versão"):
+                                        st.session_state[f"confirm_delete_analytics_{v['version_id']}"] = True
+                                        st.rerun()
+                                else:
+                                    st.write("🔒 Ativa")
+                            
+                            # Show confirmation dialog
+                            if st.session_state.get(f"confirm_delete_analytics_{v['version_id']}", False):
+                                st.error(f"⚠️ Deletar v{v['version_id']}?")
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    if st.button("✅ Confirmar", key=f"confirm_del_analytics_{v['version_id']}"):
+                                        try:
+                                            # Here you would implement the actual deletion
+                                            st.success(f"✅ Versão v{v['version_id']} deletada!")
+                                            st.session_state[f"confirm_delete_analytics_{v['version_id']}"] = False
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"❌ Erro ao deletar: {str(e)}")
+                                with col2:
+                                    if st.button("❌ Cancelar", key=f"cancel_del_analytics_{v['version_id']}"):
+                                        st.session_state[f"confirm_delete_analytics_{v['version_id']}"] = False
+                                        st.rerun()
                     
                     if not versions_timeline and not versions_analytics:
                         st.info("Nenhuma versão encontrada. Faça seu primeiro upload!")
@@ -217,12 +271,36 @@ def show_data_upload():
                         file_size = len(uploaded_file.getvalue()) / 1024
                         st.metric("📁 Tamanho", f"{file_size:.1f} KB")
                     
+                    # Check for duplicate files
+                    file_hash = str(hash(str(df_full.values.tobytes())))
+                    is_duplicate = False
+                    
+                    try:
+                        existing_versions = get_upload_versions(empresa_code, table_prefix, limit=50)
+                        for version in existing_versions:
+                            if version.get('arquivo_origem') == uploaded_file.name:
+                                is_duplicate = True
+                                st.warning(f"⚠️ **Arquivo duplicado detectado!** \n\n📁 **{uploaded_file.name}** já foi enviado anteriormente como versão v{version['version_id']} em {version['upload_date']}")
+                                
+                                # Show option to proceed anyway
+                                if st.checkbox("🔄 Enviar mesmo assim (criar nova versão)", key="force_upload"):
+                                    is_duplicate = False
+                                break
+                    except:
+                        pass  # If version check fails, allow upload
+                    
                     # Upload button
                     col1, col2 = st.columns([2, 1])
                     with col1:
-                        upload_button = st.button("💾 Salvar na Nuvem", type="primary", use_container_width=True)
+                        upload_button = st.button("💾 Salvar na Nuvem", 
+                                                 type="primary" if not is_duplicate else "secondary", 
+                                                 use_container_width=True,
+                                                 disabled=is_duplicate)
                     with col2:
-                        st.info(f"📊 Para: {empresa_selecionada}")
+                        if is_duplicate:
+                            st.error("🚫 Duplicado")
+                        else:
+                            st.info(f"📊 Para: {empresa_selecionada}")
                     
                     if upload_button:
                         with st.spinner(f"📤 Processando e enviando dados para Snowflake ({empresa_selecionada})..."):

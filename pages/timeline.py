@@ -137,24 +137,26 @@ def calcular_timeline(df, meta_meses=6):
     hoje = datetime.now()
     timeline_data = []
     
-    # Debug: Show what columns we actually have
-    st.info(f"🔍 Colunas disponíveis para timeline: {list(df.columns)}")
-    
     # Check if we have any data
     if df.empty:
         st.warning("⚠️ DataFrame vazio - nenhum dado para calcular timeline")
         return []
     
     for idx, row in df.iterrows():
-        # Safely access columns with fallbacks
-        produto = str(row.get('Modelo', f'Produto_{idx}'))
-        fornecedor = str(row.get('Fornecedor', 'Fornecedor Desconhecido'))
-        estoque_atual = row.get('Estoque_Total', 0) + row.get('In_Transit', 0)
-        vendas_mensais = row.get('Vendas_Medias', 0)
-        moq = row.get('MOQ', 0)
-        preco = row.get('Preco_Unitario', 0)
-        cbm = row.get('CBM', 0)
+        # Safely access columns with fallbacks - handle NaN values properly
+        produto = str(row.get('Modelo', f'Produto_{idx}')) if pd.notna(row.get('Modelo')) else f'Produto_{idx}'
+        fornecedor = str(row.get('Fornecedor', 'Fornecedor Desconhecido')) if pd.notna(row.get('Fornecedor')) else 'Fornecedor Desconhecido'
         
+        # Handle numeric columns properly - convert NaN to 0
+        estoque_atual = (pd.to_numeric(row.get('Estoque_Total', 0), errors='coerce') or 0) + (pd.to_numeric(row.get('In_Transit', 0), errors='coerce') or 0)
+        vendas_mensais = pd.to_numeric(row.get('Vendas_Medias', 0), errors='coerce') or 0
+        moq = pd.to_numeric(row.get('MOQ', 0), errors='coerce') or 0
+        preco = pd.to_numeric(row.get('Preco_Unitario', 0), errors='coerce') or 0
+        cbm = pd.to_numeric(row.get('CBM', 0), errors='coerce') or 0
+        
+
+        
+        # Process all products with proper data - exactly like MINIPA
         if vendas_mensais > 0:
             meses_ate_zerar = estoque_atual / vendas_mensais
             data_esgotamento = hoje + timedelta(days=int(meses_ate_zerar * 30))
@@ -183,6 +185,29 @@ def calcular_timeline(df, meta_meses=6):
                 'Produto': produto,
                 'Fornecedor': fornecedor,
                 'Dias_Restantes': int(meses_ate_zerar * 30),
+                'Estoque_Atual': estoque_atual,
+                'Vendas_Mensais': vendas_mensais,
+                'MOQ': moq,
+                'Qtd_Otimizada': qtd_otimizada,
+                'Valor_Pedido': valor_pedido,
+                'CBM_Pedido': cbm_pedido,
+                'Cor': cor,
+                'Urgencia': urgencia
+            })
+        elif (estoque_atual > 0 or moq > 0) and produto != 'nan':
+            # Products without sales but with stock/MOQ data - show as monitoring
+            qtd_otimizada = max(moq, 50) if moq > 0 else 50
+            valor_pedido = qtd_otimizada * preco
+            cbm_pedido = qtd_otimizada * cbm
+            
+            cor = '#87CEEB'  # Light blue
+            urgencia = 'MONITORAR'
+            dias_restantes = 999
+            
+            timeline_data.append({
+                'Produto': produto,
+                'Fornecedor': fornecedor,
+                'Dias_Restantes': dias_restantes,
                 'Estoque_Atual': estoque_atual,
                 'Vendas_Mensais': vendas_mensais,
                 'MOQ': moq,
