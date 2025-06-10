@@ -317,8 +317,9 @@ def show_timeline():
         if st.button("🔄 Forçar Atualização", 
                     help="Atualizar dados do Snowflake (normalmente cache por 30 dias)",
                     use_container_width=True):
-            st.cache_data.clear()  # Clear all cache
-            st.success("✅ Cache limpo! Dados atualizados.")
+            from bd.snowflake_config import load_data_with_history
+            load_data_with_history.clear()  # Clear specific function cache only
+            st.success("✅ Cache da Timeline limpo! Dados atualizados.")
             st.rerun()
 
     # Try to load data from Snowflake first
