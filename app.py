@@ -62,23 +62,23 @@ def main():
     
     try:
         if page == "home":
-            from pages.dashboard import show_dashboard
-            show_dashboard()
+            from pages.dashboard import load_page
+            load_page()
         elif page == "upload":
-            from pages.upload import show_data_upload
-            show_data_upload()
+            from pages.upload import load_page
+            load_page()
         elif page == "timeline":
-            from pages.timeline import show_timeline
-            show_timeline()
+            from pages.timeline import load_page
+            load_page()
         elif page == "analytics":
-            from pages.analytics import show_excel_analytics
-            show_excel_analytics()
+            from pages.analytics import load_page
+            load_page()
         elif page == "announcements":
-            from pages.announcements import show_announcements
-            show_announcements()
+            from pages.announcements import load_page
+            load_page()
         elif page == "snowflake":
-            from pages.snowflake_management import show_snowflake
-            show_snowflake()
+            from pages.snowflake_management import load_page
+            load_page()
         else:
             st.error(f"Page '{page}' not found!")
             

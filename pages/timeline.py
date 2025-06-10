@@ -207,92 +207,189 @@ def criar_grafico_interativo(timeline_data, filtro_urgencia="Todos"):
     
     return fig
 
-def show_timeline():
-    """Timeline page with company support"""
-    st.title("📅 TIMELINE INTERATIVA DE COMPRAS")
-    st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
-    
-    # Company selector
-    col1, col2 = st.columns([3, 1])
+def load_page():
+    # Header with company selector
+    col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
+        st.title("📅 TIMELINE INTERATIVA DE COMPRAS")
+        st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
+    
+    with col2:
+        # Company selector
         empresa_selecionada = st.selectbox(
             "🏢 Empresa:",
             ["MINIPA", "MINIPA INDUSTRIA"],
-            key="empresa_selector_timeline"
+            key="empresa_selector_timeline",
+            help="Selecione a empresa para visualizar os dados"
         )
         empresa_code = "MINIPA" if empresa_selecionada == "MINIPA" else "MINIPA_INDUSTRIA"
+        
+        # Store in session state for persistence
+        st.session_state.current_empresa = empresa_code
     
-    with col2:
-        if st.button("🔄 Forçar Atualização", use_container_width=True):
-            try:
-                from bd.snowflake_config import load_data_with_history
-                load_data_with_history.clear()
-                st.success("✅ Cache limpo!")
-                st.rerun()
-            except ImportError:
-                st.warning("⚠️ Snowflake não configurado")
+    with col3:
+        if st.button("🔄 Forçar Atualização", 
+                    help="Atualizar dados do Snowflake (normalmente cache por 30 dias)",
+                    use_container_width=True):
+            from bd.snowflake_config import load_data_with_history
+            load_data_with_history.clear()  # Clear specific function cache only
+            st.success("✅ Cache da Timeline limpo! Dados atualizados.")
+            st.rerun()
 
-    # Try to load data from Snowflake
+    # Try to load data from Snowflake first
     try:
         from bd.snowflake_config import load_data_with_history, get_upload_versions
         
-        # Get available versions
+        # Get available versions for the selected company
         versions = get_upload_versions(empresa_code, "TIMELINE", limit=20)
         
         # Version selector
         if versions:
             st.subheader(f"📦 Seleção de Versão - {empresa_selecionada}")
+            col1, col2 = st.columns([2, 1])
             
-            version_options = [{"id": None, "label": "🟢 Versão Ativa (Atual)"}]
-            for v in versions:
-                status_icon = "🟢" if v['is_active'] else "⚪"
-                version_options.append({
-                    "id": v['version_id'],
-                    "label": f"{status_icon} Versão {v['version_id']}"
-                })
+            with col1:
+                # Create options for version selector
+                version_options = [{"id": None, "label": "🟢 Versão Ativa (Atual)", "description": "Versão atualmente ativa"}]
+                for v in versions:
+                    status_icon = "🟢" if v['is_active'] else "⚪"
+                    version_options.append({
+                        "id": v['version_id'],
+                        "label": f"{status_icon} Versão {v['version_id']}",
+                        "description": f"{v['upload_date']} - {v.get('description', 'Sem descrição')}"
+                    })
+                
+                selected_version_idx = st.selectbox(
+                    "Escolha a versão:",
+                    range(len(version_options)),
+                    format_func=lambda x: version_options[x]["label"],
+                    key="version_selector_timeline",
+                    help="Selecione qual versão dos dados você quer visualizar"
+                )
+                
+                selected_version_id = version_options[selected_version_idx]["id"]
+                
+                # Show version info
+                st.info(f"📋 {version_options[selected_version_idx]['description']}")
             
-            selected_version_idx = st.selectbox(
-                "Escolha a versão:",
-                range(len(version_options)),
-                format_func=lambda x: version_options[x]["label"],
-                key="version_selector_timeline"
-            )
-            
-            selected_version_id = version_options[selected_version_idx]["id"]
+            with col2:
+                st.metric("📊 Versões Disponíveis", len(versions))
+                active_versions = len([v for v in versions if v['is_active']])
+                st.metric("🟢 Versão Ativa", f"{active_versions}/1")
         else:
             selected_version_id = None
             st.info(f"💡 Nenhuma versão encontrada para {empresa_selecionada}")
         
-        # Load data
+        # Load data with company and version selection
         df = load_data_with_history(empresa=empresa_code, version_id=selected_version_id)
         
         if df is not None and len(df) > 0:
             version_text = f"v{selected_version_id}" if selected_version_id else "ativa"
             st.success(f"✅ {empresa_selecionada} - Versão {version_text}: {len(df)} produtos carregados")
             
-            # Show data
-            st.dataframe(df.head(20))
-            
-            # Basic metrics
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("📊 Total Produtos", len(df))
-            with col2:
-                if 'Estoque_Total' in df.columns:
-                    st.metric("📦 Estoque Total", f"{df['Estoque_Total'].sum():,.0f}")
-            with col3:
-                if 'data_upload' in df.columns:
-                    st.metric("📅 Última Atualização", str(df['data_upload'].max())[:10])
-                    
+            # Convert data upload column to string for display
+            if 'data_upload' in df.columns:
+                st.info(f"📅 Data do upload: {df['data_upload'].max()}")
         else:
             st.info(f"💡 Nenhum dado encontrado para {empresa_selecionada}.")
             st.markdown("👉 **Vá para 'Upload de Dados' para enviar dados para esta empresa primeiro.**")
+            df = None
             
     except ImportError:
-        st.warning("⚠️ Snowflake não configurado. Use 'Upload de Dados' primeiro.")
+        st.warning("⚠️ Snowflake não configurado. Usando upload local temporário.")
+        df = None
+        empresa_code = "MINIPA"  # Default for fallback
     except Exception as e:
-        st.error(f"❌ Erro ao carregar dados: {str(e)}")
+        st.error(f"❌ Erro ao carregar dados para {empresa_selecionada}: {str(e)}")
+        df = None
+
+    # Fallback to local upload if no cloud data
+    if df is None:
+        with st.expander("📁 Upload Local (Temporário)", expanded=True):
+            st.markdown("⚠️ **Este upload é temporário. Para salvar na nuvem, use 'Upload de Dados'**")
+            
+            uploaded_file = st.file_uploader(
+                "Faça upload do seu arquivo Excel:",
+                type=['xlsx', 'xls'],
+                help="Carregue um arquivo Excel com dados de estoque e vendas"
+            )
+            
+            usar_dados_exemplo = st.checkbox("📊 Usar dados de exemplo", value=False)
+            
+            if usar_dados_exemplo:
+                df = criar_dados_exemplo()
+                st.info("📊 Usando dados de exemplo para demonstração")
+            elif uploaded_file is not None:
+                df = carregar_dados(uploaded_file)
+                if df is not None:
+                    st.success("✅ Arquivo carregado com sucesso!")
+                else:
+                    st.error("❌ Erro ao carregar arquivo. Verifique o formato.")
+            else:
+                st.info("📁 Faça upload de um arquivo Excel ou use os dados de exemplo para começar!")
+
+    # Only show controls and analysis if data is loaded
+    if df is not None:
+        # Sidebar controls with company context
+        st.sidebar.header(f"🎛️ Controles - {empresa_selecionada}")
+        st.sidebar.info(f"📊 Empresa: {empresa_selecionada}")
         
+        # Show version info in sidebar
+        if 'selected_version_id' in locals() and selected_version_id:
+            st.sidebar.info(f"📦 Versão: v{selected_version_id}")
+        else:
+            st.sidebar.info("📦 Versão: Ativa")
+        
+        meta_meses = st.sidebar.slider("🎯 Meta (meses)", 3, 12, 6)
+        
+        # Calculate timeline data
+        timeline_data = calcular_timeline(df, meta_meses)
+        
+        if timeline_data:
+            urgencias = ["Todos"] + sorted(list(set(item['Urgencia'] for item in timeline_data)))
+            filtro = st.sidebar.selectbox("🔍 Filtrar", urgencias)
+            
+            # Show company-specific metrics
+            st.subheader(f"📊 Métricas - {empresa_selecionada}")
+            col1, col2, col3, col4 = st.columns(4)
+            criticos = len([x for x in timeline_data if x['Urgencia'] == 'CRÍTICO'])
+            medios = len([x for x in timeline_data if x['Urgencia'] == 'MÉDIO'])
+            atencao = len([x for x in timeline_data if x['Urgencia'] == 'ATENÇÃO'])
+            ok = len([x for x in timeline_data if x['Urgencia'] == 'OK'])
+            
+            col1.metric("🔴 Críticos", criticos)
+            col2.metric("🟠 Médios", medios)
+            col3.metric("🟡 Atenção", atencao)
+            col4.metric("🟢 OK", ok)
+            
+            # Show total investment with company context
+            valor_total = sum(item['Valor_Pedido'] for item in timeline_data)
+            st.metric(f"💰 Investimento Total - {empresa_selecionada}", f"R$ {valor_total:,.0f}")
+            
+            # Create and display chart with company title
+            fig = criar_grafico_interativo(timeline_data, filtro)
+            if fig:
+                # Update chart title to include company name
+                fig.update_layout(
+                    title=f"Timeline de Compras - {empresa_selecionada} ({len([x for x in timeline_data if filtro == 'Todos' or x['Urgencia'] == filtro])} produtos)",
+                    title_x=0.5
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.markdown(f"""
+                **💡 Como usar o Timeline de {empresa_selecionada}:**
+                - 🖱️ **Zoom**: Ferramentas no canto superior direito
+                - 👆 **Hover**: Passe o mouse para ver detalhes do produto
+                - 🔍 **Filtrar**: Use a sidebar para filtrar por urgência
+                - 🏢 **Trocar Empresa**: Use o seletor no topo da página
+                - 📦 **Trocar Versão**: Use o seletor de versão para ver dados históricos
+                """)
+            else:
+                st.warning("📊 Nenhum dado válido encontrado para o filtro selecionado.")
+        else:
+            st.warning(f"📊 Nenhum dado válido encontrado para criar o timeline de {empresa_selecionada}.")
+            st.info("💡 Verifique se os dados foram importados corretamente ou tente uma versão diferente.")
+
     # Instructions
     st.markdown("""
     ### 💡 Como usar:
