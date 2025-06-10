@@ -26,7 +26,7 @@ def main():
         # Navigation buttons
         if st.button("🏠 Dashboard", use_container_width=True):
             st.session_state.current_page = "home"
-                                    st.rerun()
+            st.rerun()
 
         if st.button("📁 Upload de Dados", use_container_width=True):
             st.session_state.current_page = "upload"
@@ -50,12 +50,12 @@ def main():
 
         # User info and logout
         st.divider()
-    current_user = auth.get_current_user()
+        current_user = auth.get_current_user()
         st.info(f"👤 {current_user['name']}")
         
         if st.button("🚪 Logout", use_container_width=True):
             auth.logout()
-                st.rerun()
+            st.rerun()
         
     # Route to appropriate page with lazy loading
     page = st.session_state.current_page
@@ -63,10 +63,10 @@ def main():
     try:
         if page == "home":
             from pages.dashboard import show_dashboard
-    show_dashboard()
+            show_dashboard()
         elif page == "upload":
             from pages.upload import show_data_upload
-    show_data_upload()
+            show_data_upload()
         elif page == "timeline":
             from pages.timeline import load_page
             load_page()
@@ -75,10 +75,10 @@ def main():
             load_page()
         elif page == "announcements":
             from pages.announcements import show_announcements
-    show_announcements()
+            show_announcements()
         elif page == "snowflake":
             from pages.snowflake_management import show_snowflake
-    show_snowflake()
+            show_snowflake()
         else:
             st.error(f"Page '{page}' not found!")
 
