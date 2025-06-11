@@ -44,9 +44,9 @@ def main():
             st.session_state.current_page = "announcements"
             st.rerun()
 
-        if st.button("❄️ Gerenciar Snowflake", use_container_width=True):
-            st.session_state.current_page = "snowflake"
-            st.rerun()
+        # if st.button("❄️ Gerenciar Snowflake", use_container_width=True):
+        #     st.session_state.current_page = "snowflake"
+        #     st.rerun()
 
         # User info and logout
         st.divider()
@@ -76,9 +76,9 @@ def main():
         elif page == "announcements":
             from pages.announcements import show_announcements
             show_announcements()
-        elif page == "snowflake":
-            from pages.snowflake_management import show_snowflake
-            show_snowflake()
+        # elif page == "snowflake":
+        #     from pages.snowflake_management import show_snowflake
+        #     show_snowflake()
         else:
             st.error(f"Page '{page}' not found!")
 
