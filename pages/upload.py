@@ -204,11 +204,12 @@ def show_data_upload():
                     st.warning(f"Erro ao carregar versões: {str(e)}")
         
         with col2:
-            if st.button("🔄 Testar Conexão", use_container_width=True):
-                if test_connection():
-                    st.success("✅ Snowflake conectado!")
-                else:
-                    st.error("❌ Erro na conexão")
+            # if st.button("🔄 Testar Conexão", use_container_width=True):
+            #     if test_connection():
+            #         st.success("✅ Snowflake conectado!")
+            #     else:
+            #         st.error("❌ Erro na conexão")
+            st.info("🔗 Snowflake (monitoring disabled)")
     
     # File upload section
     st.subheader(f"📤 Upload de Arquivo - {empresa_selecionada}")
