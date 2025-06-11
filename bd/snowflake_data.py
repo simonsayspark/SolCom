@@ -7,6 +7,72 @@ import streamlit as st
 import pandas as pd
 from .snowflake_connection import get_snowflake_connection
 
+@st.cache_data(ttl=1800, show_spinner=False)  # 30 minutes - shorter cache for data existence
+def check_data_exists(empresa, table_type, version_id=None):
+    """
+    Cache data existence checks to avoid COUNT(*) queries on every call
+    Returns: number of records found
+    """
+    conn = get_snowflake_connection()
+    if not conn:
+        return 0
+        
+    try:
+        cursor = conn.cursor()
+        
+        if table_type == "TIMELINE":
+            if version_id is None:
+                cursor.execute("""
+                SELECT COUNT(*) FROM ESTOQUE.PRODUTOS 
+                WHERE empresa = %s AND table_type = %s AND is_active = TRUE
+                """, (empresa, 'TIMELINE'))
+            else:
+                cursor.execute("""
+                SELECT COUNT(*) FROM ESTOQUE.PRODUTOS 
+                WHERE empresa = %s AND table_type = %s AND version_id = %s
+                """, (empresa, 'TIMELINE', version_id))
+        elif table_type == "ANALYTICS":
+            if version_id is None:
+                cursor.execute("""
+                SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA 
+                WHERE empresa = %s AND is_active = TRUE
+                """, (empresa,))
+            else:
+                cursor.execute("""
+                SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA 
+                WHERE empresa = %s AND version_id = %s
+                """, (empresa, version_id))
+        
+        total_records = cursor.fetchone()[0]
+        cursor.close()
+        conn.close()
+        return total_records
+        
+    except Exception:
+        return 0
+
+@st.cache_data(ttl=2592000, show_spinner=False)  # 30 days - table structure rarely changes
+def check_table_structure(table_name):
+    """
+    Cache table structure checks to avoid DESCRIBE TABLE on every call
+    Returns: (table_exists, has_empresa_column)
+    """
+    conn = get_snowflake_connection()
+    if not conn:
+        return False, False
+        
+    try:
+        cursor = conn.cursor()
+        cursor.execute(f"DESCRIBE TABLE {table_name}")
+        columns = cursor.fetchall()
+        column_names = [col[0].upper() for col in columns]
+        has_empresa_column = 'EMPRESA' in column_names
+        cursor.close()
+        conn.close()
+        return True, has_empresa_column
+    except:
+        return False, False
+
 # Timeline de Compras - Company and version specific caching
 @st.cache_data(ttl=2592000, show_spinner="🔄 Carregando Timeline (atualização mensal)...")  # 30 days
 def load_data_with_history(empresa="MINIPA", version_id=None, usuario="minipa", limit_days=30):
@@ -28,25 +94,21 @@ def load_data_with_history(empresa="MINIPA", version_id=None, usuario="minipa", 
     try:
         cursor = conn.cursor()
         
-        # Check if table has new structure (empresa column)
-        has_empresa_column = False
-        try:
-            cursor.execute("DESCRIBE TABLE ESTOQUE.PRODUTOS")
-            columns = cursor.fetchall()
-            column_names = [col[0].upper() for col in columns]
-            has_empresa_column = 'EMPRESA' in column_names
-        except:
-            st.warning("⚠️ Tabela PRODUTOS não encontrada")
+        # Check if table has new structure (empresa column) - CACHED CHECK
+        table_exists, has_empresa_column = check_table_structure("ESTOQUE.PRODUTOS")
+        
+        if not table_exists:
+            # st.warning("⚠️ Tabela PRODUTOS não encontrada")  # Removed to save credits
             cursor.close()
             conn.close()
             return None
         
         if not has_empresa_column:
             # Old structure - load all data as MINIPA
-            st.warning("⚠️ Estrutura antiga detectada. Para multi-empresa, execute a migração.")
+            # st.warning("⚠️ Estrutura antiga detectada. Para multi-empresa, execute a migração.")  # Removed to save credits
             
             if empresa != "MINIPA":
-                st.info(f"💡 Nenhum dado para {empresa} na estrutura antiga.")
+                # st.info(f"💡 Nenhum dado para {empresa} na estrutura antiga.")  # Removed to save credits
                 cursor.close()
                 conn.close()
                 return None
@@ -75,7 +137,7 @@ def load_data_with_history(empresa="MINIPA", version_id=None, usuario="minipa", 
                 conn.close()
                 
                 if not df.empty:
-                    st.info(f"📅 Estrutura antiga - {len(df)} produtos carregados como MINIPA")
+                    pass  # st.info(f"📅 Estrutura antiga - {len(df)} produtos carregados como MINIPA")  # Removed to save credits
                 
                 return df
                 
@@ -88,35 +150,17 @@ def load_data_with_history(empresa="MINIPA", version_id=None, usuario="minipa", 
         # New multi-company structure
         # Determine which version to load
         if version_id is None:
-            st.info(f"📊 Carregando versão ativa para {empresa}")
+            # st.info(f"📊 Carregando versão ativa para {empresa}")  # Removed to save credits
             version_params = [empresa, 'TIMELINE']
         else:
-            st.info(f"📊 Carregando versão {version_id} para {empresa}")
+            # st.info(f"📊 Carregando versão {version_id} para {empresa}")  # Removed to save credits
             version_params = [empresa, 'TIMELINE', version_id]
         
-        # Check if the table exists and has data for this company
-        try:
-            if version_id is None:
-                cursor.execute("""
-                SELECT COUNT(*) FROM ESTOQUE.PRODUTOS 
-                WHERE empresa = %s AND table_type = %s AND is_active = TRUE
-                """, version_params)
-            else:
-                cursor.execute("""
-                SELECT COUNT(*) FROM ESTOQUE.PRODUTOS 
-                WHERE empresa = %s AND table_type = %s AND version_id = %s
-                """, version_params)
-            
-            total_records = cursor.fetchone()[0]
-            
-        except Exception as table_error:
-            st.warning(f"⚠️ Erro ao verificar dados para {empresa}: {str(table_error)}")
-            cursor.close()
-            conn.close()
-            return None
+        # Check if the table exists and has data for this company - CACHED CHECK
+        total_records = check_data_exists(empresa, "TIMELINE", version_id)
         
         if total_records == 0:
-            st.info(f"💡 Nenhum dado de timeline encontrado para {empresa}. Faça um upload primeiro.")
+            # st.info(f"💡 Nenhum dado de timeline encontrado para {empresa}. Faça um upload primeiro.")  # Removed to save credits
             cursor.close()
             conn.close()
             return None
@@ -174,14 +218,14 @@ def load_data_with_history(empresa="MINIPA", version_id=None, usuario="minipa", 
         
         # Check if we got any data
         if df.empty:
-            st.info(f"💡 Nenhum dado encontrado para {empresa}.")
+            # st.info(f"💡 Nenhum dado encontrado para {empresa}.")  # Removed to save credits
             return None
         
         # Show data summary
         version_info = df['version_id'].iloc[0] if 'version_id' in df.columns and not df.empty else "N/A"
         upload_date = df['data_upload'].max() if 'data_upload' in df.columns else "N/A"
         
-        st.info(f"📅 {empresa} - Timeline v{version_info} | {len(df)} produtos | Upload: {upload_date}")
+        # st.info(f"📅 {empresa} - Timeline v{version_info} | {len(df)} produtos | Upload: {upload_date}")  # Removed to save credits
         
         # Remove metadata columns for return
         columns_to_remove = ['upload_version', 'version_id']
@@ -214,18 +258,11 @@ def load_analytics_data(empresa="MINIPA", version_id=None, usuario="minipa", lim
     try:
         cursor = conn.cursor()
         
-        # Check if analytics table exists and has new structure
-        has_empresa_column = False
-        table_exists = False
-        try:
-            cursor.execute("DESCRIBE TABLE ESTOQUE.ANALYTICS_DATA")
-            columns = cursor.fetchall()
-            column_names = [col[0].upper() for col in columns]
-            has_empresa_column = 'EMPRESA' in column_names
-            table_exists = True
-        except:
-            # Table doesn't exist yet
-            st.info("💡 Tabela de analytics não existe ainda. Faça upload de dados de análise primeiro.")
+        # Check if analytics table exists and has new structure - CACHED CHECK
+        table_exists, has_empresa_column = check_table_structure("ESTOQUE.ANALYTICS_DATA")
+        
+        if not table_exists:
+            # st.info("💡 Tabela de analytics não existe ainda. Faça upload de dados de análise primeiro.")  # Removed to save credits
             cursor.close()
             conn.close()
             return None
@@ -271,37 +308,17 @@ def load_analytics_data(empresa="MINIPA", version_id=None, usuario="minipa", lim
         # New multi-company structure
         # Determine which version to load
         if version_id is None:
-            st.info(f"📊 Carregando análise ativa para {empresa}")
+            # st.info(f"📊 Carregando análise ativa para {empresa}")  # Removed to save credits
             version_params = [empresa]
         else:
-            st.info(f"📊 Carregando análise v{version_id} para {empresa}")
+            # st.info(f"📊 Carregando análise v{version_id} para {empresa}")  # Removed to save credits
             version_params = [empresa, version_id]
         
-        # Check if the analytics table exists and has data for this company
-        try:
-            if version_id is None:
-                cursor.execute("""
-                SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA 
-                WHERE empresa = %s AND is_active = TRUE
-                """, version_params)
-            else:
-                cursor.execute("""
-                SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA 
-                WHERE empresa = %s AND version_id = %s
-                """, version_params)
-            
-            total_records = cursor.fetchone()[0]
-            
-            if total_records == 0:
-                st.info(f"💡 Nenhum dado de análise encontrado para {empresa}. Faça upload de um arquivo de análise primeiro.")
-                cursor.close()
-                conn.close()
-                return None
-                
-        except Exception as table_error:
-            # Table doesn't exist yet
-            st.warning(f"⚠️ Erro ao verificar dados de análise para {empresa}: {str(table_error)}")
-            st.info("💡 A tabela será criada automaticamente no primeiro upload de análise.")
+        # Check if the analytics table exists and has data for this company - CACHED CHECK
+        total_records = check_data_exists(empresa, "ANALYTICS", version_id)
+        
+        if total_records == 0:
+            # st.info(f"💡 Nenhum dado de análise encontrado para {empresa}. Faça upload de um arquivo de análise primeiro.")  # Removed to save credits
             cursor.close()
             conn.close()
             return None
@@ -354,7 +371,7 @@ def load_analytics_data(empresa="MINIPA", version_id=None, usuario="minipa", lim
         version_info = df['version_id'].iloc[0] if 'version_id' in df.columns and not df.empty else "N/A"
         upload_date = df['data_upload'].max() if 'data_upload' in df.columns else "N/A"
         
-        st.info(f"📊 {empresa} - Analytics v{version_info} | {len(df)} produtos | Upload: {upload_date}")
+        # st.info(f"📊 {empresa} - Analytics v{version_info} | {len(df)} produtos | Upload: {upload_date}")  # Removed to save credits
         
         # Remove metadata columns for return
         columns_to_remove = ['upload_version', 'version_id']

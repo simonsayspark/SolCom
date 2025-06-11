@@ -67,7 +67,7 @@ def create_new_version(empresa, table_type, description="", created_by="minipa",
         st.error(f"❌ Erro ao criar versão: {str(e)}")
         return None
 
-@st.cache_data(ttl=3600, show_spinner="🔄 Carregando versões...")  # 1 hour cache
+@st.cache_data(ttl=604800, show_spinner="🔄 Carregando versões...")  # 1 week cache
 def get_upload_versions(empresa, table_type=None, limit=50):
     """
     Get list of upload versions for a company
