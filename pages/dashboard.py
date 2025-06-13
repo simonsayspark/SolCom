@@ -4,7 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
-def load_page():
+def show_dashboard():
     """Enhanced dashboard with real system data"""
     st.title("🏢 DASHBOARD EXECUTIVO - SISTEMA DE ESTOQUE")
     st.markdown("### 📊 Visão Geral Multi-Empresa em Tempo Real")
