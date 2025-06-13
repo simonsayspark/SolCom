@@ -133,6 +133,30 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
         if not create_tables():
             st.warning("⚠️ Erro ao verificar/criar tabelas - continuando...")
         
+        # For ANALYTICS uploads, ensure MOQ and ultimo_fornecedor columns exist
+        if table_type == "ANALYTICS":
+            try:
+                # Test if columns exist by trying a simple query
+                cursor.execute("SELECT moq, ultimo_fornecedor FROM ESTOQUE.ANALYTICS_DATA LIMIT 1")
+            except Exception as column_error:
+                if "invalid identifier" in str(column_error).lower():
+                    st.warning("⚠️ Colunas MOQ/UltimoFornecedor não encontradas. Tentando adicionar...")
+                    try:
+                        # Try to add missing columns
+                        cursor.execute("ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN moq INTEGER DEFAULT 0")
+                        st.info("✅ Coluna MOQ adicionada")
+                    except:
+                        pass  # Column might already exist
+                    
+                    try:
+                        cursor.execute("ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN ultimo_fornecedor VARCHAR(200) DEFAULT 'Brazil'")
+                        st.info("✅ Coluna ultimo_fornecedor adicionada")
+                    except:
+                        pass  # Column might already exist
+                    
+                    conn.commit()
+                    st.success("🔧 Estrutura da tabela atualizada automaticamente!")
+        
         # Clean the dataframe - remove NaN and empty rows
         df_clean = df.copy()
         df_clean = df_clean.dropna(how='all')
