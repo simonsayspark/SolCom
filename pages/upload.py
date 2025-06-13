@@ -73,7 +73,8 @@ def show_data_upload():
     # Import Snowflake functions
     try:
         from bd.snowflake_config import (upload_excel_to_snowflake, load_data_with_history, 
-                                        load_analytics_data, test_connection, get_upload_versions, delete_version)
+                                        load_analytics_data, test_connection, get_upload_versions, 
+                                        delete_version, fix_active_versions)
         snowflake_available = True
     except ImportError:
         snowflake_available = False
@@ -127,7 +128,7 @@ def show_data_upload():
                 st.info("📊 Analytics: Nenhum dado encontrado")
             
             # Show version history with delete options
-            with st.expander(f"📋 Histórico de Versões - {empresa_selecionada}"):
+            with st.expander(f"📋 Histórico de Versões - {empresa_selecionada}", expanded=True):
                 try:
                     versions_timeline = get_upload_versions(empresa_code, "TIMELINE", limit=10)
                     versions_analytics = get_upload_versions(empresa_code, "ANALYTICS", limit=10)
@@ -145,37 +146,52 @@ def show_data_upload():
                             # Show filename if available
                             filename_info = f" - 📁 {v.get('arquivo_origem', 'N/A')}" if v.get('arquivo_origem') else ""
                             
-                            col1, col2 = st.columns([5, 1])
-                            with col1:
-                                st.write(f"{status_icon} **{display_name}** - {v['upload_date']}{filename_info}")
-                            with col2:
-                                if not v['is_active']:  # Can't delete active version
-                                    if st.button("🗑️", key=f"del_timeline_{v['version_id']}_{i}", help="Deletar versão"):
-                                        st.session_state[f"confirm_delete_timeline_{v['version_id']}"] = True
-                                        st.rerun()
-                                else:
-                                    st.write("🔒 Ativa")
-                            
-                            # Show confirmation dialog
-                            if st.session_state.get(f"confirm_delete_timeline_{v['version_id']}", False):
-                                st.error(f"⚠️ Deletar {display_name}?")
-                                col1, col2 = st.columns(2)
+                            # Create a container for each version
+                            version_container = st.container()
+                            with version_container:
+                                col1, col2 = st.columns([4, 1])
                                 with col1:
-                                    if st.button("✅ Confirmar", key=f"confirm_del_timeline_{v['version_id']}"):
-                                        try:
-                                            # Call the actual deletion function
-                                            if delete_version(empresa_code, v['version_id'], "TIMELINE"):
-                                                st.success(f"✅ {display_name} deletada!")
-                                                st.session_state[f"confirm_delete_timeline_{v['version_id']}"] = False
-                                                st.rerun()
-                                            else:
-                                                st.error("❌ Falha ao deletar versão")
-                                        except Exception as e:
-                                            st.error(f"❌ Erro ao deletar: {str(e)}")
+                                    st.write(f"{status_icon} **{display_name}** - {v['upload_date']}{filename_info}")
                                 with col2:
-                                    if st.button("❌ Cancelar", key=f"cancel_del_timeline_{v['version_id']}"):
-                                        st.session_state[f"confirm_delete_timeline_{v['version_id']}"] = False
-                                        st.rerun()
+                                    if not v['is_active']:  # Can't delete active version
+                                        delete_button = st.button("🗑️ Deletar", 
+                                                                 key=f"del_timeline_{v['version_id']}_{i}", 
+                                                                 help="Deletar esta versão",
+                                                                 type="secondary",
+                                                                 use_container_width=True)
+                                        if delete_button:
+                                            st.session_state[f"confirm_delete_timeline_{v['version_id']}"] = True
+                                            st.rerun()
+                                    else:
+                                        st.write("🔒 **Ativa**")
+                                
+                                # Show confirmation dialog
+                                if st.session_state.get(f"confirm_delete_timeline_{v['version_id']}", False):
+                                    st.error(f"⚠️ **CONFIRMAR EXCLUSÃO:** {display_name}")
+                                    col1, col2 = st.columns(2)
+                                    with col1:
+                                        if st.button("✅ SIM, DELETAR", 
+                                                    key=f"confirm_del_timeline_{v['version_id']}",
+                                                    type="primary",
+                                                    use_container_width=True):
+                                            try:
+                                                # Call the actual deletion function
+                                                if delete_version(empresa_code, v['version_id'], "TIMELINE"):
+                                                    st.success(f"✅ {display_name} deletada!")
+                                                    st.session_state[f"confirm_delete_timeline_{v['version_id']}"] = False
+                                                    st.rerun()
+                                                else:
+                                                    st.error("❌ Falha ao deletar versão")
+                                            except Exception as e:
+                                                st.error(f"❌ Erro ao deletar: {str(e)}")
+                                    with col2:
+                                        if st.button("❌ Cancelar", 
+                                                    key=f"cancel_del_timeline_{v['version_id']}",
+                                                    use_container_width=True):
+                                            st.session_state[f"confirm_delete_timeline_{v['version_id']}"] = False
+                                            st.rerun()
+                                
+                                st.divider()  # Visual separator between versions
                     
                     if versions_analytics:
                         st.write("**📊 Análise de Estoque:**")
@@ -190,37 +206,52 @@ def show_data_upload():
                             # Show filename if available
                             filename_info = f" - 📁 {v.get('arquivo_origem', 'N/A')}" if v.get('arquivo_origem') else ""
                             
-                            col1, col2 = st.columns([5, 1])
-                            with col1:
-                                st.write(f"{status_icon} **{display_name}** - {v['upload_date']}{filename_info}")
-                            with col2:
-                                if not v['is_active']:  # Can't delete active version
-                                    if st.button("🗑️", key=f"del_analytics_{v['version_id']}_{i}", help="Deletar versão"):
-                                        st.session_state[f"confirm_delete_analytics_{v['version_id']}"] = True
-                                        st.rerun()
-                                else:
-                                    st.write("🔒 Ativa")
-                            
-                            # Show confirmation dialog
-                            if st.session_state.get(f"confirm_delete_analytics_{v['version_id']}", False):
-                                st.error(f"⚠️ Deletar {display_name}?")
-                                col1, col2 = st.columns(2)
+                            # Create a container for each version
+                            version_container = st.container()
+                            with version_container:
+                                col1, col2 = st.columns([4, 1])
                                 with col1:
-                                    if st.button("✅ Confirmar", key=f"confirm_del_analytics_{v['version_id']}"):
-                                        try:
-                                            # Call the actual deletion function
-                                            if delete_version(empresa_code, v['version_id'], "ANALYTICS"):
-                                                st.success(f"✅ {display_name} deletada!")
-                                                st.session_state[f"confirm_delete_analytics_{v['version_id']}"] = False
-                                                st.rerun()
-                                            else:
-                                                st.error("❌ Falha ao deletar versão")
-                                        except Exception as e:
-                                            st.error(f"❌ Erro ao deletar: {str(e)}")
+                                    st.write(f"{status_icon} **{display_name}** - {v['upload_date']}{filename_info}")
                                 with col2:
-                                    if st.button("❌ Cancelar", key=f"cancel_del_analytics_{v['version_id']}"):
-                                        st.session_state[f"confirm_delete_analytics_{v['version_id']}"] = False
-                                        st.rerun()
+                                    if not v['is_active']:  # Can't delete active version
+                                        delete_button = st.button("🗑️ Deletar", 
+                                                                 key=f"del_analytics_{v['version_id']}_{i}", 
+                                                                 help="Deletar esta versão",
+                                                                 type="secondary",
+                                                                 use_container_width=True)
+                                        if delete_button:
+                                            st.session_state[f"confirm_delete_analytics_{v['version_id']}"] = True
+                                            st.rerun()
+                                    else:
+                                        st.write("🔒 **Ativa**")
+                                
+                                # Show confirmation dialog
+                                if st.session_state.get(f"confirm_delete_analytics_{v['version_id']}", False):
+                                    st.error(f"⚠️ **CONFIRMAR EXCLUSÃO:** {display_name}")
+                                    col1, col2 = st.columns(2)
+                                    with col1:
+                                        if st.button("✅ SIM, DELETAR", 
+                                                    key=f"confirm_del_analytics_{v['version_id']}",
+                                                    type="primary",
+                                                    use_container_width=True):
+                                            try:
+                                                # Call the actual deletion function
+                                                if delete_version(empresa_code, v['version_id'], "ANALYTICS"):
+                                                    st.success(f"✅ {display_name} deletada!")
+                                                    st.session_state[f"confirm_delete_analytics_{v['version_id']}"] = False
+                                                    st.rerun()
+                                                else:
+                                                    st.error("❌ Falha ao deletar versão")
+                                            except Exception as e:
+                                                st.error(f"❌ Erro ao deletar: {str(e)}")
+                                    with col2:
+                                        if st.button("❌ Cancelar", 
+                                                    key=f"cancel_del_analytics_{v['version_id']}",
+                                                    use_container_width=True):
+                                            st.session_state[f"confirm_delete_analytics_{v['version_id']}"] = False
+                                            st.rerun()
+                                
+                                st.divider()  # Visual separator between versions
                     
                     if not versions_timeline and not versions_analytics:
                         st.info("Nenhuma versão encontrada. Faça seu primeiro upload!")
@@ -229,6 +260,19 @@ def show_data_upload():
         
         with col2:
             st.info("🔗 Snowflake (monitoring disabled)")
+            
+            # Add repair button for version issues
+            if st.button("🔧 Reparar Versões", 
+                        use_container_width=True,
+                        help="Corrige o status 'ativa' das versões - use se todas as versões aparecem como ativas"):
+                with st.spinner("🔧 Reparando status das versões..."):
+                    if fix_active_versions():
+                        st.success("✅ Versões reparadas! Recarregue a página.")
+                        # Clear the cache to show updated data
+                        get_upload_versions.clear()
+                        st.rerun()
+                    else:
+                        st.error("❌ Erro ao reparar versões")
     
     # File upload section
     st.subheader(f"📤 Upload de Arquivo - {empresa_selecionada}")

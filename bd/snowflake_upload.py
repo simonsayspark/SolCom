@@ -128,6 +128,40 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
         
         st.success(f"✅ Nova versão criada: v{version_id} ({upload_version})")
         
+        # IMPORTANT: Deactivate all previous versions for this company and table type
+        st.info(f"🔄 Desativando versões anteriores para {empresa} - {table_type}...")
+        
+        # Deactivate in data tables
+        if table_type == "TIMELINE":
+            cursor.execute("""
+            UPDATE ESTOQUE.PRODUTOS 
+            SET is_active = FALSE 
+            WHERE empresa = %s AND table_type = %s
+            """, (empresa, table_type))
+        elif table_type == "ANALYTICS":
+            cursor.execute("""
+            UPDATE ESTOQUE.ANALYTICS_DATA 
+            SET is_active = FALSE 
+            WHERE empresa = %s
+            """, (empresa,))
+        
+        # Deactivate in version control table
+        cursor.execute("""
+        UPDATE CONFIG.VERSIONS 
+        SET is_active = FALSE 
+        WHERE empresa = %s AND table_type = %s
+        """, (empresa, table_type))
+        
+        # Set the new version as active in version control
+        cursor.execute("""
+        UPDATE CONFIG.VERSIONS 
+        SET is_active = TRUE 
+        WHERE empresa = %s AND upload_version = %s AND table_type = %s
+        """, (empresa, upload_version, table_type))
+        
+        conn.commit()
+        st.success(f"✅ Versão v{version_id} definida como ativa para {empresa}")
+        
         # Ensure tables exist
         st.info(f"🔧 Verificando estrutura das tabelas...")
         if not create_tables():

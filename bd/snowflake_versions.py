@@ -356,4 +356,100 @@ def delete_version(empresa, version_id, table_type):
         
     except Exception as e:
         st.error(f"❌ Erro ao deletar versão: {str(e)}")
+        return False
+
+def fix_active_versions():
+    """
+    Fix the is_active status to ensure only the latest version per company/table_type is active
+    This is a repair function for existing data
+    """
+    conn = get_snowflake_connection()
+    if not conn:
+        return False
+        
+    try:
+        cursor = conn.cursor()
+        
+        # Get all companies and table types
+        cursor.execute("""
+        SELECT DISTINCT empresa, table_type 
+        FROM CONFIG.VERSIONS 
+        ORDER BY empresa, table_type
+        """)
+        
+        combinations = cursor.fetchall()
+        fixed_count = 0
+        
+        for empresa, table_type in combinations:
+            # First, deactivate all versions for this combination
+            cursor.execute("""
+            UPDATE CONFIG.VERSIONS 
+            SET is_active = FALSE 
+            WHERE empresa = %s AND table_type = %s
+            """, (empresa, table_type))
+            
+            # Deactivate in data tables
+            if table_type == "TIMELINE":
+                cursor.execute("""
+                UPDATE ESTOQUE.PRODUTOS 
+                SET is_active = FALSE 
+                WHERE empresa = %s AND table_type = %s
+                """, (empresa, table_type))
+            elif table_type == "ANALYTICS":
+                cursor.execute("""
+                UPDATE ESTOQUE.ANALYTICS_DATA 
+                SET is_active = FALSE 
+                WHERE empresa = %s
+                """, (empresa,))
+            
+            # Find the latest version (highest version_id)
+            cursor.execute("""
+            SELECT upload_version, version_id 
+            FROM CONFIG.VERSIONS 
+            WHERE empresa = %s AND table_type = %s 
+            ORDER BY version_id DESC 
+            LIMIT 1
+            """, (empresa, table_type))
+            
+            latest_version = cursor.fetchone()
+            if latest_version:
+                upload_version, version_id = latest_version
+                
+                # Set the latest version as active in version control
+                cursor.execute("""
+                UPDATE CONFIG.VERSIONS 
+                SET is_active = TRUE 
+                WHERE empresa = %s AND upload_version = %s AND table_type = %s
+                """, (empresa, upload_version, table_type))
+                
+                # Set the latest version as active in data tables
+                if table_type == "TIMELINE":
+                    cursor.execute("""
+                    UPDATE ESTOQUE.PRODUTOS 
+                    SET is_active = TRUE 
+                    WHERE empresa = %s AND upload_version = %s AND table_type = %s
+                    """, (empresa, upload_version, table_type))
+                elif table_type == "ANALYTICS":
+                    cursor.execute("""
+                    UPDATE ESTOQUE.ANALYTICS_DATA 
+                    SET is_active = TRUE 
+                    WHERE empresa = %s AND upload_version = %s
+                    """, (empresa, upload_version))
+                
+                fixed_count += 1
+                st.info(f"✅ {empresa} - {table_type}: v{version_id} definida como ativa")
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        st.success(f"🔧 Reparação concluída! {fixed_count} combinações empresa/tipo corrigidas.")
+        
+        # Clear cache to refresh data
+        get_upload_versions.clear()
+        
+        return True
+        
+    except Exception as e:
+        st.error(f"❌ Erro ao reparar versões ativas: {str(e)}")
         return False 

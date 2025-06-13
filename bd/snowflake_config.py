@@ -33,7 +33,8 @@ from .snowflake_versions import (
     set_active_version,
     get_version_by_id,
     get_active_version,
-    delete_version
+    delete_version,
+    fix_active_versions
 )
 
 from .snowflake_upload import (
@@ -77,6 +78,7 @@ __all__ = [
     'get_version_by_id',
     'get_active_version',
     'delete_version',
+    'fix_active_versions',
     
     # Upload & Analysis
     'upload_excel_to_snowflake',

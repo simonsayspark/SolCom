@@ -688,14 +688,23 @@ def show_tabela_geral(df, empresa="MINIPA"):
         st.info("Nenhum dado disponível para exibir")
         return
     
-    # Remove metadata columns from display
-    metadata_columns = ['data_upload', 'upload_version', 'version_id']
+    # Remove metadata columns from display - FORCE REMOVAL
+    metadata_columns = ['data_upload', 'upload_version', 'version_id', 'upload_date', 'created_by', 'is_active']
     clean_df = df.copy()
     
-    # Remove metadata columns if they exist
+    # Remove metadata columns if they exist - more comprehensive
     for col in metadata_columns:
         if col in clean_df.columns:
             clean_df = clean_df.drop(columns=[col])
+    
+    # Also remove any columns that start with these patterns
+    columns_to_remove = []
+    for col in clean_df.columns:
+        if any(pattern in col.lower() for pattern in ['upload', 'version', 'created', 'active']):
+            columns_to_remove.append(col)
+    
+    for col in columns_to_remove:
+        clean_df = clean_df.drop(columns=[col])
     
     # Search and filter controls
     col1, col2, col3 = st.columns([2, 1, 1])
@@ -796,20 +805,29 @@ def show_tabela_geral(df, empresa="MINIPA"):
             else:
                 display_df[col] = display_df[col].round(1)
         
+        # Create dynamic column config based on available columns
+        column_config = {}
+        if "Produto" in display_df.columns:
+            column_config["Produto"] = st.column_config.TextColumn("Produto", width="medium")
+        if "Estoque" in display_df.columns:
+            column_config["Estoque"] = st.column_config.NumberColumn("Estoque", format="%d")
+        if "Consumo 6 Meses" in display_df.columns:
+            column_config["Consumo 6 Meses"] = st.column_config.NumberColumn("Consumo 6M", format="%d")
+        if "Média 6 Meses" in display_df.columns:
+            column_config["Média 6 Meses"] = st.column_config.NumberColumn("Média 6M", format="%d")
+        if "Estoque Cobertura" in display_df.columns:
+            column_config["Estoque Cobertura"] = st.column_config.NumberColumn("Cobertura", format="%.2f meses")
+        if "MOQ" in display_df.columns:
+            column_config["MOQ"] = st.column_config.NumberColumn("MOQ", format="%d")
+        if "UltimoFornecedor" in display_df.columns:
+            column_config["UltimoFornecedor"] = st.column_config.TextColumn("Último Fornecedor", width="medium")
+        
         # Show the dataframe with pagination
         st.dataframe(
             display_df,
             use_container_width=True,
             height=600,
-            column_config={
-                "Produto": st.column_config.TextColumn("Produto", width="medium"),
-                "Estoque": st.column_config.NumberColumn("Estoque", format="%d"),
-                "Consumo 6 Meses": st.column_config.NumberColumn("Consumo 6M", format="%d"),
-                "Média 6 Meses": st.column_config.NumberColumn("Média 6M", format="%d"),
-                "Estoque Cobertura": st.column_config.NumberColumn("Cobertura", format="%.2f meses"),
-                "MOQ": st.column_config.NumberColumn("MOQ", format="%d"),
-                "UltimoFornecedor": st.column_config.TextColumn("Último Fornecedor", width="medium")
-            }
+            column_config=column_config
         )
         
         # Summary statistics
