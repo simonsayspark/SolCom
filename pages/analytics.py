@@ -113,7 +113,7 @@ def load_page():
         uploaded_file = st.file_uploader(
             "Faça upload do arquivo Excel (.xlsx)",
             type=['xlsx'],
-            help="Arquivo deve conter planilha 'Export' com colunas: Produto, Estoque, Média 6 Meses, Estoque Cobertura"
+            help="Arquivo deve conter planilha 'Export' com colunas: Produto, Estoque, Média 6 Meses, Estoque Cobertura, MOQ, UltimoFor"
         )
         
         if uploaded_file is not None:
@@ -127,10 +127,15 @@ def load_page():
                 df = df[~df['Produto'].str.contains('Filtros aplicados', na=False)]
                 
                 # Convert numeric columns
-                numeric_columns = ['Estoque', 'Média 6 Meses', 'Estoque Cobertura', 'Qtde Tot Compras']
+                numeric_columns = ['Estoque', 'Média 6 Meses', 'Estoque Cobertura', 'Qtde Tot Compras', 'MOQ']
                 for col in numeric_columns:
                     if col in df.columns:
                         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                
+                # Handle supplier column - fill empty values with Brazil
+                if 'UltimoFornecedor' in df.columns:
+                    df['UltimoFornecedor'] = df['UltimoFornecedor'].fillna('Brazil')
+                    df.loc[df['UltimoFornecedor'].str.strip() == '', 'UltimoFornecedor'] = 'Brazil'
                 
                 st.success(f"✅ Dados carregados: {len(df)} produtos")
                 
@@ -151,6 +156,8 @@ def load_page():
                 - `Estoque`: Quantidade atual em estoque
                 - `Média 6 Meses`: Consumo médio mensal
                 - `Estoque Cobertura`: Cobertura em meses
+                - `MOQ`: Quantidade mínima de pedido
+                - `UltimoFor`: Último fornecedor (deixe vazio para 'Brazil')
                 - `Qtde Tot Compras`: Quantidade total para compras (opcional)
                 """)
             return
@@ -165,7 +172,8 @@ def load_page():
             'Item': 'Produto',
             'Modelo': 'Produto', 
             'Estoque_Total': 'Estoque',
-            'Vendas_Medias': 'Média 6 Meses'
+            'Vendas_Medias': 'Média 6 Meses',
+            'UltimoFor': 'UltimoFornecedor'  # NEW MAPPING
         }
         
         for old_col, new_col in column_mapping.items():
@@ -317,15 +325,24 @@ def calculate_purchase_suggestions(produtos_existentes):
         else:
             return f"{meses_restantes:.1f} meses", meses_restantes
     
-    def quanto_comprar(consumo_mensal, estoque_atual, meses_desejados=6):
+    def quanto_comprar(consumo_mensal, estoque_atual, moq=0, meses_desejados=6):
         if consumo_mensal <= 0:
-            return 0
+            return moq if moq > 0 else 0
         
         estoque_ideal = consumo_mensal * meses_desejados
         falta = max(0, estoque_ideal - estoque_atual)
         
-        # Round for easier purchasing
-        return int(np.ceil(falta / 50) * 50) if falta > 0 else 0
+        if falta <= 0:
+            return 0
+        
+        # Use MOQ if available, otherwise round to 50s
+        if moq > 0:
+            # Calculate multiples of MOQ needed
+            multiplos = max(1, int(np.ceil(falta / moq)))
+            return multiplos * moq
+        else:
+            # Round for easier purchasing
+            return int(np.ceil(falta / 50) * 50)
     
     # Calculate for each product
     suggestions = []
@@ -334,14 +351,18 @@ def calculate_purchase_suggestions(produtos_existentes):
         produto = str(row['Produto'])
         estoque = row['Estoque']
         consumo = row['Média 6 Meses']
+        moq = row.get('MOQ', 0) if 'MOQ' in row.index else 0
+        fornecedor = row.get('UltimoFornecedor', 'Brazil') if 'UltimoFornecedor' in row.index else 'Brazil'
         
         quando_acaba, meses_num = calcular_quando_vai_acabar(estoque, consumo)
-        qtd_comprar = quanto_comprar(consumo, estoque)
+        qtd_comprar = quanto_comprar(consumo, estoque, moq)
         
         suggestions.append({
             'Produto': produto,
             'Estoque_Atual': estoque,
             'Consumo_Mensal': consumo,
+            'MOQ': moq,
+            'Fornecedor': fornecedor,
             'Quando_Acaba': quando_acaba,
             'Meses_Restantes': meses_num,
             'Qtd_Comprar': qtd_comprar,
@@ -379,7 +400,7 @@ def show_purchase_list(produtos_existentes, empresa="MINIPA"):
     if len(emergencia) > 0:
         st.error("🚨 EMERGÊNCIA (≤ 1 mês)")
         st.dataframe(
-            emergencia[['Produto', 'Quando_Acaba', 'Consumo_Mensal', 'Qtd_Comprar', 'Investimento_Estimado']].round(1),
+            emergencia[['Produto', 'Fornecedor', 'Quando_Acaba', 'MOQ', 'Qtd_Comprar', 'Investimento_Estimado']].round(1),
             use_container_width=True
         )
     
@@ -388,7 +409,7 @@ def show_purchase_list(produtos_existentes, empresa="MINIPA"):
     if len(criticos) > 0:
         st.warning("🔴 CRÍTICOS (1-3 meses)")
         st.dataframe(
-            criticos[['Produto', 'Quando_Acaba', 'Consumo_Mensal', 'Qtd_Comprar', 'Investimento_Estimado']].head(10).round(1),
+            criticos[['Produto', 'Fornecedor', 'Quando_Acaba', 'MOQ', 'Qtd_Comprar', 'Investimento_Estimado']].head(10).round(1),
             use_container_width=True
         )
     
@@ -397,7 +418,7 @@ def show_purchase_list(produtos_existentes, empresa="MINIPA"):
     if len(atencao) > 0:
         st.info("🟡 ATENÇÃO (>3 meses)")
         st.dataframe(
-            atencao[['Produto', 'Quando_Acaba', 'Consumo_Mensal', 'Qtd_Comprar', 'Investimento_Estimado']].head(10).round(1),
+            atencao[['Produto', 'Fornecedor', 'Quando_Acaba', 'MOQ', 'Qtd_Comprar', 'Investimento_Estimado']].head(10).round(1),
             use_container_width=True
         )
     
@@ -489,7 +510,49 @@ def show_analytics_dashboard(produtos_existentes, produtos_novos, empresa="MINIP
         fig_top.update_layout(height=500)
         st.plotly_chart(fig_top, use_container_width=True)
     
-    # Chart 4: Investment timeline
+    # Chart 4: Supplier analysis
+    if 'Fornecedor' in suggestions_df.columns:
+        st.subheader("🏭 Análise por Fornecedor")
+        
+        # Group by supplier
+        supplier_analysis = suggestions_df.groupby('Fornecedor').agg({
+            'Produto': 'count',
+            'Qtd_Comprar': 'sum',
+            'Investimento_Estimado': 'sum',
+            'Meses_Restantes': 'mean'
+        }).round(1)
+        supplier_analysis.columns = ['Produtos', 'Qtd_Total', 'Investimento', 'Urgência_Média']
+        supplier_analysis = supplier_analysis.sort_values('Investimento', ascending=False)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Top suppliers by investment
+            fig_suppliers = px.bar(
+                supplier_analysis.head(10).reset_index(),
+                x='Investimento',
+                y='Fornecedor',
+                orientation='h',
+                title='💰 Top Fornecedores por Investimento',
+                color='Urgência_Média',
+                color_continuous_scale='Reds_r'
+            )
+            st.plotly_chart(fig_suppliers, use_container_width=True)
+        
+        with col2:
+            # Supplier distribution
+            fig_supplier_pie = px.pie(
+                supplier_analysis.reset_index(),
+                values='Produtos',
+                names='Fornecedor',
+                title='📊 Distribuição de Produtos por Fornecedor'
+            )
+            st.plotly_chart(fig_supplier_pie, use_container_width=True)
+        
+        # Show supplier summary table
+        st.dataframe(supplier_analysis, use_container_width=True)
+    
+    # Chart 5: Investment timeline
     col1, col2 = st.columns(2)
     
     with col1:

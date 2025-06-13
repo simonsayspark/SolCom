@@ -62,6 +62,8 @@ def create_tables():
             consumo_6_meses DECIMAL(10,2),
             media_6_meses DECIMAL(10,2),
             estoque_cobertura DECIMAL(8,2),
+            moq INTEGER DEFAULT 0,
+            ultimo_fornecedor VARCHAR(200) DEFAULT 'Brazil',
             data_upload TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP(),
             usuario VARCHAR(50),
             table_type VARCHAR(20) DEFAULT 'ANALYTICS',
@@ -176,7 +178,9 @@ def check_database_structure():
                     'columns': column_names,
                     'has_empresa': 'EMPRESA' in [col.upper() for col in column_names],
                     'has_table_type': 'TABLE_TYPE' in [col.upper() for col in column_names],
-                    'has_upload_version': 'UPLOAD_VERSION' in [col.upper() for col in column_names]
+                    'has_upload_version': 'UPLOAD_VERSION' in [col.upper() for col in column_names],
+                    'has_moq': 'MOQ' in [col.upper() for col in column_names],
+                    'has_ultimo_fornecedor': 'ULTIMO_FORNECEDOR' in [col.upper() for col in column_names]
                 }
                 
             except Exception as e:
@@ -250,4 +254,74 @@ def force_create_new_structure():
         
     except Exception as e:
         st.error(f"❌ Erro ao criar estrutura nova: {str(e)}")
+        return False
+
+def add_analytics_columns():
+    """
+    Add MOQ and ultimo_fornecedor columns to existing ANALYTICS_DATA table
+    This is a safe migration that won't lose existing data
+    """
+    conn = get_snowflake_connection()
+    if not conn:
+        return False
+        
+    try:
+        cursor = conn.cursor()
+        
+        st.info("🔄 Verificando e adicionando colunas MOQ e UltimoFornecedor...")
+        
+        # Check if table exists
+        try:
+            cursor.execute("SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA LIMIT 1")
+            table_exists = True
+        except:
+            st.warning("⚠️ Tabela ANALYTICS_DATA não existe. Execute 'Criar Tabelas' primeiro.")
+            return False
+        
+        # Check current columns
+        cursor.execute("DESCRIBE TABLE ESTOQUE.ANALYTICS_DATA")
+        columns = cursor.fetchall()
+        column_names = [col[0].upper() for col in columns]
+        
+        changes_made = False
+        
+        # Add MOQ column if missing
+        if 'MOQ' not in column_names:
+            try:
+                cursor.execute("ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN moq INTEGER DEFAULT 0")
+                st.success("✅ Coluna MOQ adicionada com sucesso!")
+                changes_made = True
+            except Exception as e:
+                st.error(f"❌ Erro ao adicionar coluna MOQ: {str(e)}")
+        else:
+            st.info("✅ Coluna MOQ já existe")
+        
+        # Add ultimo_fornecedor column if missing
+        if 'ULTIMO_FORNECEDOR' not in column_names:
+            try:
+                cursor.execute("ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN ultimo_fornecedor VARCHAR(200) DEFAULT 'Brazil'")
+                st.success("✅ Coluna ultimo_fornecedor adicionada com sucesso!")
+                changes_made = True
+            except Exception as e:
+                st.error(f"❌ Erro ao adicionar coluna ultimo_fornecedor: {str(e)}")
+        else:
+            st.info("✅ Coluna ultimo_fornecedor já existe")
+        
+        if changes_made:
+            conn.commit()
+            st.success("🎉 Migração concluída! Estrutura da tabela ANALYTICS_DATA atualizada.")
+            
+            # Show updated structure
+            cursor.execute("DESCRIBE TABLE ESTOQUE.ANALYTICS_DATA")
+            updated_columns = cursor.fetchall()
+            st.info(f"📊 Colunas atualizadas: {[col[0] for col in updated_columns]}")
+        else:
+            st.info("✅ Tabela já está atualizada - nenhuma alteração necessária")
+        
+        cursor.close()
+        conn.close()
+        return True
+        
+    except Exception as e:
+        st.error(f"❌ Erro na migração: {str(e)}")
         return False 

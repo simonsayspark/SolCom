@@ -218,20 +218,26 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
                     media_6_meses = safe_float(row.get('Média 6 Meses', 0.0))
                     estoque_cobertura = safe_float(row.get('Estoque Cobertura', 0.0))
                     
+                    # NEW: Handle MOQ and UltimoFornecedor columns
+                    moq = safe_numeric(row.get('MOQ', 0))
+                    ultimo_fornecedor = str(row.get('UltimoFor', '') or row.get('UltimoFornecedor', ''))
+                    if not ultimo_fornecedor or ultimo_fornecedor.lower() in ['nan', 'none', '']:
+                        ultimo_fornecedor = 'Brazil'  # Default value
+                    
                     # Skip completely empty rows
                     if not produto and all(v == 0 for v in [estoque, consumo_6_meses, media_6_meses]):
                         continue
                     
-                    # Insert analytics data with versioning
+                    # Insert analytics data with versioning - UPDATED WITH NEW COLUMNS
                     cursor.execute("""
                     INSERT INTO ESTOQUE.ANALYTICS_DATA 
                     (empresa, upload_version, version_id, is_active, produto, estoque, 
-                     consumo_6_meses, media_6_meses, estoque_cobertura, usuario, table_type, 
-                     version_description, created_by)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     consumo_6_meses, media_6_meses, estoque_cobertura, moq, ultimo_fornecedor,
+                     usuario, table_type, version_description, created_by)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (empresa, upload_version, version_id, True, produto, estoque, 
-                          consumo_6_meses, media_6_meses, estoque_cobertura, usuario, table_type, 
-                          description, usuario))
+                          consumo_6_meses, media_6_meses, estoque_cobertura, moq, ultimo_fornecedor,
+                          usuario, table_type, description, usuario))
                     
                     success_count += 1
                     

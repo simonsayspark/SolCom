@@ -285,6 +285,8 @@ def load_analytics_data(empresa="MINIPA", version_id=None, usuario="minipa", lim
                        consumo_6_meses as "Consumo 6 Meses",
                        media_6_meses as "Média 6 Meses", 
                        estoque_cobertura as "Estoque Cobertura",
+                       COALESCE(moq, 0) as "MOQ",
+                       COALESCE(ultimo_fornecedor, 'Brazil') as "UltimoFornecedor",
                        data_upload
                 FROM ESTOQUE.ANALYTICS_DATA 
                 ORDER BY data_upload DESC
@@ -331,6 +333,8 @@ def load_analytics_data(empresa="MINIPA", version_id=None, usuario="minipa", lim
                    consumo_6_meses as "Consumo 6 Meses",
                    media_6_meses as "Média 6 Meses", 
                    estoque_cobertura as "Estoque Cobertura",
+                   moq as "MOQ",
+                   ultimo_fornecedor as "UltimoFornecedor",
                    data_upload,
                    upload_version,
                    version_id
@@ -347,6 +351,8 @@ def load_analytics_data(empresa="MINIPA", version_id=None, usuario="minipa", lim
                    consumo_6_meses as "Consumo 6 Meses",
                    media_6_meses as "Média 6 Meses", 
                    estoque_cobertura as "Estoque Cobertura",
+                   moq as "MOQ",
+                   ultimo_fornecedor as "UltimoFornecedor",
                    data_upload,
                    upload_version,
                    version_id

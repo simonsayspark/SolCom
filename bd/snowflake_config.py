@@ -17,7 +17,8 @@ from .snowflake_connection import (
 from .snowflake_tables import (
     create_tables,
     check_database_structure,
-    force_create_new_structure
+    force_create_new_structure,
+    add_analytics_columns
 )
 
 from .snowflake_data import (
@@ -61,6 +62,7 @@ __all__ = [
     'create_tables',
     'check_database_structure', 
     'force_create_new_structure',
+    'add_analytics_columns',
     
     # Data Loading
     'load_data_with_history',
