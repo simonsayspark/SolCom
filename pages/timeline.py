@@ -330,34 +330,40 @@ def load_page():
         # Get available versions for the selected company
         versions = get_upload_versions(empresa_code, "TIMELINE", limit=20)
         
-        # Version selector
+        # Version selector with custom names and filenames
         if versions:
             st.subheader(f"📦 Seleção de Versão - {empresa_selecionada}")
             col1, col2 = st.columns([2, 1])
             
             with col1:
-                # Create options for version selector
-                version_options = [{"id": None, "label": "🟢 Versão Ativa (Atual)", "description": "Versão atualmente ativa"}]
-                for v in versions:
-                    status_icon = "🟢" if v['is_active'] else "⚪"
-                    version_options.append({
-                        "id": v['version_id'],
-                        "label": f"{status_icon} Versão {v['version_id']}",
-                        "description": f"{v['upload_date']} - {v.get('description', 'Sem descrição')}"
-                    })
+                # Create version options with custom names and filenames
+                version_options = ["Versão Ativa (mais recente)"]
+                version_mapping = {0: None}  # 0 = active version
                 
-                selected_version_idx = st.selectbox(
-                    "Escolha a versão:",
-                    range(len(version_options)),
-                    format_func=lambda x: version_options[x]["label"],
-                    key="version_selector_timeline",
-                    help="Selecione qual versão dos dados você quer visualizar"
+                for i, v in enumerate(versions):
+                    display_name = v.get('description', '').strip()
+                    if not display_name:
+                        display_name = f"Versão {v['version_id']}"
+                    
+                    filename_info = f" - 📁 {v.get('arquivo_origem', 'N/A')}" if v.get('arquivo_origem') else ""
+                    option_text = f"{display_name} ({v['upload_date']}){filename_info}"
+                    
+                    version_options.append(option_text)
+                    version_mapping[i + 1] = v['version_id']
+                
+                selected_option = st.selectbox(
+                    "Escolha a versão dos dados:",
+                    options=range(len(version_options)),
+                    format_func=lambda x: version_options[x],
+                    help="Selecione uma versão específica ou use a versão ativa"
                 )
                 
-                selected_version_id = version_options[selected_version_idx]["id"]
+                selected_version_id = version_mapping[selected_option]
                 
-                # Show version info
-                st.info(f"📋 {version_options[selected_version_idx]['description']}")
+                if selected_version_id:
+                    st.info(f"📊 Carregando versão específica: {version_options[selected_option]}")
+                else:
+                    st.info("📊 Carregando versão ativa (mais recente)")
             
             with col2:
                 st.metric("📊 Versões Disponíveis", len(versions))

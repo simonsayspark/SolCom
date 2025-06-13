@@ -42,34 +42,40 @@ def load_page():
         # Get available versions for the selected company
         versions = get_upload_versions(empresa_code, "ANALYTICS", limit=20)
         
-        # Version selector
+        # Version selector with custom names and filenames
         if versions:
             st.subheader(f"📦 Seleção de Versão - {empresa_selecionada}")
             col1, col2 = st.columns([2, 1])
             
             with col1:
-                # Create options for version selector
-                version_options = [{"id": None, "label": "🟢 Versão Ativa (Atual)", "description": "Versão atualmente ativa"}]
-                for v in versions:
-                    status_icon = "🟢" if v['is_active'] else "⚪"
-                    version_options.append({
-                        "id": v['version_id'],
-                        "label": f"{status_icon} Versão {v['version_id']}",
-                        "description": f"{v['upload_date']} - {v.get('description', 'Sem descrição')}"
-                    })
+                # Create version options with custom names and filenames
+                version_options = ["Versão Ativa (mais recente)"]
+                version_mapping = {0: None}  # 0 = active version
                 
-                selected_version_idx = st.selectbox(
-                    "Escolha a versão:",
-                    range(len(version_options)),
-                    format_func=lambda x: version_options[x]["label"],
-                    key="version_selector_analytics",
-                    help="Selecione qual versão dos dados de análise você quer visualizar"
+                for i, v in enumerate(versions):
+                    display_name = v.get('description', '').strip()
+                    if not display_name:
+                        display_name = f"Versão {v['version_id']}"
+                    
+                    filename_info = f" - 📁 {v.get('arquivo_origem', 'N/A')}" if v.get('arquivo_origem') else ""
+                    option_text = f"{display_name} ({v['upload_date']}){filename_info}"
+                    
+                    version_options.append(option_text)
+                    version_mapping[i + 1] = v['version_id']
+                
+                selected_option = st.selectbox(
+                    "Escolha a versão dos dados:",
+                    options=range(len(version_options)),
+                    format_func=lambda x: version_options[x],
+                    help="Selecione uma versão específica ou use a versão ativa"
                 )
                 
-                selected_version_id = version_options[selected_version_idx]["id"]
+                selected_version_id = version_mapping[selected_option]
                 
-                # Show version info
-                st.info(f"📋 {version_options[selected_version_idx]['description']}")
+                if selected_version_id:
+                    st.info(f"📊 Carregando versão específica: {version_options[selected_option]}")
+                else:
+                    st.info("📊 Carregando versão ativa (mais recente)")
             
             with col2:
                 st.metric("📊 Versões Disponíveis", len(versions))
@@ -682,6 +688,15 @@ def show_tabela_geral(df, empresa="MINIPA"):
         st.info("Nenhum dado disponível para exibir")
         return
     
+    # Remove metadata columns from display
+    metadata_columns = ['data_upload', 'upload_version', 'version_id']
+    clean_df = df.copy()
+    
+    # Remove metadata columns if they exist
+    for col in metadata_columns:
+        if col in clean_df.columns:
+            clean_df = clean_df.drop(columns=[col])
+    
     # Search and filter controls
     col1, col2, col3 = st.columns([2, 1, 1])
     
@@ -690,7 +705,7 @@ def show_tabela_geral(df, empresa="MINIPA"):
     
     with col2:
         # Filter by stock coverage if available
-        if 'Estoque Cobertura' in df.columns:
+        if 'Estoque Cobertura' in clean_df.columns:
             coverage_filter = st.selectbox(
                 "📊 Filtrar por cobertura:",
                 ["Todos", "Críticos (≤1 mês)", "Alerta (1-3 meses)", "Saudáveis (>3 meses)"]
@@ -706,12 +721,15 @@ def show_tabela_geral(df, empresa="MINIPA"):
                 import io
                 from datetime import datetime
                 
+                # Prepare clean data for export (no metadata columns)
+                export_df = clean_df.copy()
+                
                 # Create a BytesIO buffer
                 buffer = io.BytesIO()
                 
-                # Write to Excel
-                with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                    df.to_excel(writer, sheet_name=f'{empresa}_Dados_Completos', index=False)
+                # Write to Excel using openpyxl (built into pandas)
+                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                    export_df.to_excel(writer, sheet_name=f'{empresa}_Dados_Completos', index=False)
                 
                 # Get the data
                 buffer.seek(0)
@@ -727,9 +745,23 @@ def show_tabela_geral(df, empresa="MINIPA"):
                 
             except Exception as e:
                 st.error(f"❌ Erro ao gerar Excel: {str(e)}")
+                st.info("💡 Tentando método alternativo...")
+                
+                # Fallback method using CSV
+                try:
+                    csv_data = export_df.to_csv(index=False)
+                    st.download_button(
+                        label="⬇️ Download CSV (alternativo)",
+                        data=csv_data,
+                        file_name=f"{empresa}_dados_completos_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                        mime="text/csv"
+                    )
+                    st.success("✅ Arquivo CSV preparado para download!")
+                except Exception as e2:
+                    st.error(f"❌ Erro no método alternativo: {str(e2)}")
     
     # Apply filters
-    filtered_df = df.copy()
+    filtered_df = clean_df.copy()
     
     # Search filter
     if search_term:
@@ -747,7 +779,7 @@ def show_tabela_geral(df, empresa="MINIPA"):
             filtered_df = filtered_df[filtered_df['Estoque Cobertura'] > 3]
     
     # Show results count
-    st.info(f"📊 Exibindo {len(filtered_df)} de {len(df)} produtos")
+    st.info(f"📊 Exibindo {len(filtered_df)} de {len(clean_df)} produtos")
     
     # Display the table
     if len(filtered_df) > 0:

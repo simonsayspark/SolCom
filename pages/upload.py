@@ -136,12 +136,21 @@ def show_data_upload():
                         st.write("**📅 Timeline de Compras:**")
                         for i, v in enumerate(versions_timeline[:5]):
                             status_icon = "🟢" if v['is_active'] else "⚪"
-                            col1, col2 = st.columns([4, 1])
+                            
+                            # Use custom description or fallback to version number
+                            display_name = v.get('description', '').strip()
+                            if not display_name:
+                                display_name = f"Versão {v['version_id']}"
+                            
+                            # Show filename if available
+                            filename_info = f" - 📁 {v.get('arquivo_origem', 'N/A')}" if v.get('arquivo_origem') else ""
+                            
+                            col1, col2 = st.columns([5, 1])
                             with col1:
-                                st.write(f"{status_icon} v{v['version_id']} - {v['upload_date']} - {v.get('description', 'Sem descrição')}")
+                                st.write(f"{status_icon} **{display_name}** - {v['upload_date']}{filename_info}")
                             with col2:
                                 if not v['is_active']:  # Can't delete active version
-                                    if st.button("🗑️", key=f"del_timeline_{i}", help="Deletar versão"):
+                                    if st.button("🗑️", key=f"del_timeline_{v['version_id']}_{i}", help="Deletar versão"):
                                         st.session_state[f"confirm_delete_timeline_{v['version_id']}"] = True
                                         st.rerun()
                                 else:
@@ -149,14 +158,14 @@ def show_data_upload():
                             
                             # Show confirmation dialog
                             if st.session_state.get(f"confirm_delete_timeline_{v['version_id']}", False):
-                                st.error(f"⚠️ Deletar v{v['version_id']}?")
+                                st.error(f"⚠️ Deletar {display_name}?")
                                 col1, col2 = st.columns(2)
                                 with col1:
                                     if st.button("✅ Confirmar", key=f"confirm_del_timeline_{v['version_id']}"):
                                         try:
                                             # Call the actual deletion function
                                             if delete_version(empresa_code, v['version_id'], "TIMELINE"):
-                                                st.success(f"✅ Versão v{v['version_id']} deletada!")
+                                                st.success(f"✅ {display_name} deletada!")
                                                 st.session_state[f"confirm_delete_timeline_{v['version_id']}"] = False
                                                 st.rerun()
                                             else:
@@ -172,12 +181,21 @@ def show_data_upload():
                         st.write("**📊 Análise de Estoque:**")
                         for i, v in enumerate(versions_analytics[:5]):
                             status_icon = "🟢" if v['is_active'] else "⚪"
-                            col1, col2 = st.columns([4, 1])
+                            
+                            # Use custom description or fallback to version number
+                            display_name = v.get('description', '').strip()
+                            if not display_name:
+                                display_name = f"Versão {v['version_id']}"
+                            
+                            # Show filename if available
+                            filename_info = f" - 📁 {v.get('arquivo_origem', 'N/A')}" if v.get('arquivo_origem') else ""
+                            
+                            col1, col2 = st.columns([5, 1])
                             with col1:
-                                st.write(f"{status_icon} v{v['version_id']} - {v['upload_date']} - {v.get('description', 'Sem descrição')}")
+                                st.write(f"{status_icon} **{display_name}** - {v['upload_date']}{filename_info}")
                             with col2:
                                 if not v['is_active']:  # Can't delete active version
-                                    if st.button("🗑️", key=f"del_analytics_{i}", help="Deletar versão"):
+                                    if st.button("🗑️", key=f"del_analytics_{v['version_id']}_{i}", help="Deletar versão"):
                                         st.session_state[f"confirm_delete_analytics_{v['version_id']}"] = True
                                         st.rerun()
                                 else:
@@ -185,14 +203,14 @@ def show_data_upload():
                             
                             # Show confirmation dialog
                             if st.session_state.get(f"confirm_delete_analytics_{v['version_id']}", False):
-                                st.error(f"⚠️ Deletar v{v['version_id']}?")
+                                st.error(f"⚠️ Deletar {display_name}?")
                                 col1, col2 = st.columns(2)
                                 with col1:
                                     if st.button("✅ Confirmar", key=f"confirm_del_analytics_{v['version_id']}"):
                                         try:
                                             # Call the actual deletion function
                                             if delete_version(empresa_code, v['version_id'], "ANALYTICS"):
-                                                st.success(f"✅ Versão v{v['version_id']} deletada!")
+                                                st.success(f"✅ {display_name} deletada!")
                                                 st.session_state[f"confirm_delete_analytics_{v['version_id']}"] = False
                                                 st.rerun()
                                             else:
@@ -210,11 +228,6 @@ def show_data_upload():
                     st.warning(f"Erro ao carregar versões: {str(e)}")
         
         with col2:
-            # if st.button("🔄 Testar Conexão", use_container_width=True):
-            #     if test_connection():
-            #         st.success("✅ Snowflake conectado!")
-            #     else:
-            #         st.error("❌ Erro na conexão")
             st.info("🔗 Snowflake (monitoring disabled)")
     
     # File upload section
