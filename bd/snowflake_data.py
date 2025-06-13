@@ -7,7 +7,7 @@ import streamlit as st
 import pandas as pd
 from .snowflake_connection import get_snowflake_connection
 
-@st.cache_data(ttl=1800, show_spinner=False)  # 30 minutes - shorter cache for data existence
+@st.cache_data(ttl=21600, show_spinner=False)  # 6 hours - optimized cache for data existence
 def check_data_exists(empresa, table_type, version_id=None):
     """
     Cache data existence checks to avoid COUNT(*) queries on every call

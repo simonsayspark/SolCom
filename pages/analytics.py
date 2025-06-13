@@ -199,11 +199,12 @@ def load_page():
         st.info(f"📊 **Análise para {empresa_selecionada}** | Versão: {f'v{selected_version_id}' if 'selected_version_id' in locals() and selected_version_id else 'Ativa'}")
         
         # Show analytics tabs with company context
-        tab1, tab2, tab3, tab4 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
             f"📋 Resumo - {empresa_selecionada}", 
             f"🚨 Lista de Compras - {empresa_selecionada}", 
             f"📊 Dashboards - {empresa_selecionada}", 
-            f"📞 Contatos Urgentes - {empresa_selecionada}"
+            f"📞 Contatos Urgentes - {empresa_selecionada}",
+            f"📋 Tabela Geral - {empresa_selecionada}"
         ])
         
         with tab1:
@@ -217,6 +218,9 @@ def load_page():
         
         with tab4:
             show_urgent_contacts(produtos_existentes, empresa_selecionada)
+        
+        with tab5:
+            show_tabela_geral(df, empresa_selecionada)
 
 def show_executive_summary(df, produtos_novos, produtos_existentes, empresa="MINIPA"):
     """Resumo executivo dos dados por empresa"""
@@ -667,4 +671,156 @@ def show_urgent_contacts(produtos_existentes, empresa="MINIPA"):
     
     with col3:
         if st.button("📊 Exportar Lista", use_container_width=True):
-            st.info("Lista de produtos críticos exportada") 
+            st.info("Lista de produtos críticos exportada")
+
+def show_tabela_geral(df, empresa="MINIPA"):
+    """Show complete data table with search, filter and export functionality"""
+    
+    st.subheader(f"📋 Tabela Geral - {empresa}")
+    
+    if df is None or len(df) == 0:
+        st.info("Nenhum dado disponível para exibir")
+        return
+    
+    # Search and filter controls
+    col1, col2, col3 = st.columns([2, 1, 1])
+    
+    with col1:
+        search_term = st.text_input("🔍 Buscar produto:", placeholder="Digite o nome do produto...")
+    
+    with col2:
+        # Filter by stock coverage if available
+        if 'Estoque Cobertura' in df.columns:
+            coverage_filter = st.selectbox(
+                "📊 Filtrar por cobertura:",
+                ["Todos", "Críticos (≤1 mês)", "Alerta (1-3 meses)", "Saudáveis (>3 meses)"]
+            )
+        else:
+            coverage_filter = "Todos"
+    
+    with col3:
+        # Export button
+        if st.button("📥 Exportar Excel", use_container_width=True):
+            # Create Excel export
+            try:
+                import io
+                from datetime import datetime
+                
+                # Create a BytesIO buffer
+                buffer = io.BytesIO()
+                
+                # Write to Excel
+                with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                    df.to_excel(writer, sheet_name=f'{empresa}_Dados_Completos', index=False)
+                
+                # Get the data
+                buffer.seek(0)
+                
+                # Download button
+                st.download_button(
+                    label="⬇️ Download Excel",
+                    data=buffer.getvalue(),
+                    file_name=f"{empresa}_dados_completos_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+                st.success("✅ Arquivo Excel preparado para download!")
+                
+            except Exception as e:
+                st.error(f"❌ Erro ao gerar Excel: {str(e)}")
+    
+    # Apply filters
+    filtered_df = df.copy()
+    
+    # Search filter
+    if search_term:
+        if 'Produto' in filtered_df.columns:
+            mask = filtered_df['Produto'].astype(str).str.contains(search_term, case=False, na=False)
+            filtered_df = filtered_df[mask]
+    
+    # Coverage filter
+    if coverage_filter != "Todos" and 'Estoque Cobertura' in filtered_df.columns:
+        if coverage_filter == "Críticos (≤1 mês)":
+            filtered_df = filtered_df[filtered_df['Estoque Cobertura'] <= 1]
+        elif coverage_filter == "Alerta (1-3 meses)":
+            filtered_df = filtered_df[(filtered_df['Estoque Cobertura'] > 1) & (filtered_df['Estoque Cobertura'] <= 3)]
+        elif coverage_filter == "Saudáveis (>3 meses)":
+            filtered_df = filtered_df[filtered_df['Estoque Cobertura'] > 3]
+    
+    # Show results count
+    st.info(f"📊 Exibindo {len(filtered_df)} de {len(df)} produtos")
+    
+    # Display the table
+    if len(filtered_df) > 0:
+        # Format numeric columns for better display
+        display_df = filtered_df.copy()
+        
+        # Round numeric columns
+        numeric_columns = display_df.select_dtypes(include=[np.number]).columns
+        for col in numeric_columns:
+            if col in ['Estoque', 'Consumo 6 Meses', 'Média 6 Meses']:
+                display_df[col] = display_df[col].round(0).astype(int)
+            elif col in ['Estoque Cobertura']:
+                display_df[col] = display_df[col].round(2)
+            else:
+                display_df[col] = display_df[col].round(1)
+        
+        # Show the dataframe with pagination
+        st.dataframe(
+            display_df,
+            use_container_width=True,
+            height=600,
+            column_config={
+                "Produto": st.column_config.TextColumn("Produto", width="medium"),
+                "Estoque": st.column_config.NumberColumn("Estoque", format="%d"),
+                "Consumo 6 Meses": st.column_config.NumberColumn("Consumo 6M", format="%d"),
+                "Média 6 Meses": st.column_config.NumberColumn("Média 6M", format="%d"),
+                "Estoque Cobertura": st.column_config.NumberColumn("Cobertura", format="%.2f meses"),
+                "MOQ": st.column_config.NumberColumn("MOQ", format="%d"),
+                "UltimoFornecedor": st.column_config.TextColumn("Último Fornecedor", width="medium")
+            }
+        )
+        
+        # Summary statistics
+        st.subheader("📈 Estatísticas Resumidas")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            if 'Estoque' in filtered_df.columns:
+                total_estoque = filtered_df['Estoque'].sum()
+                st.metric("📦 Estoque Total", f"{total_estoque:,.0f}")
+        
+        with col2:
+            if 'Média 6 Meses' in filtered_df.columns:
+                media_consumo = filtered_df['Média 6 Meses'].mean()
+                st.metric("📊 Consumo Médio", f"{media_consumo:.1f}")
+        
+        with col3:
+            if 'Estoque Cobertura' in filtered_df.columns:
+                cobertura_media = filtered_df['Estoque Cobertura'].mean()
+                st.metric("⏱️ Cobertura Média", f"{cobertura_media:.1f} meses")
+        
+        with col4:
+            if 'MOQ' in filtered_df.columns:
+                moq_medio = filtered_df['MOQ'].mean()
+                st.metric("📋 MOQ Médio", f"{moq_medio:.0f}")
+        
+        # Show distribution by supplier if available
+        if 'UltimoFornecedor' in filtered_df.columns:
+            st.subheader("🏭 Distribuição por Fornecedor")
+            
+            supplier_counts = filtered_df['UltimoFornecedor'].value_counts()
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.bar_chart(supplier_counts.head(10))
+            
+            with col2:
+                st.dataframe(
+                    supplier_counts.reset_index().rename(columns={'index': 'Fornecedor', 'UltimoFornecedor': 'Produtos'}),
+                    use_container_width=True
+                )
+    
+    else:
+        st.warning("🔍 Nenhum produto encontrado com os filtros aplicados") 

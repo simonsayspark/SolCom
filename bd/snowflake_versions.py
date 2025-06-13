@@ -279,4 +279,81 @@ def get_active_version(empresa, table_type):
             
     except Exception as e:
         st.error(f"❌ Erro ao buscar versão ativa: {str(e)}")
-        return None 
+        return None
+
+def delete_version(empresa, version_id, table_type):
+    """
+    Delete a specific version (cannot delete active version)
+    Returns True if successful, False otherwise
+    """
+    conn = get_snowflake_connection()
+    if not conn:
+        return False
+        
+    try:
+        cursor = conn.cursor()
+        
+        # First check if this version is active
+        cursor.execute("""
+        SELECT is_active FROM CONFIG.VERSIONS 
+        WHERE empresa = %s AND version_id = %s AND table_type = %s
+        """, (empresa, version_id, table_type))
+        
+        result = cursor.fetchone()
+        if not result:
+            st.error("❌ Versão não encontrada")
+            cursor.close()
+            conn.close()
+            return False
+            
+        if result[0]:  # is_active = True
+            st.error("❌ Não é possível deletar a versão ativa")
+            cursor.close()
+            conn.close()
+            return False
+        
+        # Get upload_version for data deletion
+        cursor.execute("""
+        SELECT upload_version FROM CONFIG.VERSIONS 
+        WHERE empresa = %s AND version_id = %s AND table_type = %s
+        """, (empresa, version_id, table_type))
+        
+        upload_version_result = cursor.fetchone()
+        if not upload_version_result:
+            st.error("❌ Upload version não encontrada")
+            cursor.close()
+            conn.close()
+            return False
+            
+        upload_version = upload_version_result[0]
+        
+        # Delete data from appropriate table
+        if table_type == "TIMELINE":
+            cursor.execute("""
+            DELETE FROM ESTOQUE.PRODUTOS 
+            WHERE empresa = %s AND upload_version = %s AND table_type = %s
+            """, (empresa, upload_version, table_type))
+        elif table_type == "ANALYTICS":
+            cursor.execute("""
+            DELETE FROM ESTOQUE.ANALYTICS_DATA 
+            WHERE empresa = %s AND upload_version = %s
+            """, (empresa, upload_version))
+        
+        # Delete version record
+        cursor.execute("""
+        DELETE FROM CONFIG.VERSIONS 
+        WHERE empresa = %s AND version_id = %s AND table_type = %s
+        """, (empresa, version_id, table_type))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        # Clear cache to refresh data
+        get_upload_versions.clear()
+        
+        return True
+        
+    except Exception as e:
+        st.error(f"❌ Erro ao deletar versão: {str(e)}")
+        return False 

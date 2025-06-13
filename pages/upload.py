@@ -73,7 +73,7 @@ def show_data_upload():
     # Import Snowflake functions
     try:
         from bd.snowflake_config import (upload_excel_to_snowflake, load_data_with_history, 
-                                        load_analytics_data, test_connection, get_upload_versions)
+                                        load_analytics_data, test_connection, get_upload_versions, delete_version)
         snowflake_available = True
     except ImportError:
         snowflake_available = False
@@ -154,10 +154,13 @@ def show_data_upload():
                                 with col1:
                                     if st.button("✅ Confirmar", key=f"confirm_del_timeline_{v['version_id']}"):
                                         try:
-                                            # Here you would implement the actual deletion
-                                            st.success(f"✅ Versão v{v['version_id']} deletada!")
-                                            st.session_state[f"confirm_delete_timeline_{v['version_id']}"] = False
-                                            st.rerun()
+                                            # Call the actual deletion function
+                                            if delete_version(empresa_code, v['version_id'], "TIMELINE"):
+                                                st.success(f"✅ Versão v{v['version_id']} deletada!")
+                                                st.session_state[f"confirm_delete_timeline_{v['version_id']}"] = False
+                                                st.rerun()
+                                            else:
+                                                st.error("❌ Falha ao deletar versão")
                                         except Exception as e:
                                             st.error(f"❌ Erro ao deletar: {str(e)}")
                                 with col2:
@@ -187,10 +190,13 @@ def show_data_upload():
                                 with col1:
                                     if st.button("✅ Confirmar", key=f"confirm_del_analytics_{v['version_id']}"):
                                         try:
-                                            # Here you would implement the actual deletion
-                                            st.success(f"✅ Versão v{v['version_id']} deletada!")
-                                            st.session_state[f"confirm_delete_analytics_{v['version_id']}"] = False
-                                            st.rerun()
+                                            # Call the actual deletion function
+                                            if delete_version(empresa_code, v['version_id'], "ANALYTICS"):
+                                                st.success(f"✅ Versão v{v['version_id']} deletada!")
+                                                st.session_state[f"confirm_delete_analytics_{v['version_id']}"] = False
+                                                st.rerun()
+                                            else:
+                                                st.error("❌ Falha ao deletar versão")
                                         except Exception as e:
                                             st.error(f"❌ Erro ao deletar: {str(e)}")
                                 with col2:

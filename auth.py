@@ -38,7 +38,7 @@ def create_default_users():
     """Create default users if no auth file exists."""
     default_users = {
         "minipa": {
-            "password": hash_password("{878460@}"),
+            "password": hash_password("1980"),
             "role": "admin",
             "name": "MINIPA Admin",
             "department": "Administração",
