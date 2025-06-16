@@ -54,6 +54,63 @@ def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
             df_full = pd.read_excel(uploaded_file, sheet_name=best_sheet, header=best_header_row)
             df_full = df_full.dropna(how='all')  # Remove completely empty rows
             
+            # 🔧 CRITICAL FIX: Apply column renaming BEFORE upload to fix zero prices issue
+            st.info("🔄 Padronizando nomes das colunas...")
+            
+            # Column renaming dictionary (from timeline.py)
+            colunas_rename = {
+                # Price columns - CRITICAL for fixing zero prices
+                'Preço FOB\nUnitário': 'Preco_Unitario',
+                'Preço FOB Unitário': 'Preco_Unitario', 
+                'Preco FOB Unitario': 'Preco_Unitario',
+                'Preço Unitário': 'Preco_Unitario',
+                'Preço FOB': 'Preco_Unitario',
+                'Preço Unit.': 'Preco_Unitario',
+                'Price': 'Preco_Unitario',
+                
+                # Other standard columns
+                'Fornecedor\n': 'Fornecedor',
+                'QTD\n': 'QTD',
+                'Modelo\n': 'Modelo',
+                'Estoque Total\n': 'Estoque_Total',
+                'Estoque\nTotal': 'Estoque_Total',
+                'In Transit\n': 'In_Transit',
+                'In\nTransit': 'In_Transit',
+                'Avg Sales\n': 'Vendas_Medias',
+                'Avg Sales': 'Vendas_Medias',
+                'Vendas Médias': 'Vendas_Medias',
+                'CBM\n': 'CBM',
+                'MOQ\n': 'MOQ',
+                
+                # Analytics specific columns
+                'Estoque Cobertura': 'Estoque_Cobertura',
+                'Consumo 6 Meses': 'Consumo_6_Meses', 
+                'Média 6 Meses': 'Media_6_Meses',
+                'UltimoFor': 'ultimo_fornecedor',
+                'UltimoFornecedor': 'ultimo_fornecedor'
+            }
+            
+            # Apply renaming
+            original_columns = list(df_full.columns)
+            df_full = df_full.rename(columns=colunas_rename)
+            renamed_columns = list(df_full.columns)
+            
+            # Show what was renamed
+            changes_made = []
+            for old_col, new_col in zip(original_columns, renamed_columns):
+                if old_col != new_col:
+                    changes_made.append(f"'{old_col}' → '{new_col}'")
+            
+            if changes_made:
+                st.success(f"✅ Colunas padronizadas: {len(changes_made)} alterações")
+                with st.expander("📋 Ver alterações nas colunas"):
+                    for change in changes_made:
+                        st.write(f"• {change}")
+                        
+                # Show critical price column fix
+                if any('Preco_Unitario' in change for change in changes_made):
+                    st.success("🔧 **CORREÇÃO CRÍTICA**: Coluna de preços padronizada - isso deve resolver o problema de preços zero!")
+            
             st.success(f"✅ Detectado automaticamente: planilha '{best_sheet}', linha {best_header_row + 1}")
             return df_full, best_sheet, best_header_row
         else:
