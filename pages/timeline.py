@@ -214,24 +214,32 @@ def calcular_timeline(df, meta_meses=6):
         
         cbm = pd.to_numeric(row.get('CBM', 0), errors='coerce') or 0
         
-        # 🔧 FIX: Get Previsão Total directly from Excel if available - with debugging
+        # 🔧 FIX: Get Previsão Total directly from Excel - try exact column names first
         excel_previsao_total = 0
-        previsao_columns = ['Previsao_Total_New_Pos', 'Previsão Total com New PO', 'Previsão Total com New Pos', 'Previsão Total']
-
-        # Try different column variations
-        for col in previsao_columns:
-            if col in row and pd.notna(row[col]):
-                excel_previsao_total = pd.to_numeric(row[col], errors='coerce') or 0
-                if excel_previsao_total > 0:
-                    break
-
-        # Also check exact column names in dataframe
+        
+        # First try the exact column name from the image
+        if 'Previsão Total com New PO' in row and pd.notna(row['Previsão Total com New PO']):
+            excel_previsao_total = pd.to_numeric(row['Previsão Total com New PO'], errors='coerce') or 0
+        # Then try the mapped column name
+        elif 'Previsao_Total_New_Pos' in row and pd.notna(row['Previsao_Total_New_Pos']):
+            excel_previsao_total = pd.to_numeric(row['Previsao_Total_New_Pos'], errors='coerce') or 0
+        # Try other variations
+        else:
+            previsao_columns = ['Previsão Total com New Pos', 'Previsão\nTotal com New PO', 'Previsão Total', 'Previsao Total']
+            for col in previsao_columns:
+                if col in row and pd.notna(row[col]):
+                    excel_previsao_total = pd.to_numeric(row[col], errors='coerce') or 0
+                    if excel_previsao_total > 0:
+                        break
+        
+        # Also check for any column containing "previsao" or "previsão" - make sure we don't miss it
         if excel_previsao_total == 0:
             for col in df.columns:
-                if 'previsao' in col.lower() or 'previsão' in col.lower():
+                if ('previsao' in col.lower() or 'previsão' in col.lower()) and ('total' in col.lower()):
                     if pd.notna(row[col]):
-                        excel_previsao_total = pd.to_numeric(row[col], errors='coerce') or 0
-                        if excel_previsao_total > 0:
+                        test_value = pd.to_numeric(row[col], errors='coerce') or 0
+                        if test_value > 0:
+                            excel_previsao_total = test_value
                             break
         
 
@@ -256,11 +264,11 @@ def calcular_timeline(df, meta_meses=6):
             # CBM should be the total CBM value from Excel, not CBM per unit * quantity
             cbm_pedido = cbm if cbm > 0 else (qtd_otimizada * 0.01)  # fallback to small CBM if zero
             
-            # 🔧 FIX: Use Excel Previsão Total value directly if available, otherwise calculate
-            if excel_previsao_total > 0:
+            # 🔧 FIX: Use Excel Previsão Total value directly if available (even if 0), otherwise calculate
+            if 'Previsão Total com New PO' in row or 'Previsao_Total_New_Pos' in row or excel_previsao_total != 0:
                 previsao_total_new_pos = excel_previsao_total
             else:
-                # Fallback calculation if Excel doesn't have the value
+                # Fallback calculation if Excel doesn't have the value at all
                 previsao_total_new_pos = qtd_otimizada / vendas_mensais if vendas_mensais > 0 else 0
             
             if meses_ate_zerar <= 1:
@@ -302,8 +310,11 @@ def calcular_timeline(df, meta_meses=6):
             # 🔧 FIX: Use Excel CBM value directly for monitoring products too
             cbm_pedido = cbm if cbm > 0 else (qtd_otimizada * 0.01)  # fallback
             
-            # 🔧 FIX: Use Excel Previsão Total if available for monitoring products
-            previsao_total_new_pos = excel_previsao_total if excel_previsao_total > 0 else 0
+            # 🔧 FIX: Use Excel Previsão Total if available for monitoring products (even if 0)
+            if 'Previsão Total com New PO' in row or 'Previsao_Total_New_Pos' in row or excel_previsao_total != 0:
+                previsao_total_new_pos = excel_previsao_total
+            else:
+                previsao_total_new_pos = 0
             
             cor = '#87CEEB'  # Light blue
             urgencia = 'MONITORAR'
@@ -330,7 +341,11 @@ def calcular_timeline(df, meta_meses=6):
                 qtd_otimizada = excel_qtd if excel_qtd > 0 else (moq if moq > 0 else 1)
                 valor_pedido = excel_qtd * preco if excel_qtd > 0 else preco
                 cbm_pedido = cbm if cbm > 0 else 0.01
-                previsao_total_new_pos = excel_previsao_total if excel_previsao_total > 0 else 0
+                # 🔧 FIX: Use Excel Previsão Total for REVISAR products (even if 0)
+                if 'Previsão Total com New PO' in row or 'Previsao_Total_New_Pos' in row or excel_previsao_total != 0:
+                    previsao_total_new_pos = excel_previsao_total
+                else:
+                    previsao_total_new_pos = 0
                 
                 timeline_data.append({
                     'Produto': produto,
@@ -475,7 +490,7 @@ def show_timeline_visual(timeline_data, empresa_selecionada, filtro):
     
     col1, col2 = st.columns(2)
     with col1:
-        st.metric(f"💰 Investimento Total", f"R$ {valor_total:,.0f}")
+        st.metric(f"💰 Investimento Total", f"R$ {valor_total:,.2f}")  # 🔧 FIX: Show 2 decimal places
     with col2:
         st.metric(f"📦 CBM Total", f"{cbm_total:.1f} m³")
     
@@ -523,7 +538,7 @@ def show_purchase_planning(timeline_data, empresa_selecionada, filtro):
     total_cbm = sum(item['CBM_Pedido'] for item in filtered_data)
     suppliers = len(set(item['Fornecedor'] for item in filtered_data))
     
-    col1.metric("💰 Valor Total", f"R$ {total_value:,.0f}")
+    col1.metric("💰 Valor Total", f"R$ {total_value:,.2f}")  # 🔧 FIX: Show 2 decimal places
     col2.metric("🔴 Itens Críticos", critical_items)
     col3.metric("📦 CBM Total", f"{total_cbm:.1f} m³")
     col4.metric("🏭 Fornecedores", suppliers)
@@ -583,7 +598,7 @@ def show_purchase_planning(timeline_data, empresa_selecionada, filtro):
             'Dias Restantes': [item['Dias_Restantes'] for item in display_data],
             'MOQ': [f"{item['MOQ']:.0f}" for item in display_data],
             'Preço Unit. (R$)': [f"{item['Preco_Unitario']:.2f}" for item in display_data],
-            'Investimento (R$)': [f"{item['Valor_Pedido']:,.0f}" for item in display_data],
+            'Investimento (R$)': [f"{item['Valor_Pedido']:,.2f}" for item in display_data],  # 🔧 FIX: Show 2 decimal places instead of rounding
             'CBM': [f"{item['CBM_Pedido']:.2f}" for item in display_data],
             'Cobertura (meses)': [f"{item['Previsao_Total_New_Pos']:.1f}" for item in display_data],
             'Ação': [get_action_recommendation(item['Urgencia'], item['Dias_Restantes']) for item in display_data]
@@ -614,7 +629,7 @@ def show_purchase_planning(timeline_data, empresa_selecionada, filtro):
             
             col1, col2, col3 = st.columns(3)
             col1.metric("📦 Itens Selecionados", len(selected_items))
-            col2.metric("💰 Valor Total", f"R$ {selected_value:,.0f}")
+            col2.metric("💰 Valor Total", f"R$ {selected_value:,.2f}")  # 🔧 FIX: Show 2 decimal places
             col3.metric("🏭 Fornecedores", selected_suppliers)
             
             # Group by supplier
@@ -628,9 +643,9 @@ def show_purchase_planning(timeline_data, empresa_selecionada, filtro):
             # Display grouped by supplier
             st.markdown("**📋 Agrupado por Fornecedor:**")
             for supplier, items in supplier_groups.items():
-                with st.expander(f"🏭 {supplier} ({len(items)} itens - R$ {sum(x['Valor_Pedido'] for x in items):,.0f})"):
+                with st.expander(f"🏭 {supplier} ({len(items)} itens - R$ {sum(x['Valor_Pedido'] for x in items):,.2f})"):  # 🔧 FIX: Show 2 decimal places
                     for item in items:
-                        st.write(f"• {item['Produto']} - {item['MOQ']:.0f} un. - R$ {item['Valor_Pedido']:,.0f}")
+                        st.write(f"• {item['Produto']} - {item['MOQ']:.0f} un. - R$ {item['Valor_Pedido']:,.2f}")  # 🔧 FIX: Show 2 decimal places
             
             # Export functionality
             col1, col2 = st.columns(2)
