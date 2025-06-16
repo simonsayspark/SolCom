@@ -514,95 +514,22 @@ def show_purchase_planning(timeline_data, empresa_selecionada, filtro):
             'Ação': [get_action_recommendation(item['Urgencia'], item['Dias_Restantes']) for item in display_data]
         })
         
-        # 🔧 FIX: Initialize session state for selections
+        # 🔧 FIX: Initialize session state for selections  
         if 'purchase_selections' not in st.session_state:
             st.session_state.purchase_selections = {}
+        # Add counter for forcing checkbox refresh
+        if 'clear_counter' not in st.session_state:
+            st.session_state.clear_counter = 0
 
-        # Clear selection button BEFORE the table
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.markdown("**Selecione os itens para gerar pedido de compra:**")
-        with col2:
-            if st.button("🔄 Limpar Seleção", use_container_width=True, key="clear_selection_btn"):
-                st.session_state.purchase_selections = {}  # Clear all selections
-                st.rerun()
-        
-        # Add table header
-        header_cols = st.columns([0.5, 2, 1.5, 1, 1, 1, 1.2, 0.8, 1, 1.5, 1.2])
-        with header_cols[0]:
-            st.markdown("**Sel**")
-        with header_cols[1]:
-            st.markdown("**Produto**")
-        with header_cols[2]:
-            st.markdown("**Fornecedor**")
-        with header_cols[3]:
-            st.markdown("**Prioridade**")
-        with header_cols[4]:
-            st.markdown("**Dias Rest.**")
-        with header_cols[5]:
-            st.markdown("**MOQ**")
-        with header_cols[6]:
-            st.markdown("**Preço Unit.**")
-        with header_cols[7]:
-            st.markdown("**Invest.**")
-        with header_cols[8]:
-            st.markdown("**CBM**")
-        with header_cols[9]:
-            st.markdown("**Cobertura**")
-        with header_cols[10]:
-            st.markdown("**Ação**")
-        
-        st.divider()
-        
-        # 🔧 FIX: Add selection checkboxes with session state persistence
+        # 🔧 FIX: Calculate selected items first to show Gerador above table
         selected_items = []
-        for i, (idx, row) in enumerate(display_df.iterrows()):
-            cols = st.columns([0.5, 2, 1.5, 1, 1, 1, 1.2, 0.8, 1, 1.5, 1.2])
-            
-            with cols[0]:
-                # Create unique identifier for this item
-                item_id = f"{display_data[i]['Produto']}_{display_data[i]['Fornecedor']}"
-                
-                # Get previous state or default to False
-                default_value = st.session_state.purchase_selections.get(item_id, False)
-                
-                # Create checkbox with session state persistence
-                selected = st.checkbox(
-                    "Sel", 
-                    value=default_value,
-                    key=f"select_{i}_{item_id[:20]}", 
-                    label_visibility="collapsed"
-                )
-                
-                # Update session state
-                st.session_state.purchase_selections[item_id] = selected
-                
-                # Add to selected items if checked
-                if selected:
-                    selected_items.append(display_data[i])
-            
-            with cols[1]:
-                st.write(row['Produto'])
-            with cols[2]:
-                st.write(row['Fornecedor'])
-            with cols[3]:
-                st.write(row['Prioridade'])
-            with cols[4]:
-                st.write(row['Dias Restantes'])
-            with cols[5]:
-                st.write(row['MOQ'])
-            with cols[6]:
-                st.write(row['Preço Unit. (R$)'])
-            with cols[7]:
-                st.write(row['Investimento (R$)'])
-            with cols[8]:
-                st.write(row['CBM'])
-            with cols[9]:
-                st.write(row['Cobertura (meses)'])
-            with cols[10]:
-                st.write(row['Ação'])
-        
-        # Purchase Order Generator
+        # Get current selections from session state
+        for i, item in enumerate(display_data):
+            item_id = f"{item['Produto']}_{item['Fornecedor']}"
+            if st.session_state.purchase_selections.get(item_id, False):
+                selected_items.append(item)
+
+        # 🛒 GERADOR DE PEDIDO DE COMPRA - MOVED ABOVE TABLE
         if selected_items:
             st.subheader("🛒 Gerador de Pedido de Compra")
             
@@ -657,6 +584,101 @@ def show_purchase_planning(timeline_data, empresa_selecionada, filtro):
             
             with col2:
                 st.info(f"📋 {len(selected_items)} itens selecionados")
+            
+            st.divider()
+
+        # Clear selection button BEFORE the table
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.markdown("**Selecione os itens para gerar pedido de compra:**")
+        with col2:
+            # 🔧 FIX: Better clear button with forced refresh
+            if st.button("🔄 Limpar Seleção", use_container_width=True, key="clear_selection_btn"):
+                # Clear all purchase selections completely
+                st.session_state.purchase_selections = {}
+                # Increment counter to force new checkbox keys
+                st.session_state.clear_counter += 1
+                # Force immediate refresh to clear all checkboxes
+                st.rerun()
+        
+        # Add table header
+        header_cols = st.columns([0.5, 2, 1.5, 1, 1, 1, 1.2, 0.8, 1, 1.5, 1.2])
+        with header_cols[0]:
+            st.markdown("**Sel**")
+        with header_cols[1]:
+            st.markdown("**Produto**")
+        with header_cols[2]:
+            st.markdown("**Fornecedor**")
+        with header_cols[3]:
+            st.markdown("**Prioridade**")
+        with header_cols[4]:
+            st.markdown("**Dias Rest.**")
+        with header_cols[5]:
+            st.markdown("**MOQ**")
+        with header_cols[6]:
+            st.markdown("**Preço Unit.**")
+        with header_cols[7]:
+            st.markdown("**Invest.**")
+        with header_cols[8]:
+            st.markdown("**CBM**")
+        with header_cols[9]:
+            st.markdown("**Cobertura**")
+        with header_cols[10]:
+            st.markdown("**Ação**")
+        
+        st.divider()
+        
+        # 🔧 FIX: Add selection checkboxes with session state persistence
+        selected_items = []
+        for i, (idx, row) in enumerate(display_df.iterrows()):
+            cols = st.columns([0.5, 2, 1.5, 1, 1, 1, 1.2, 0.8, 1, 1.5, 1.2])
+            
+            with cols[0]:
+                # Create unique identifier for this item
+                item_id = f"{display_data[i]['Produto']}_{display_data[i]['Fornecedor']}"
+                
+                # Get previous state or default to False
+                default_value = st.session_state.purchase_selections.get(item_id, False)
+                
+                # 🔧 FIX: Create checkbox with better unique key to prevent conflicts
+                # Include clear counter to force refresh when clearing
+                checkbox_key = f"purchase_checkbox_{i}_{hash(item_id) % 10000}_{st.session_state.clear_counter}"
+                selected = st.checkbox(
+                    "Sel", 
+                    value=default_value,
+                    key=checkbox_key, 
+                    label_visibility="collapsed"
+                )
+                
+                # Update session state
+                st.session_state.purchase_selections[item_id] = selected
+                
+                # Add to selected items if checked
+                if selected:
+                    selected_items.append(display_data[i])
+            
+            with cols[1]:
+                st.write(row['Produto'])
+            with cols[2]:
+                st.write(row['Fornecedor'])
+            with cols[3]:
+                st.write(row['Prioridade'])
+            with cols[4]:
+                st.write(row['Dias Restantes'])
+            with cols[5]:
+                st.write(row['MOQ'])
+            with cols[6]:
+                st.write(row['Preço Unit. (R$)'])
+            with cols[7]:
+                st.write(row['Investimento (R$)'])
+            with cols[8]:
+                st.write(row['CBM'])
+            with cols[9]:
+                st.write(row['Cobertura (meses)'])
+            with cols[10]:
+                st.write(row['Ação'])
+        
+        # Purchase Order Generator moved above table - this duplicate section removed
     
     else:
         st.info("📋 Nenhum item encontrado para os filtros selecionados.")
