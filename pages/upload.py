@@ -93,13 +93,7 @@ def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
                 'Previsão Total com New PO': 'Previsao_Total_New_Pos',
                 'Previsão Total com New Pos': 'Previsao_Total_New_Pos',
                 'Previsão Total': 'Previsao_Total_New_Pos',
-                'Previsao Total': 'Previsao_Total_New_Pos',
-                
-                # 🔧 SIMPLIFIED: Add Preço FOB TOTAL column mapping
-                'Preço FOB TOTAL': 'Preco_FOB_TOTAL',
-                'Preço FOB\nTOTAL': 'Preco_FOB_TOTAL',
-                'Preco FOB TOTAL': 'Preco_FOB_TOTAL',
-                'PRECO FOB TOTAL': 'Preco_FOB_TOTAL'
+                'Previsao Total': 'Previsao_Total_New_Pos'
             }
             
             # Apply renaming

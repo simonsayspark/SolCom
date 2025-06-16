@@ -100,13 +100,7 @@ def carregar_dados(uploaded_file=None):
             'Avg Sales\n': 'Vendas_Medias',
             'Avg Sales': 'Vendas_Medias',
             'Previsão Total com New PO': 'Previsao_Total_New_Pos',
-            'Previsão Total com New Pos': 'Previsao_Total_New_Pos',
-            
-            # 🔧 SIMPLIFIED: Add Preço FOB TOTAL column mapping
-            'Preço FOB TOTAL': 'Preco_FOB_TOTAL',
-            'Preço FOB\nTOTAL': 'Preco_FOB_TOTAL',
-            'Preco FOB TOTAL': 'Preco_FOB_TOTAL',
-            'PRECO FOB TOTAL': 'Preco_FOB_TOTAL'
+            'Previsão Total com New Pos': 'Previsao_Total_New_Pos'
         })
         
         return df
@@ -187,43 +181,36 @@ def calcular_timeline(df, meta_meses=6):
         vendas_mensais = pd.to_numeric(row.get('Vendas_Medias', 0), errors='coerce') or 0
         moq = pd.to_numeric(row.get('MOQ', 0), errors='coerce') or 0
         
-        # 🔧 SIMPLIFIED: Get Excel "Preço FOB TOTAL" directly - no calculations needed
-        excel_fob_total = 0
-        fob_total_columns = [
-            'Preço FOB TOTAL',          # Excel direct
-            'Preco_FOB_TOTAL',          # Mapped column
-            'Preço FOB\nTOTAL',         # Excel with newline
-            'PRECO_FOB_TOTAL',          # Database column
-            'Preco FOB TOTAL'           # Alternative spacing
-        ]
+        # 🔧 FIX: Get Excel QTD for correct total value calculation
+        excel_qtd = pd.to_numeric(row.get('QTD', 0), errors='coerce') or 0
         
-        for col in fob_total_columns:
-            if col in row and pd.notna(row[col]):
-                excel_fob_total = pd.to_numeric(row[col], errors='coerce') or 0
-                if excel_fob_total > 0:
-                    break
-        
-        # Also search for any column containing "fob" and "total"
-        if excel_fob_total == 0:
-            for col in df.columns:
-                if 'fob' in col.lower() and 'total' in col.lower():
-                    if pd.notna(row[col]):
-                        excel_fob_total = pd.to_numeric(row[col], errors='coerce') or 0
-                        if excel_fob_total > 0:
-                            break
-        
-        # Keep unit price for display purposes only
+        # Try multiple column name variations for price
         preco = 0
         price_columns = [
             'Preco_Unitario',           # Standard renamed column
+            '"Preco_Unitario"',         # Snowflake quoted column  
             'Preço FOB Unitário',       # Excel direct
             'Preço FOB\nUnitário',      # Excel with newline
+            'preco_unitario',           # Database column
+            'Preco_FOB_Unitario'        # Alternative naming
         ]
         for col in price_columns:
             if col in row and pd.notna(row[col]):
                 preco = pd.to_numeric(row[col], errors='coerce') or 0
                 if preco > 0:
                     break
+        
+        # Also try accessing by exact column names from the dataframe
+        if preco == 0:
+            for col in df.columns:
+                if 'preco' in col.lower() and ('unit' in col.lower() or 'fob' in col.lower()):
+                    if pd.notna(row[col]):
+                        try:
+                            preco = pd.to_numeric(row[col], errors='coerce') or 0
+                            if preco > 0:
+                                break
+                        except Exception as e:
+                            continue  # Skip problematic columns
         
         cbm = pd.to_numeric(row.get('CBM', 0), errors='coerce') or 0
         
@@ -270,8 +257,8 @@ def calcular_timeline(df, meta_meses=6):
             
             qtd_otimizada = otimizar_quantidade_moq(vendas_mensais, moq, meta_meses)
             
-            # 🔧 SIMPLIFIED: Use Excel FOB TOTAL directly - no calculations
-            valor_pedido = excel_fob_total
+            # 🔧 FIX: Use Excel QTD for total value, not optimized quantity
+            valor_pedido = excel_qtd * preco if excel_qtd > 0 else qtd_otimizada * preco
             
             # 🔧 FIX: Use Excel CBM value directly instead of calculating CBM per quantity
             # CBM should be the total CBM value from Excel, not CBM per unit * quantity
@@ -312,13 +299,13 @@ def calcular_timeline(df, meta_meses=6):
                 'Cor': cor,
                 'Urgencia': urgencia
             })
-        elif (estoque_atual > 0 or moq > 0 or excel_fob_total > 0) and produto != 'nan':
-            # 🔧 FIX: Include products with FOB TOTAL even if no stock/MOQ/sales
+        elif (estoque_atual > 0 or moq > 0 or excel_qtd > 0) and produto != 'nan':
+            # 🔧 FIX: Include products with QTD even if no stock/MOQ/sales
             # Products without sales but with stock/MOQ data - show as monitoring
             qtd_otimizada = max(moq, 50) if moq > 0 else 50
             
-            # 🔧 SIMPLIFIED: Use Excel FOB TOTAL directly for monitoring products
-            valor_pedido = excel_fob_total
+            # 🔧 FIX: Use Excel QTD for monitoring products too
+            valor_pedido = excel_qtd * preco if excel_qtd > 0 else qtd_otimizada * preco
             
             # 🔧 FIX: Use Excel CBM value directly for monitoring products too
             cbm_pedido = cbm if cbm > 0 else (qtd_otimizada * 0.01)  # fallback
@@ -350,12 +337,9 @@ def calcular_timeline(df, meta_meses=6):
             })
         else:
             # 🔧 FIX: Catch-all for products that don't meet main conditions but should still appear
-            if preco > 0 or excel_fob_total > 0:  # At least has price or FOB total
-                qtd_otimizada = moq if moq > 0 else 1
-                
-                # 🔧 SIMPLIFIED: Use Excel FOB TOTAL directly for REVISAR products
-                valor_pedido = excel_fob_total
-                
+            if preco > 0 or excel_qtd > 0:  # At least has price or quantity
+                qtd_otimizada = excel_qtd if excel_qtd > 0 else (moq if moq > 0 else 1)
+                valor_pedido = excel_qtd * preco if excel_qtd > 0 else preco
                 cbm_pedido = cbm if cbm > 0 else 0.01
                 # 🔧 FIX: Use Excel Previsão Total for REVISAR products (even if 0)
                 if 'Previsão Total com New PO' in row or 'Previsao_Total_New_Pos' in row or excel_previsao_total != 0:
