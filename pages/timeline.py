@@ -167,6 +167,8 @@ def calcular_timeline(df, meta_meses=6):
             qtd_otimizada = otimizar_quantidade_moq(vendas_mensais, moq, meta_meses)
             valor_pedido = qtd_otimizada * preco
             cbm_pedido = qtd_otimizada * cbm
+            # Calculate "Previsão Total com New Pos" - how many months the MOQ purchase will last
+            previsao_total_new_pos = qtd_otimizada / vendas_mensais if vendas_mensais > 0 else 0
             
             if meses_ate_zerar <= 1:
                 cor = '#FF0000'
@@ -191,6 +193,8 @@ def calcular_timeline(df, meta_meses=6):
                 'Qtd_Otimizada': qtd_otimizada,
                 'Valor_Pedido': valor_pedido,
                 'CBM_Pedido': cbm_pedido,
+                'Previsao_Total_New_Pos': previsao_total_new_pos,
+                'Preco_Unitario': preco,
                 'Cor': cor,
                 'Urgencia': urgencia
             })
@@ -199,6 +203,7 @@ def calcular_timeline(df, meta_meses=6):
             qtd_otimizada = max(moq, 50) if moq > 0 else 50
             valor_pedido = qtd_otimizada * preco
             cbm_pedido = qtd_otimizada * cbm
+            previsao_total_new_pos = 0  # No forecast for products without sales
             
             cor = '#87CEEB'  # Light blue
             urgencia = 'MONITORAR'
@@ -214,6 +219,8 @@ def calcular_timeline(df, meta_meses=6):
                 'Qtd_Otimizada': qtd_otimizada,
                 'Valor_Pedido': valor_pedido,
                 'CBM_Pedido': cbm_pedido,
+                'Previsao_Total_New_Pos': previsao_total_new_pos,
+                'Preco_Unitario': preco,
                 'Cor': cor,
                 'Urgencia': urgencia
             })
@@ -249,10 +256,11 @@ def criar_grafico_interativo(timeline_data, filtro_urgencia="Todos"):
                 hovertemplate=(
                     f"<b>{item['Produto']}</b><br>" +
                     f"Fornecedor: {item['Fornecedor']}<br>" +
-                    f"Estoque: {item['Estoque_Atual']:.0f} un.<br>" +
-                    f"Dias restantes: {item['Dias_Restantes']}<br>" +
-                    f"MOQ: {item['MOQ']:.0f}<br>" +
-                    f"Comprar: {item['Qtd_Otimizada']:.0f}<br>" +
+                    f"Estoque Atual: {item['Estoque_Atual']:.0f} un.<br>" +
+                    f"Vendas Mensais: {item['Vendas_Mensais']:.1f} un.<br>" +
+                    f"Dias Restantes: {item['Dias_Restantes']}<br>" +
+                    f"MOQ: {item['MOQ']:.0f} un.<br>" +
+                    f"Urgência: {item['Urgencia']}<br>" +
                     "<extra></extra>"
                 )
             ),
@@ -271,10 +279,12 @@ def criar_grafico_interativo(timeline_data, filtro_urgencia="Todos"):
                 showlegend=False,
                 hovertemplate=(
                     f"<b>{item['Produto']}</b><br>" +
-                    f"Quantidade: {item['Qtd_Otimizada']:.0f} un.<br>" +
-                    f"MOQ: {item['MOQ']:.0f}<br>" +
-                    f"Valor: R$ {item['Valor_Pedido']:,.0f}<br>" +
-                    f"CBM: {item['CBM_Pedido']:.1f}<br>" +
+                    f"Fornecedor: {item['Fornecedor']}<br>" +
+                    f"Quantidade MOQ: {item['Qtd_Otimizada']:.0f} un.<br>" +
+                    f"Preço FOB Unitário: R$ {item['Preco_Unitario']:.2f}<br>" +
+                    f"Total FOB: R$ {item['Valor_Pedido']:,.2f}<br>" +
+                    f"CBM Total: {item['CBM_Pedido']:.2f}<br>" +
+                    f"Previsão Cobertura: {item['Previsao_Total_New_Pos']:.1f} meses<br>" +
                     "<extra></extra>"
                 )
             ),
@@ -294,12 +304,242 @@ def criar_grafico_interativo(timeline_data, filtro_urgencia="Todos"):
     
     return fig
 
+def show_timeline_visual(timeline_data, empresa_selecionada, filtro):
+    """Tab 1: Enhanced Timeline Visual"""
+    
+    # Show company-specific metrics
+    st.subheader(f"📊 Métricas - {empresa_selecionada}")
+    col1, col2, col3, col4 = st.columns(4)
+    criticos = len([x for x in timeline_data if x['Urgencia'] == 'CRÍTICO'])
+    medios = len([x for x in timeline_data if x['Urgencia'] == 'MÉDIO'])
+    atencao = len([x for x in timeline_data if x['Urgencia'] == 'ATENÇÃO'])
+    ok = len([x for x in timeline_data if x['Urgencia'] == 'OK'])
+    
+    col1.metric("🔴 Críticos", criticos)
+    col2.metric("🟠 Médios", medios)
+    col3.metric("🟡 Atenção", atencao)
+    col4.metric("🟢 OK", ok)
+    
+    # Show total investment with company context
+    valor_total = sum(item['Valor_Pedido'] for item in timeline_data)
+    cbm_total = sum(item['CBM_Pedido'] for item in timeline_data)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric(f"💰 Investimento Total", f"R$ {valor_total:,.0f}")
+    with col2:
+        st.metric(f"📦 CBM Total", f"{cbm_total:.1f} m³")
+    
+    # Create and display enhanced charts
+    fig = criar_grafico_interativo(timeline_data, filtro)
+    if fig:
+        # Update chart title to include company name
+        fig.update_layout(
+            title=f"Timeline de Compras - {empresa_selecionada} ({len([x for x in timeline_data if filtro == 'Todos' or x['Urgencia'] == filtro])} produtos)",
+            title_x=0.5
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+        st.markdown(f"""
+        **💡 Como usar o Timeline Visual:**
+        - 🖱️ **Zoom**: Ferramentas no canto superior direito
+        - 👆 **Hover**: Informações detalhadas incluindo preços FOB e previsão de cobertura
+        - 🔍 **Filtrar**: Use a sidebar para filtrar por urgência
+        - 📊 **Gráfico Superior**: Quando o estoque vai acabar (em dias)
+        - 📦 **Gráfico Inferior**: Quanto comprar (MOQ) com valores FOB e previsão
+        """)
+    else:
+        st.warning("📊 Nenhum dado válido encontrado para o filtro selecionado.")
+
+def show_purchase_planning(timeline_data, empresa_selecionada, filtro):
+    """Tab 2: Purchase Planning and Management"""
+    
+    # Filter data based on selection
+    if filtro != "Todos":
+        filtered_data = [item for item in timeline_data if item['Urgencia'] == filtro]
+    else:
+        filtered_data = timeline_data
+    
+    if not filtered_data:
+        st.warning("📊 Nenhum produto encontrado para o filtro selecionado.")
+        return
+    
+    # Purchase Summary Cards
+    st.subheader("📊 Resumo de Compras")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    # Calculate metrics
+    total_value = sum(item['Valor_Pedido'] for item in filtered_data)
+    critical_items = len([x for x in filtered_data if x['Urgencia'] == 'CRÍTICO'])
+    total_cbm = sum(item['CBM_Pedido'] for item in filtered_data)
+    suppliers = len(set(item['Fornecedor'] for item in filtered_data))
+    
+    col1.metric("💰 Valor Total", f"R$ {total_value:,.0f}")
+    col2.metric("🔴 Itens Críticos", critical_items)
+    col3.metric("📦 CBM Total", f"{total_cbm:.1f} m³")
+    col4.metric("🏭 Fornecedores", suppliers)
+    
+    # Priority-based filtering
+    st.subheader("🎯 Filtros Inteligentes")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        show_critical = st.button("🔴 Apenas Críticos", help="Itens que precisam ser pedidos imediatamente")
+    with col2:
+        show_high_value = st.button("💰 Alto Valor", help="Itens com valor > R$ 10.000")
+    with col3:
+        show_by_supplier = st.selectbox("🏭 Por Fornecedor", 
+                                       ["Todos"] + sorted(list(set(item['Fornecedor'] for item in filtered_data))))
+    
+    # Apply additional filters
+    display_data = filtered_data.copy()
+    if show_critical:
+        display_data = [x for x in display_data if x['Urgencia'] == 'CRÍTICO']
+    if show_high_value:
+        display_data = [x for x in display_data if x['Valor_Pedido'] > 10000]
+    if show_by_supplier != "Todos":
+        display_data = [x for x in display_data if x['Fornecedor'] == show_by_supplier]
+    
+    # Smart Purchase Table
+    st.subheader("📋 Tabela de Planejamento de Compras")
+    
+    if display_data:
+        # Convert to DataFrame for better display
+        df_purchase = pd.DataFrame(display_data)
+        
+        # Add priority icons and action recommendations
+        def get_priority_icon(urgencia):
+            icons = {
+                'CRÍTICO': '🔴 CRÍTICO',
+                'MÉDIO': '🟡 MÉDIO', 
+                'ATENÇÃO': '🟠 ATENÇÃO',
+                'OK': '🟢 OK',
+                'MONITORAR': '🔵 MONITORAR'
+            }
+            return icons.get(urgencia, urgencia)
+        
+        def get_action_recommendation(urgencia, dias):
+            if urgencia == 'CRÍTICO' or dias <= 30:
+                return "🚨 PEDIR AGORA"
+            elif urgencia == 'MÉDIO' or dias <= 90:
+                return "⚠️ MONITORAR"
+            else:
+                return "✅ OK"
+        
+        # Create display dataframe
+        display_df = pd.DataFrame({
+            'Produto': [item['Produto'] for item in display_data],
+            'Fornecedor': [item['Fornecedor'] for item in display_data],
+            'Prioridade': [get_priority_icon(item['Urgencia']) for item in display_data],
+            'Dias Restantes': [item['Dias_Restantes'] for item in display_data],
+            'MOQ': [f"{item['MOQ']:.0f}" for item in display_data],
+            'Preço Unit. (R$)': [f"{item['Preco_Unitario']:.2f}" for item in display_data],
+            'Investimento (R$)': [f"{item['Valor_Pedido']:,.0f}" for item in display_data],
+            'CBM': [f"{item['CBM_Pedido']:.2f}" for item in display_data],
+            'Cobertura (meses)': [f"{item['Previsao_Total_New_Pos']:.1f}" for item in display_data],
+            'Ação': [get_action_recommendation(item['Urgencia'], item['Dias_Restantes']) for item in display_data]
+        })
+        
+        # Display the table with selection
+        st.markdown("**Selecione os itens para gerar pedido de compra:**")
+        
+        # Add selection checkboxes
+        selected_items = []
+        for i, (idx, row) in enumerate(display_df.iterrows()):
+            cols = st.columns([0.5, 2, 1.5, 1, 1, 1, 1.2, 0.8, 1, 1.5])
+            
+            with cols[0]:
+                selected = st.checkbox("", key=f"select_{i}", label_visibility="collapsed")
+                if selected:
+                    selected_items.append(display_data[i])
+            
+            with cols[1]:
+                st.write(row['Produto'])
+            with cols[2]:
+                st.write(row['Fornecedor'])
+            with cols[3]:
+                st.write(row['Prioridade'])
+            with cols[4]:
+                st.write(row['Dias Restantes'])
+            with cols[5]:
+                st.write(row['MOQ'])
+            with cols[6]:
+                st.write(row['Preço Unit. (R$)'])
+            with cols[7]:
+                st.write(row['Investimento (R$)'])
+            with cols[8]:
+                st.write(row['CBM'])
+            with cols[9]:
+                st.write(row['Cobertura (meses)'])
+            with cols[10]:
+                st.write(row['Ação'])
+        
+        # Purchase Order Generator
+        if selected_items:
+            st.subheader("🛒 Gerador de Pedido de Compra")
+            
+            selected_value = sum(item['Valor_Pedido'] for item in selected_items)
+            selected_cbm = sum(item['CBM_Pedido'] for item in selected_items)
+            selected_suppliers = len(set(item['Fornecedor'] for item in selected_items))
+            
+            col1, col2, col3 = st.columns(3)
+            col1.metric("📦 Itens Selecionados", len(selected_items))
+            col2.metric("💰 Valor Total", f"R$ {selected_value:,.0f}")
+            col3.metric("🏭 Fornecedores", selected_suppliers)
+            
+            # Group by supplier
+            supplier_groups = {}
+            for item in selected_items:
+                supplier = item['Fornecedor']
+                if supplier not in supplier_groups:
+                    supplier_groups[supplier] = []
+                supplier_groups[supplier].append(item)
+            
+            # Display grouped by supplier
+            st.markdown("**📋 Agrupado por Fornecedor:**")
+            for supplier, items in supplier_groups.items():
+                with st.expander(f"🏭 {supplier} ({len(items)} itens - R$ {sum(x['Valor_Pedido'] for x in items):,.0f})"):
+                    for item in items:
+                        st.write(f"• {item['Produto']} - {item['MOQ']:.0f} un. - R$ {item['Valor_Pedido']:,.0f}")
+            
+            # Export functionality
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("📊 Exportar para Excel", use_container_width=True):
+                    # Create Excel export
+                    export_df = pd.DataFrame({
+                        'Item': [item['Produto'] for item in selected_items],
+                        'Fornecedor': [item['Fornecedor'] for item in selected_items],
+                        'QTD': [item['MOQ'] for item in selected_items],
+                        'Preço FOB Unitário': [item['Preco_Unitario'] for item in selected_items],
+                        'Preço FOB TOTAL': [item['Valor_Pedido'] for item in selected_items],
+                        'CBM': [item['CBM_Pedido'] for item in selected_items],
+                        'Previsão Total com New Pos': [item['Previsao_Total_New_Pos'] for item in selected_items],
+                        'Urgência': [item['Urgencia'] for item in selected_items]
+                    })
+                    
+                    st.download_button(
+                        label="⬇️ Download Excel",
+                        data=export_df.to_csv(index=False).encode('utf-8'),
+                        file_name=f"pedido_compras_{empresa_selecionada}_{datetime.now().strftime('%Y%m%d')}.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+            
+            with col2:
+                if st.button("🔄 Limpar Seleção", use_container_width=True):
+                    st.rerun()
+    
+    else:
+        st.info("📋 Nenhum item encontrado para os filtros selecionados.")
+
 def load_page():
     # Header with company selector
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
-        st.title("📅 TIMELINE INTERATIVA DE COMPRAS")
-        st.markdown("### 🎯 Visualização interativa com MOQ otimizado")
+        st.title("📅 TIMELINE DE COMPRAS")
+        st.markdown("### 🎯 Análise completa de compras e MOQ")
     
     with col2:
         # Company selector
@@ -442,58 +682,45 @@ def load_page():
             urgencias = ["Todos"] + sorted(list(set(item['Urgencia'] for item in timeline_data)))
             filtro = st.sidebar.selectbox("🔍 Filtrar", urgencias)
             
-            # Show company-specific metrics
-            st.subheader(f"📊 Métricas - {empresa_selecionada}")
-            col1, col2, col3, col4 = st.columns(4)
-            criticos = len([x for x in timeline_data if x['Urgencia'] == 'CRÍTICO'])
-            medios = len([x for x in timeline_data if x['Urgencia'] == 'MÉDIO'])
-            atencao = len([x for x in timeline_data if x['Urgencia'] == 'ATENÇÃO'])
-            ok = len([x for x in timeline_data if x['Urgencia'] == 'OK'])
+            # TAB STRUCTURE IMPLEMENTATION
+            tab1, tab2 = st.tabs(["📅 Timeline Visual", "🛒 Planejamento de Compras"])
             
-            col1.metric("🔴 Críticos", criticos)
-            col2.metric("🟠 Médios", medios)
-            col3.metric("🟡 Atenção", atencao)
-            col4.metric("🟢 OK", ok)
+            with tab1:
+                show_timeline_visual(timeline_data, empresa_selecionada, filtro)
             
-            # Show total investment with company context
-            valor_total = sum(item['Valor_Pedido'] for item in timeline_data)
-            st.metric(f"💰 Investimento Total - {empresa_selecionada}", f"R$ {valor_total:,.0f}")
-            
-            # Create and display chart with company title
-            fig = criar_grafico_interativo(timeline_data, filtro)
-            if fig:
-                # Update chart title to include company name
-                fig.update_layout(
-                    title=f"Timeline de Compras - {empresa_selecionada} ({len([x for x in timeline_data if filtro == 'Todos' or x['Urgencia'] == filtro])} produtos)",
-                    title_x=0.5
-                )
-                st.plotly_chart(fig, use_container_width=True)
+            with tab2:
+                show_purchase_planning(timeline_data, empresa_selecionada, filtro)
                 
-                st.markdown(f"""
-                **💡 Como usar o Timeline de {empresa_selecionada}:**
-                - 🖱️ **Zoom**: Ferramentas no canto superior direito
-                - 👆 **Hover**: Passe o mouse para ver detalhes do produto
-                - 🔍 **Filtrar**: Use a sidebar para filtrar por urgência
-                - 🏢 **Trocar Empresa**: Use o seletor no topo da página
-                - 📦 **Trocar Versão**: Use o seletor de versão para ver dados históricos
-                """)
-            else:
-                st.warning("📊 Nenhum dado válido encontrado para o filtro selecionado.")
         else:
             st.warning(f"📊 Nenhum dado válido encontrado para criar o timeline de {empresa_selecionada}.")
             st.info("💡 Verifique se os dados foram importados corretamente ou tente uma versão diferente.")
 
     # Instructions
     st.markdown("""
-    ### 💡 Como usar:
-    1. **Selecione a empresa** no menu superior
-    2. **Escolha a versão** dos dados que quer visualizar
-    3. **Analise os dados** na tabela abaixo
-    4. Use **Forçar Atualização** se fez upload recente
+    ### 💡 Como usar a Timeline de Compras:
     
-    ### 🔄 Próximas melhorias:
-    - Gráficos interativos de timeline
-    - Cálculo automático de MOQ
-    - Alertas de estoque baixo
-    - Análise de fornecedores
+    **🏢 Configuração:**
+    1. **Selecione a empresa** no menu superior (MINIPA ou MINIPA INDUSTRIA)
+    2. **Escolha a versão** dos dados que quer visualizar
+    3. **Ajuste a meta** de meses na sidebar (3-12 meses)
+    4. **Aplique filtros** por urgência na sidebar
+    
+    **📅 Tab "Timeline Visual":**
+    - Visualização interativa com gráficos aprimorados
+    - Hover detalhado com preços FOB unitário e total
+    - Previsão de cobertura em meses (Previsão Total com New Pos)
+    - Métricas de investimento total e CBM
+    
+    **🛒 Tab "Planejamento de Compras":**
+    - Tabela inteligente com prioridades e ações recomendadas
+    - Filtros por criticidade, valor alto e fornecedor
+    - Seleção de itens para pedido de compra
+    - Agrupamento automático por fornecedor
+    - Export para Excel no formato de solicitação
+    
+    **🎯 Funcionalidades Avançadas:**
+    - **Previsão Total com New Pos**: Mostra quantos meses o MOQ vai durar
+    - **Prioridades automáticas**: Crítico (≤30 dias), Médio, Atenção, OK
+    - **Valores FOB completos**: Unitário e total com CBM
+    - **Cache otimizado**: 30 dias para reduzir custos do Snowflake
     """) 
