@@ -152,9 +152,28 @@ def calcular_timeline(df, meta_meses=6):
     
     # Debug columns moved to main function
     
+    # Debug: Track filtering process
+    total_rows = len(df)
+    filtered_out = 0
+    product_rows = 0
+    
     for idx, row in df.iterrows():
+        # FILTER OUT SUMMARY/TOTAL ROWS
+        item_name = str(row.get('Item', '')).strip().upper()
+        modelo = str(row.get('Modelo', '')).strip()
+        
+        # Skip summary rows like "TOTAL GERAL", empty rows, or rows without valid product names
+        if (item_name in ['TOTAL GERAL', 'TOTAL', 'SUBTOTAL', 'GRAND TOTAL', ''] or
+            modelo == '' or
+            pd.isna(row.get('Modelo')) or
+            item_name.startswith('TOTAL')):
+            filtered_out += 1
+            continue
+        
+        product_rows += 1
+        
         # Safely access columns with fallbacks - handle NaN values properly
-        produto = str(row.get('Modelo', f'Produto_{idx}')) if pd.notna(row.get('Modelo')) else f'Produto_{idx}'
+        produto = modelo if modelo else f'Produto_{idx}'
         fornecedor = str(row.get('Fornecedor', 'Fornecedor Desconhecido')) if pd.notna(row.get('Fornecedor')) else 'Fornecedor Desconhecido'
         
         # Handle numeric columns properly - convert NaN to 0
@@ -262,6 +281,21 @@ def calcular_timeline(df, meta_meses=6):
                 'Cor': cor,
                 'Urgencia': urgencia
             })
+    
+    # Store debug info for main function
+    if hasattr(st.session_state, 'debug_info') or True:
+        st.session_state.debug_info = {
+            'total_rows': total_rows,
+            'filtered_out': filtered_out,
+            'product_rows': product_rows,
+            'timeline_items': len(timeline_data)
+        }
+    
+    # If no valid timeline data after filtering, show warning
+    if len(timeline_data) == 0 and product_rows > 0:
+        st.warning(f"⚠️ Found {product_rows} product rows but no valid timeline data. Check sales data and stock levels.")
+    elif len(timeline_data) == 0:
+        st.warning(f"⚠️ No product rows found after filtering {filtered_out} summary/empty rows from {total_rows} total rows.")
     
     return sorted(timeline_data, key=lambda x: x['Dias_Restantes'])
 
@@ -762,6 +796,28 @@ def load_page():
                 for col in df.columns:
                     if any(keyword in col.lower() for keyword in ['preco', 'price', 'fob', 'unit']):
                         st.write(f"{col}: {first_row.get(col, 'N/A')}")
+                
+                # Show data filtering info
+                if hasattr(st.session_state, 'debug_info'):
+                    debug_info = st.session_state.debug_info
+                    st.write("**🔍 Data Filtering Results:**")
+                    st.write(f"📊 Total Rows in DF: {debug_info.get('total_rows', 'N/A')}")
+                    st.write(f"❌ Filtered Out: {debug_info.get('filtered_out', 'N/A')} (totals/empty)")
+                    st.write(f"✅ Product Rows: {debug_info.get('product_rows', 'N/A')}")
+                    st.write(f"🎯 Timeline Items: {debug_info.get('timeline_items', 'N/A')}")
+                
+                # Show sample of rows being processed
+                st.write("**📋 First 5 Rows to Process:**")
+                for i in range(min(5, len(df))):
+                    row = df.iloc[i]
+                    item_name = str(row.get('Item', '')).strip()
+                    modelo = str(row.get('Modelo', '')).strip()
+                    preco = row.get('Preco_Unitario', 0)
+                    st.write(f"{i+1}. Item: '{item_name}' | Modelo: '{modelo}' | Preço: {preco}")
+                    if item_name.upper() in ['TOTAL GERAL', 'TOTAL'] or modelo == '':
+                        st.write("   ❌ (Will be filtered out)")
+                    else:
+                        st.write("   ✅ (Will be processed)")
         
         # Calculate timeline data
         timeline_data = calcular_timeline(df, meta_meses)
