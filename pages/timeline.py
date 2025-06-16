@@ -514,8 +514,18 @@ def show_purchase_planning(timeline_data, empresa_selecionada, filtro):
             'Ação': [get_action_recommendation(item['Urgencia'], item['Dias_Restantes']) for item in display_data]
         })
         
-        # Display the table with selection
-        st.markdown("**Selecione os itens para gerar pedido de compra:**")
+        # 🔧 FIX: Initialize session state for selections
+        if 'purchase_selections' not in st.session_state:
+            st.session_state.purchase_selections = {}
+
+        # Clear selection button BEFORE the table
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.markdown("**Selecione os itens para gerar pedido de compra:**")
+        with col2:
+            if st.button("🔄 Limpar Seleção", use_container_width=True, key="clear_selection_btn"):
+                st.session_state.purchase_selections = {}  # Clear all selections
+                st.rerun()
         
         # Add table header
         header_cols = st.columns([0.5, 2, 1.5, 1, 1, 1, 1.2, 0.8, 1, 1.5, 1.2])
@@ -544,13 +554,30 @@ def show_purchase_planning(timeline_data, empresa_selecionada, filtro):
         
         st.divider()
         
-        # Add selection checkboxes
+        # 🔧 FIX: Add selection checkboxes with session state persistence
         selected_items = []
         for i, (idx, row) in enumerate(display_df.iterrows()):
-            cols = st.columns([0.5, 2, 1.5, 1, 1, 1, 1.2, 0.8, 1, 1.5, 1.2])  # Added one more column
+            cols = st.columns([0.5, 2, 1.5, 1, 1, 1, 1.2, 0.8, 1, 1.5, 1.2])
             
             with cols[0]:
-                selected = st.checkbox("Sel", key=f"select_{i}", label_visibility="collapsed")
+                # Create unique identifier for this item
+                item_id = f"{display_data[i]['Produto']}_{display_data[i]['Fornecedor']}"
+                
+                # Get previous state or default to False
+                default_value = st.session_state.purchase_selections.get(item_id, False)
+                
+                # Create checkbox with session state persistence
+                selected = st.checkbox(
+                    "Sel", 
+                    value=default_value,
+                    key=f"select_{i}_{item_id[:20]}", 
+                    label_visibility="collapsed"
+                )
+                
+                # Update session state
+                st.session_state.purchase_selections[item_id] = selected
+                
+                # Add to selected items if checked
                 if selected:
                     selected_items.append(display_data[i])
             
@@ -629,8 +656,7 @@ def show_purchase_planning(timeline_data, empresa_selecionada, filtro):
                     )
             
             with col2:
-                if st.button("🔄 Limpar Seleção", use_container_width=True):
-                    st.rerun()
+                st.info(f"📋 {len(selected_items)} itens selecionados")
     
     else:
         st.info("📋 Nenhum item encontrado para os filtros selecionados.")
