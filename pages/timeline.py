@@ -236,6 +236,9 @@ def calcular_timeline(df, meta_meses=6):
         
 
         
+        # 🔧 DEBUG: Track what happens to each product
+        debug_info = f"Produto: {produto} | Fornecedor: {fornecedor} | Vendas: {vendas_mensais} | Estoque: {estoque_atual} | MOQ: {moq} | Preço: {preco}"
+        
         # Process all products with proper data - exactly like MINIPA
         if vendas_mensais > 0:
             meses_ate_zerar = estoque_atual / vendas_mensais
@@ -288,7 +291,8 @@ def calcular_timeline(df, meta_meses=6):
                 'Cor': cor,
                 'Urgencia': urgencia
             })
-        elif (estoque_atual > 0 or moq > 0) and produto != 'nan':
+        elif (estoque_atual > 0 or moq > 0 or excel_qtd > 0) and produto != 'nan':
+            # 🔧 FIX: Include products with QTD even if no stock/MOQ/sales
             # Products without sales but with stock/MOQ data - show as monitoring
             qtd_otimizada = max(moq, 50) if moq > 0 else 50
             
@@ -320,14 +324,46 @@ def calcular_timeline(df, meta_meses=6):
                 'Cor': cor,
                 'Urgencia': urgencia
             })
+        else:
+            # 🔧 FIX: Catch-all for products that don't meet main conditions but should still appear
+            if preco > 0 or excel_qtd > 0:  # At least has price or quantity
+                qtd_otimizada = excel_qtd if excel_qtd > 0 else (moq if moq > 0 else 1)
+                valor_pedido = excel_qtd * preco if excel_qtd > 0 else preco
+                cbm_pedido = cbm if cbm > 0 else 0.01
+                previsao_total_new_pos = excel_previsao_total if excel_previsao_total > 0 else 0
+                
+                timeline_data.append({
+                    'Produto': produto,
+                    'Fornecedor': fornecedor,
+                    'Dias_Restantes': 999,  # No urgency calculation possible
+                    'Estoque_Atual': estoque_atual,
+                    'Vendas_Mensais': vendas_mensais,
+                    'MOQ': moq,
+                    'Qtd_Otimizada': qtd_otimizada,
+                    'Valor_Pedido': valor_pedido,
+                    'CBM_Pedido': cbm_pedido,
+                    'Previsao_Total_New_Pos': previsao_total_new_pos,
+                    'Preco_Unitario': preco,
+                    'Cor': '#D3D3D3',  # Light gray
+                    'Urgencia': 'REVISAR'
+                })
     
     # Store debug info for main function
     if hasattr(st.session_state, 'debug_info') or True:
+        # Count different categories
+        products_with_sales = len([x for x in timeline_data if x['Vendas_Mensais'] > 0])
+        products_monitoring = len([x for x in timeline_data if x['Urgencia'] == 'MONITORAR'])
+        products_revisar = len([x for x in timeline_data if x['Urgencia'] == 'REVISAR'])
+        
         st.session_state.debug_info = {
             'total_rows': total_rows,
             'filtered_out': filtered_out,
             'product_rows': product_rows,
-            'timeline_items': len(timeline_data)
+            'timeline_items': len(timeline_data),
+            'products_with_sales': products_with_sales,
+            'products_monitoring': products_monitoring,
+            'products_revisar': products_revisar,
+            'missing_from_timeline': product_rows - len(timeline_data)
         }
     
     # If no valid timeline data after filtering, show warning
