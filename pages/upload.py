@@ -108,24 +108,55 @@ def show_data_upload():
         col1, col2 = st.columns([3, 1])
         
         with col1:
-            # Try to load existing data for selected company
-            timeline_data = load_data_with_history(empresa=empresa_code)
-            analytics_data = load_analytics_data(empresa=empresa_code)
+            # OPTIMIZATION: Use cached counts instead of loading full datasets
+            from bd.snowflake_config import get_cached_counts, load_combined_data_stats
             
-            # Show data summary
-            if timeline_data is not None and len(timeline_data) > 0:
-                st.success(f"📅 Timeline: {len(timeline_data)} produtos salvos")
-                if 'data_upload' in timeline_data.columns:
-                    st.info(f"🕒 Último upload Timeline: {timeline_data['data_upload'].max()}")
-            else:
-                st.info("📅 Timeline: Nenhum dado encontrado")
+            # Use the optimized combined stats function
+            combined_stats = load_combined_data_stats(empresa_code, include_timeline=True, include_analytics=True)
             
-            if analytics_data is not None and len(analytics_data) > 0:
-                st.success(f"📊 Analytics: {len(analytics_data)} produtos salvos")
-                if 'data_upload' in analytics_data.columns:
-                    st.info(f"🕒 Último upload Analytics: {analytics_data['data_upload'].max()}")
+            if combined_stats:
+                # Show timeline data
+                timeline_stats = combined_stats.get('timeline', {})
+                timeline_count = timeline_stats.get('count', 0)
+                
+                if timeline_count > 0:
+                    st.success(f"📅 Timeline: {timeline_count} produtos salvos")
+                    if timeline_stats.get('latest_upload'):
+                        st.info(f"🕒 Último upload Timeline: {timeline_stats['latest_upload']}")
+                    st.info(f"🏭 Fornecedores: {timeline_stats.get('suppliers', 0)}")
+                else:
+                    st.info("📅 Timeline: Nenhum dado encontrado")
+                
+                # Show analytics data
+                analytics_stats = combined_stats.get('analytics', {})
+                analytics_count = analytics_stats.get('count', 0)
+                
+                if analytics_count > 0:
+                    st.success(f"📊 Analytics: {analytics_count} produtos salvos")
+                    if analytics_stats.get('latest_upload'):
+                        st.info(f"🕒 Último upload Analytics: {analytics_stats['latest_upload']}")
+                    st.info(f"🏭 Fornecedores: {analytics_stats.get('suppliers', 0)}")
+                else:
+                    st.info("📊 Analytics: Nenhum dado encontrado")
             else:
-                st.info("📊 Analytics: Nenhum dado encontrado")
+                # Fallback to original method if combined stats fail
+                timeline_data = load_data_with_history(empresa=empresa_code)
+                analytics_data = load_analytics_data(empresa=empresa_code)
+                
+                # Show data summary
+                if timeline_data is not None and len(timeline_data) > 0:
+                    st.success(f"📅 Timeline: {len(timeline_data)} produtos salvos")
+                    if 'data_upload' in timeline_data.columns:
+                        st.info(f"🕒 Último upload Timeline: {timeline_data['data_upload'].max()}")
+                else:
+                    st.info("📅 Timeline: Nenhum dado encontrado")
+                
+                if analytics_data is not None and len(analytics_data) > 0:
+                    st.success(f"📊 Analytics: {len(analytics_data)} produtos salvos")
+                    if 'data_upload' in analytics_data.columns:
+                        st.info(f"🕒 Último upload Analytics: {analytics_data['data_upload'].max()}")
+                else:
+                    st.info("📊 Analytics: Nenhum dado encontrado")
             
             # Show version history with delete options
             with st.expander(f"📋 Histórico de Versões - {empresa_selecionada}", expanded=True):

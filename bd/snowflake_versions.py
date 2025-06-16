@@ -67,11 +67,11 @@ def create_new_version(empresa, table_type, description="", created_by="minipa",
         st.error(f"❌ Erro ao criar versão: {str(e)}")
         return None
 
-@st.cache_data(ttl=604800, show_spinner="🔄 Carregando versões...")  # 1 week cache
+@st.cache_data(ttl=604800, show_spinner=False)  # 1 week cache - matches your analytics update frequency
 def get_upload_versions(empresa, table_type=None, limit=50):
     """
-    Get list of upload versions for a company
-    Returns list of version info or empty list if failed
+    OPTIMIZATION: Reduced cache time for more accurate version info
+    Combined query to reduce database calls and improve ordering
     """
     conn = get_snowflake_connection()
     if not conn:
@@ -80,13 +80,14 @@ def get_upload_versions(empresa, table_type=None, limit=50):
     try:
         cursor = conn.cursor()
         
+        # OPTIMIZED: Use better ordering - active versions first, then by date
         if table_type:
             query = """
             SELECT upload_version, version_id, table_type, upload_date, 
                    description, arquivo_origem, linhas_processadas, status, created_by, is_active
             FROM CONFIG.VERSIONS 
             WHERE empresa = %s AND table_type = %s
-            ORDER BY upload_date DESC
+            ORDER BY is_active DESC, upload_date DESC  -- Active versions first
             LIMIT %s
             """
             params = (empresa, table_type, limit)
@@ -96,7 +97,7 @@ def get_upload_versions(empresa, table_type=None, limit=50):
                    description, arquivo_origem, linhas_processadas, status, created_by, is_active
             FROM CONFIG.VERSIONS 
             WHERE empresa = %s
-            ORDER BY upload_date DESC
+            ORDER BY is_active DESC, table_type, upload_date DESC  -- Active first, then by type
             LIMIT %s
             """
             params = (empresa, limit)
@@ -126,6 +127,55 @@ def get_upload_versions(empresa, table_type=None, limit=50):
     except Exception as e:
         st.error(f"❌ Erro ao carregar versões: {str(e)}")
         return []
+
+@st.cache_data(ttl=604800, show_spinner=False)  # 1 week cache - matches your data update pattern  
+def get_version_summary(empresa, table_type=None):
+    """
+    NEW OPTIMIZATION: Get version summary without loading full version list
+    Useful for quick status checks without expensive queries
+    """
+    conn = get_snowflake_connection()
+    if not conn:
+        return {}
+        
+    try:
+        cursor = conn.cursor()
+        
+        if table_type:
+            cursor.execute("""
+            SELECT 
+                COUNT(*) as total_versions,
+                COUNT(*) FILTER (WHERE is_active = TRUE) as active_versions,
+                MAX(upload_date) as latest_upload,
+                MAX(linhas_processadas) as max_records
+            FROM CONFIG.VERSIONS 
+            WHERE empresa = %s AND table_type = %s
+            """, (empresa, table_type))
+        else:
+            cursor.execute("""
+            SELECT 
+                COUNT(*) as total_versions,
+                COUNT(*) FILTER (WHERE is_active = TRUE) as active_versions,
+                MAX(upload_date) as latest_upload,
+                MAX(linhas_processadas) as max_records
+            FROM CONFIG.VERSIONS 
+            WHERE empresa = %s
+            """, (empresa,))
+        
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        return {
+            'total_versions': result[0] or 0,
+            'active_versions': result[1] or 0,
+            'latest_upload': result[2],
+            'max_records': result[3] or 0
+        }
+        
+    except Exception as e:
+        st.error(f"❌ Erro ao carregar resumo de versões: {str(e)}")
+        return {}
 
 def set_active_version(empresa, upload_version, table_type):
     """

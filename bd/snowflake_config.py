@@ -23,7 +23,9 @@ from .snowflake_tables import (
 
 from .snowflake_data import (
     load_data_with_history,
-    load_analytics_data
+    load_analytics_data,
+    get_cached_counts,
+    load_combined_data_stats
 )
 
 from .snowflake_versions import (
@@ -34,7 +36,8 @@ from .snowflake_versions import (
     get_version_by_id,
     get_active_version,
     delete_version,
-    fix_active_versions
+    fix_active_versions,
+    get_version_summary
 )
 
 from .snowflake_upload import (
@@ -69,6 +72,8 @@ __all__ = [
     # Data Loading
     'load_data_with_history',
     'load_analytics_data',
+    'get_cached_counts',
+    'load_combined_data_stats',
     
     # Version Management
     'generate_version_id',
@@ -79,6 +84,7 @@ __all__ = [
     'get_active_version',
     'delete_version',
     'fix_active_versions',
+    'get_version_summary',
     
     # Upload & Analysis
     'upload_excel_to_snowflake',
