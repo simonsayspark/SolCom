@@ -150,14 +150,7 @@ def calcular_timeline(df, meta_meses=6):
         st.warning("⚠️ DataFrame vazio - nenhum dado para calcular timeline")
         return []
     
-    # Debug: Show available columns
-    if st.sidebar.checkbox("🔍 Debug Columns", value=True, help="Show available DataFrame columns"):
-        st.sidebar.write("**Available Columns:**")
-        st.sidebar.write(list(df.columns))
-        st.sidebar.write("**Sample Row:**")
-        if len(df) > 0:
-            sample_row = df.iloc[0]
-            st.sidebar.write({col: sample_row[col] for col in df.columns[:10]})  # Show first 10 columns
+    # Debug columns moved to main function
     
     for idx, row in df.iterrows():
         # Safely access columns with fallbacks - handle NaN values properly
@@ -749,40 +742,72 @@ def load_page():
         
         meta_meses = st.sidebar.slider("🎯 Meta (meses)", 3, 12, 6)
         
+        # MOVED DEBUG SECTIONS HERE - where sidebar is properly set up
+        st.sidebar.subheader("🔧 Debug & Troubleshooting")
+        st.sidebar.info("💡 Enable debug options below to troubleshoot price issues")
+        
+        # Debug: Show available columns
+        if st.sidebar.checkbox("🔍 Debug Columns", value=True, help="Show available DataFrame columns"):
+            with st.sidebar.expander("📋 Available Columns"):
+                st.write("**Available Columns:**")
+                st.write(list(df.columns))
+                st.write("**Sample Row:**")
+                if len(df) > 0:
+                    sample_row = df.iloc[0]
+                    st.write({col: sample_row[col] for col in df.columns[:10]})  # Show first 10 columns
+                
+                # Show all potential price columns and their values
+                st.write("**All Potential Price Columns:**")
+                first_row = df.iloc[0]
+                for col in df.columns:
+                    if any(keyword in col.lower() for keyword in ['preco', 'price', 'fob', 'unit']):
+                        st.write(f"{col}: {first_row.get(col, 'N/A')}")
+        
         # Calculate timeline data
         timeline_data = calcular_timeline(df, meta_meses)
         
+        # IMMEDIATE PRICE ISSUE CHECK
+        if timeline_data:
+            items_with_zero_prices = len([x for x in timeline_data if x.get('Preco_Unitario', 0) == 0])
+            if items_with_zero_prices > 0:
+                st.sidebar.error(f"🚨 {items_with_zero_prices}/{len(timeline_data)} items have ZERO PRICES!")
+                st.sidebar.warning("👆 Enable debug options above to troubleshoot")
+            else:
+                st.sidebar.success(f"✅ All {len(timeline_data)} items have valid prices")
+        
         # Debug info for troubleshooting
-        if timeline_data and st.sidebar.checkbox("🔧 Debug Info", value=True, help="Show data calculation details"):
-            with st.sidebar.expander("🔍 Data Debug"):
+        if timeline_data and st.sidebar.checkbox("🔧 Debug Calculations", value=True, help="Show data calculation details"):
+            with st.sidebar.expander("🔍 Calculation Debug"):
                 sample_item = timeline_data[0] if timeline_data else {}
-                st.write("**Sample Calculated Item:**")
+                st.write("**📊 Sample Calculated Item:**")
                 st.write(f"Produto: {sample_item.get('Produto', 'N/A')}")
-                st.write(f"Preço Unit.: R$ {sample_item.get('Preco_Unitario', 0):.2f}")
-                st.write(f"Total FOB: R$ {sample_item.get('Valor_Pedido', 0):,.2f}")
-                st.write(f"CBM: {sample_item.get('CBM_Pedido', 0):.2f}")
-                st.write(f"Previsão: {sample_item.get('Previsao_Total_New_Pos', 0):.1f} meses")
-                st.write(f"MOQ: {sample_item.get('MOQ', 0):.0f}")
-                st.write(f"Qty Otimizada: {sample_item.get('Qtd_Otimizada', 0):.0f}")
+                st.write(f"💰 Preço Unit.: R$ {sample_item.get('Preco_Unitario', 0):.2f}")
+                st.write(f"💰 Total FOB: R$ {sample_item.get('Valor_Pedido', 0):,.2f}")
+                st.write(f"📦 CBM: {sample_item.get('CBM_Pedido', 0):.2f}")
+                st.write(f"📅 Previsão: {sample_item.get('Previsao_Total_New_Pos', 0):.1f} meses")
+                st.write(f"📊 MOQ: {sample_item.get('MOQ', 0):.0f}")
+                st.write(f"🎯 Qty Otimizada: {sample_item.get('Qtd_Otimizada', 0):.0f}")
                 
-                # Show original data columns for comparison
-                if len(df) > 0:
-                    st.write("**Original Data Sample:**")
-                    first_row = df.iloc[0]
-                    price_cols = [col for col in df.columns if 'preço' in col.lower() or 'fob' in col.lower() or 'price' in col.lower()]
-                    if price_cols:
-                        st.write("**Price Columns Found:**")
-                        for col in price_cols:
-                            st.write(f"{col}: {first_row.get(col, 'N/A')}")
-                    else:
-                        st.write("❌ No price columns found!")
-                        st.write("Available columns:", list(df.columns))
-                    
-                    # Show all potential price columns and their values
-                    st.write("**All Potential Price Columns:**")
-                    for col in df.columns:
-                        if any(keyword in col.lower() for keyword in ['preco', 'price', 'fob', 'unit']):
-                            st.write(f"{col}: {first_row.get(col, 'N/A')}")
+                # Show if zero values detected
+                if sample_item.get('Preco_Unitario', 0) == 0:
+                    st.error("⚠️ PREÇO UNITÁRIO ZERO! Verificar colunas de preço.")
+                if sample_item.get('Valor_Pedido', 0) == 0:
+                    st.error("⚠️ VALOR PEDIDO ZERO! Problema no cálculo de preços.")
+                
+                # Show calculation summary for all items
+                total_items = len(timeline_data)
+                items_with_prices = len([x for x in timeline_data if x.get('Preco_Unitario', 0) > 0])
+                items_zero_prices = total_items - items_with_prices
+                
+                st.write("**📈 Summary:**")
+                st.write(f"Total Items: {total_items}")
+                st.write(f"✅ With Prices: {items_with_prices}")
+                st.write(f"❌ Zero Prices: {items_zero_prices}")
+                
+                if items_zero_prices > 0:
+                    st.error(f"🚨 {items_zero_prices} items have zero prices!")
+                else:
+                    st.success("✅ All items have valid prices!")
         
         if timeline_data:
             urgencias = ["Todos"] + sorted(list(set(item['Urgencia'] for item in timeline_data)))
