@@ -79,20 +79,28 @@ def carregar_dados(uploaded_file=None):
         df = df.dropna(subset=['Item'])
         df = df[df['Item'] != 'Item']
         
-        # Convert numeric columns
-        colunas_numericas = ['QTD', 'Preço FOB\nUnitário', 'Estoque\nTotal ', 
-                           'In Transit\nShipt', 'Avg Sales\n', 'CBM', 'MOQ']
+        # Convert numeric columns - support multiple column name variations
+        colunas_numericas = ['QTD', 'Preço FOB\nUnitário', 'Preço FOB Unitário', 'Preco FOB Unitario',
+                           'Estoque\nTotal ', 'Estoque Total', 'In Transit\nShipt', 'In Transit Shipt',
+                           'Avg Sales\n', 'Avg Sales', 'CBM', 'MOQ', 'Preço FOB TOTAL', 'Preço FOB\nTOTAL']
         
         for col in colunas_numericas:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
-        # Rename columns
+        # Rename columns - support multiple variations
         df = df.rename(columns={
             'Preço FOB\nUnitário': 'Preco_Unitario',
+            'Preço FOB Unitário': 'Preco_Unitario',
+            'Preco FOB Unitario': 'Preco_Unitario',
             'Estoque\nTotal ': 'Estoque_Total',
+            'Estoque Total': 'Estoque_Total',
             'In Transit\nShipt': 'In_Transit',
-            'Avg Sales\n': 'Vendas_Medias'
+            'In Transit Shipt': 'In_Transit',
+            'Avg Sales\n': 'Vendas_Medias',
+            'Avg Sales': 'Vendas_Medias',
+            'Previsão Total com New PO': 'Previsao_Total_New_Pos',
+            'Previsão Total com New Pos': 'Previsao_Total_New_Pos'
         })
         
         return df
@@ -142,6 +150,15 @@ def calcular_timeline(df, meta_meses=6):
         st.warning("⚠️ DataFrame vazio - nenhum dado para calcular timeline")
         return []
     
+    # Debug: Show available columns
+    if st.sidebar.checkbox("🔍 Debug Columns", value=True, help="Show available DataFrame columns"):
+        st.sidebar.write("**Available Columns:**")
+        st.sidebar.write(list(df.columns))
+        st.sidebar.write("**Sample Row:**")
+        if len(df) > 0:
+            sample_row = df.iloc[0]
+            st.sidebar.write({col: sample_row[col] for col in df.columns[:10]})  # Show first 10 columns
+    
     for idx, row in df.iterrows():
         # Safely access columns with fallbacks - handle NaN values properly
         produto = str(row.get('Modelo', f'Produto_{idx}')) if pd.notna(row.get('Modelo')) else f'Produto_{idx}'
@@ -151,7 +168,35 @@ def calcular_timeline(df, meta_meses=6):
         estoque_atual = (pd.to_numeric(row.get('Estoque_Total', 0), errors='coerce') or 0) + (pd.to_numeric(row.get('In_Transit', 0), errors='coerce') or 0)
         vendas_mensais = pd.to_numeric(row.get('Vendas_Medias', 0), errors='coerce') or 0
         moq = pd.to_numeric(row.get('MOQ', 0), errors='coerce') or 0
-        preco = pd.to_numeric(row.get('Preco_Unitario', 0), errors='coerce') or 0
+        
+        # Try multiple column name variations for price
+        preco = 0
+        price_columns = [
+            'Preco_Unitario',           # Standard renamed column
+            '"Preco_Unitario"',         # Snowflake quoted column  
+            'Preço FOB Unitário',       # Excel direct
+            'Preço FOB\nUnitário',      # Excel with newline
+            'preco_unitario',           # Database column
+            'Preco_FOB_Unitario'        # Alternative naming
+        ]
+        for col in price_columns:
+            if col in row and pd.notna(row[col]):
+                preco = pd.to_numeric(row[col], errors='coerce') or 0
+                if preco > 0:
+                    break
+        
+        # Also try accessing by exact column names from the dataframe
+        if preco == 0:
+            for col in df.columns:
+                if 'preco' in col.lower() and ('unit' in col.lower() or 'fob' in col.lower()):
+                    if pd.notna(row[col]):
+                        try:
+                            preco = pd.to_numeric(row[col], errors='coerce') or 0
+                            if preco > 0:
+                                break
+                        except Exception as e:
+                            continue  # Skip problematic columns
+        
         cbm = pd.to_numeric(row.get('CBM', 0), errors='coerce') or 0
         
 
@@ -708,15 +753,36 @@ def load_page():
         timeline_data = calcular_timeline(df, meta_meses)
         
         # Debug info for troubleshooting
-        if timeline_data and st.sidebar.checkbox("🔧 Debug Info", help="Show data calculation details"):
+        if timeline_data and st.sidebar.checkbox("🔧 Debug Info", value=True, help="Show data calculation details"):
             with st.sidebar.expander("🔍 Data Debug"):
                 sample_item = timeline_data[0] if timeline_data else {}
-                st.write("**Sample Item:**")
+                st.write("**Sample Calculated Item:**")
                 st.write(f"Produto: {sample_item.get('Produto', 'N/A')}")
                 st.write(f"Preço Unit.: R$ {sample_item.get('Preco_Unitario', 0):.2f}")
                 st.write(f"Total FOB: R$ {sample_item.get('Valor_Pedido', 0):,.2f}")
                 st.write(f"CBM: {sample_item.get('CBM_Pedido', 0):.2f}")
                 st.write(f"Previsão: {sample_item.get('Previsao_Total_New_Pos', 0):.1f} meses")
+                st.write(f"MOQ: {sample_item.get('MOQ', 0):.0f}")
+                st.write(f"Qty Otimizada: {sample_item.get('Qtd_Otimizada', 0):.0f}")
+                
+                # Show original data columns for comparison
+                if len(df) > 0:
+                    st.write("**Original Data Sample:**")
+                    first_row = df.iloc[0]
+                    price_cols = [col for col in df.columns if 'preço' in col.lower() or 'fob' in col.lower() or 'price' in col.lower()]
+                    if price_cols:
+                        st.write("**Price Columns Found:**")
+                        for col in price_cols:
+                            st.write(f"{col}: {first_row.get(col, 'N/A')}")
+                    else:
+                        st.write("❌ No price columns found!")
+                        st.write("Available columns:", list(df.columns))
+                    
+                    # Show all potential price columns and their values
+                    st.write("**All Potential Price Columns:**")
+                    for col in df.columns:
+                        if any(keyword in col.lower() for keyword in ['preco', 'price', 'fob', 'unit']):
+                            st.write(f"{col}: {first_row.get(col, 'N/A')}")
         
         if timeline_data:
             urgencias = ["Todos"] + sorted(list(set(item['Urgencia'] for item in timeline_data)))
