@@ -211,6 +211,9 @@ def calcular_timeline(df, meta_meses=6):
         
         cbm = pd.to_numeric(row.get('CBM', 0), errors='coerce') or 0
         
+        # 🔧 FIX: Get Previsão Total directly from Excel if available
+        excel_previsao_total = pd.to_numeric(row.get('Previsao_Total_New_Pos', 0), errors='coerce') or 0
+        
 
         
         # Process all products with proper data - exactly like MINIPA
@@ -223,9 +226,17 @@ def calcular_timeline(df, meta_meses=6):
             
             qtd_otimizada = otimizar_quantidade_moq(vendas_mensais, moq, meta_meses)
             valor_pedido = qtd_otimizada * preco
-            cbm_pedido = qtd_otimizada * cbm
-            # Calculate "Previsão Total com New Pos" - how many months the MOQ purchase will last
-            previsao_total_new_pos = qtd_otimizada / vendas_mensais if vendas_mensais > 0 else 0
+            
+            # 🔧 FIX: Use Excel CBM value directly instead of calculating CBM per quantity
+            # CBM should be the total CBM value from Excel, not CBM per unit * quantity
+            cbm_pedido = cbm if cbm > 0 else (qtd_otimizada * 0.01)  # fallback to small CBM if zero
+            
+            # 🔧 FIX: Use Excel Previsão Total value directly if available, otherwise calculate
+            if excel_previsao_total > 0:
+                previsao_total_new_pos = excel_previsao_total
+            else:
+                # Fallback calculation if Excel doesn't have the value
+                previsao_total_new_pos = qtd_otimizada / vendas_mensais if vendas_mensais > 0 else 0
             
             if meses_ate_zerar <= 1:
                 cor = '#FF0000'
@@ -259,8 +270,12 @@ def calcular_timeline(df, meta_meses=6):
             # Products without sales but with stock/MOQ data - show as monitoring
             qtd_otimizada = max(moq, 50) if moq > 0 else 50
             valor_pedido = qtd_otimizada * preco
-            cbm_pedido = qtd_otimizada * cbm
-            previsao_total_new_pos = 0  # No forecast for products without sales
+            
+            # 🔧 FIX: Use Excel CBM value directly for monitoring products too
+            cbm_pedido = cbm if cbm > 0 else (qtd_otimizada * 0.01)  # fallback
+            
+            # 🔧 FIX: Use Excel Previsão Total if available for monitoring products
+            previsao_total_new_pos = excel_previsao_total if excel_previsao_total > 0 else 0
             
             cor = '#87CEEB'  # Light blue
             urgencia = 'MONITORAR'

@@ -87,7 +87,13 @@ def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
                 'Consumo 6 Meses': 'Consumo_6_Meses', 
                 'Média 6 Meses': 'Media_6_Meses',
                 'UltimoFor': 'ultimo_fornecedor',
-                'UltimoFornecedor': 'ultimo_fornecedor'
+                'UltimoFornecedor': 'ultimo_fornecedor',
+                
+                # 🔧 FIX: Add missing Previsão Total column mapping
+                'Previsão Total com New PO': 'Previsao_Total_New_Pos',
+                'Previsão Total com New Pos': 'Previsao_Total_New_Pos',
+                'Previsão Total': 'Previsao_Total_New_Pos',
+                'Previsao Total': 'Previsao_Total_New_Pos'
             }
             
             # Apply renaming
