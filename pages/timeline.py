@@ -260,6 +260,8 @@ def criar_grafico_interativo(timeline_data, filtro_urgencia="Todos"):
                     f"Vendas Mensais: {item['Vendas_Mensais']:.1f} un.<br>" +
                     f"Dias Restantes: {item['Dias_Restantes']}<br>" +
                     f"MOQ: {item['MOQ']:.0f} un.<br>" +
+                    f"Preço FOB Unit.: R$ {item['Preco_Unitario']:.2f}<br>" +
+                    f"Total FOB: R$ {item['Valor_Pedido']:,.2f}<br>" +
                     f"Urgência: {item['Urgencia']}<br>" +
                     "<extra></extra>"
                 )
@@ -443,13 +445,40 @@ def show_purchase_planning(timeline_data, empresa_selecionada, filtro):
         # Display the table with selection
         st.markdown("**Selecione os itens para gerar pedido de compra:**")
         
+        # Add table header
+        header_cols = st.columns([0.5, 2, 1.5, 1, 1, 1, 1.2, 0.8, 1, 1.5, 1.2])
+        with header_cols[0]:
+            st.markdown("**Sel**")
+        with header_cols[1]:
+            st.markdown("**Produto**")
+        with header_cols[2]:
+            st.markdown("**Fornecedor**")
+        with header_cols[3]:
+            st.markdown("**Prioridade**")
+        with header_cols[4]:
+            st.markdown("**Dias Rest.**")
+        with header_cols[5]:
+            st.markdown("**MOQ**")
+        with header_cols[6]:
+            st.markdown("**Preço Unit.**")
+        with header_cols[7]:
+            st.markdown("**Invest.**")
+        with header_cols[8]:
+            st.markdown("**CBM**")
+        with header_cols[9]:
+            st.markdown("**Cobertura**")
+        with header_cols[10]:
+            st.markdown("**Ação**")
+        
+        st.divider()
+        
         # Add selection checkboxes
         selected_items = []
         for i, (idx, row) in enumerate(display_df.iterrows()):
-            cols = st.columns([0.5, 2, 1.5, 1, 1, 1, 1.2, 0.8, 1, 1.5])
+            cols = st.columns([0.5, 2, 1.5, 1, 1, 1, 1.2, 0.8, 1, 1.5, 1.2])  # Added one more column
             
             with cols[0]:
-                selected = st.checkbox("", key=f"select_{i}", label_visibility="collapsed")
+                selected = st.checkbox("Sel", key=f"select_{i}", label_visibility="collapsed")
                 if selected:
                     selected_items.append(display_data[i])
             
@@ -677,6 +706,17 @@ def load_page():
         
         # Calculate timeline data
         timeline_data = calcular_timeline(df, meta_meses)
+        
+        # Debug info for troubleshooting
+        if timeline_data and st.sidebar.checkbox("🔧 Debug Info", help="Show data calculation details"):
+            with st.sidebar.expander("🔍 Data Debug"):
+                sample_item = timeline_data[0] if timeline_data else {}
+                st.write("**Sample Item:**")
+                st.write(f"Produto: {sample_item.get('Produto', 'N/A')}")
+                st.write(f"Preço Unit.: R$ {sample_item.get('Preco_Unitario', 0):.2f}")
+                st.write(f"Total FOB: R$ {sample_item.get('Valor_Pedido', 0):,.2f}")
+                st.write(f"CBM: {sample_item.get('CBM_Pedido', 0):.2f}")
+                st.write(f"Previsão: {sample_item.get('Previsao_Total_New_Pos', 0):.1f} meses")
         
         if timeline_data:
             urgencias = ["Todos"] + sorted(list(set(item['Urgencia'] for item in timeline_data)))
