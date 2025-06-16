@@ -25,7 +25,7 @@ def get_cached_counts(empresa, table_types=None):
         # Get timeline counts with conditional aggregation
         cursor.execute("""
         SELECT 
-            COUNT(*) FILTER (WHERE is_active = TRUE) as active_count,
+            SUM(CASE WHEN is_active = TRUE THEN 1 ELSE 0 END) as active_count,
             COUNT(*) as total_count,
             MAX(version_id) as max_version_id,
             MAX(data_upload) as latest_upload
@@ -44,7 +44,7 @@ def get_cached_counts(empresa, table_types=None):
         # Get analytics counts  
         cursor.execute("""
         SELECT 
-            COUNT(*) FILTER (WHERE is_active = TRUE) as active_count,
+            SUM(CASE WHEN is_active = TRUE THEN 1 ELSE 0 END) as active_count,
             COUNT(*) as total_count,
             MAX(version_id) as max_version_id,
             MAX(data_upload) as latest_upload
@@ -109,7 +109,7 @@ def load_combined_data_stats(empresa, include_timeline=True, include_analytics=T
             SELECT COUNT(*) as total_records,
                    MAX(data_upload) as latest_upload,
                    COUNT(DISTINCT upload_version) as version_count,
-                   COUNT(DISTINCT "UltimoFornecedor") as supplier_count
+                   COUNT(DISTINCT ultimo_fornecedor) as supplier_count
             FROM ESTOQUE.ANALYTICS_DATA 
             WHERE empresa = %s AND is_active = TRUE
             """, (empresa,))

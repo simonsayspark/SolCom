@@ -145,7 +145,7 @@ def get_version_summary(empresa, table_type=None):
             cursor.execute("""
             SELECT 
                 COUNT(*) as total_versions,
-                COUNT(*) FILTER (WHERE is_active = TRUE) as active_versions,
+                SUM(CASE WHEN is_active = TRUE THEN 1 ELSE 0 END) as active_versions,
                 MAX(upload_date) as latest_upload,
                 MAX(linhas_processadas) as max_records
             FROM CONFIG.VERSIONS 
@@ -155,7 +155,7 @@ def get_version_summary(empresa, table_type=None):
             cursor.execute("""
             SELECT 
                 COUNT(*) as total_versions,
-                COUNT(*) FILTER (WHERE is_active = TRUE) as active_versions,
+                SUM(CASE WHEN is_active = TRUE THEN 1 ELSE 0 END) as active_versions,
                 MAX(upload_date) as latest_upload,
                 MAX(linhas_processadas) as max_records
             FROM CONFIG.VERSIONS 
