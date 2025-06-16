@@ -471,22 +471,28 @@ def criar_grafico_interativo(timeline_data, filtro_urgencia="Todos"):
 def show_timeline_visual(timeline_data, empresa_selecionada, filtro):
     """Tab 1: Enhanced Timeline Visual"""
     
-    # Show company-specific metrics
+    # 🔧 FIX: Filter data to match what's actually displayed in charts
+    if filtro != "Todos":
+        filtered_timeline_data = [item for item in timeline_data if item['Urgencia'] == filtro]
+    else:
+        filtered_timeline_data = timeline_data
+    
+    # Show company-specific metrics for filtered data
     st.subheader(f"📊 Métricas - {empresa_selecionada}")
     col1, col2, col3, col4 = st.columns(4)
-    criticos = len([x for x in timeline_data if x['Urgencia'] == 'CRÍTICO'])
-    medios = len([x for x in timeline_data if x['Urgencia'] == 'MÉDIO'])
-    atencao = len([x for x in timeline_data if x['Urgencia'] == 'ATENÇÃO'])
-    ok = len([x for x in timeline_data if x['Urgencia'] == 'OK'])
+    criticos = len([x for x in filtered_timeline_data if x['Urgencia'] == 'CRÍTICO'])
+    medios = len([x for x in filtered_timeline_data if x['Urgencia'] == 'MÉDIO'])
+    atencao = len([x for x in filtered_timeline_data if x['Urgencia'] == 'ATENÇÃO'])
+    ok = len([x for x in filtered_timeline_data if x['Urgencia'] == 'OK'])
     
     col1.metric("🔴 Críticos", criticos)
     col2.metric("🟠 Médios", medios)
     col3.metric("🟡 Atenção", atencao)
     col4.metric("🟢 OK", ok)
     
-    # Show total investment with company context
-    valor_total = sum(item['Valor_Pedido'] for item in timeline_data)
-    cbm_total = sum(item['CBM_Pedido'] for item in timeline_data)
+    # 🔧 FIX: Show total investment for FILTERED data (what's actually displayed)
+    valor_total = sum(item['Valor_Pedido'] for item in filtered_timeline_data)
+    cbm_total = sum(item['CBM_Pedido'] for item in filtered_timeline_data)
     
     col1, col2 = st.columns(2)
     with col1:
@@ -495,11 +501,11 @@ def show_timeline_visual(timeline_data, empresa_selecionada, filtro):
         st.metric(f"📦 CBM Total", f"{cbm_total:.1f} m³")
     
     # Create and display enhanced charts
-    fig = criar_grafico_interativo(timeline_data, filtro)
+    fig = criar_grafico_interativo(filtered_timeline_data, "Todos")  # 🔧 FIX: Use filtered data, no double filtering
     if fig:
         # Update chart title to include company name
         fig.update_layout(
-            title=f"Timeline de Compras - {empresa_selecionada} ({len([x for x in timeline_data if filtro == 'Todos' or x['Urgencia'] == filtro])} produtos)",
+            title=f"Timeline de Compras - {empresa_selecionada} ({len(filtered_timeline_data)} produtos)",
             title_x=0.5
         )
         st.plotly_chart(fig, use_container_width=True)
@@ -528,22 +534,7 @@ def show_purchase_planning(timeline_data, empresa_selecionada, filtro):
         st.warning("📊 Nenhum produto encontrado para o filtro selecionado.")
         return
     
-    # Purchase Summary Cards
-    st.subheader("📊 Resumo de Compras")
-    col1, col2, col3, col4 = st.columns(4)
-    
-    # Calculate metrics
-    total_value = sum(item['Valor_Pedido'] for item in filtered_data)
-    critical_items = len([x for x in filtered_data if x['Urgencia'] == 'CRÍTICO'])
-    total_cbm = sum(item['CBM_Pedido'] for item in filtered_data)
-    suppliers = len(set(item['Fornecedor'] for item in filtered_data))
-    
-    col1.metric("💰 Valor Total", f"R$ {total_value:,.2f}")  # 🔧 FIX: Show 2 decimal places
-    col2.metric("🔴 Itens Críticos", critical_items)
-    col3.metric("📦 CBM Total", f"{total_cbm:.1f} m³")
-    col4.metric("🏭 Fornecedores", suppliers)
-    
-    # Priority-based filtering
+    # Priority-based filtering FIRST
     st.subheader("🎯 Filtros Inteligentes")
     col1, col2, col3 = st.columns(3)
     
@@ -563,6 +554,21 @@ def show_purchase_planning(timeline_data, empresa_selecionada, filtro):
         display_data = [x for x in display_data if x['Valor_Pedido'] > 10000]
     if show_by_supplier != "Todos":
         display_data = [x for x in display_data if x['Fornecedor'] == show_by_supplier]
+
+    # 🔧 FIX: Calculate metrics from display_data (what's actually shown in table)
+    st.subheader("📊 Resumo de Compras")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    # Calculate metrics from the ACTUAL displayed data
+    total_value = sum(item['Valor_Pedido'] for item in display_data)
+    critical_items = len([x for x in display_data if x['Urgencia'] == 'CRÍTICO'])
+    total_cbm = sum(item['CBM_Pedido'] for item in display_data)
+    suppliers = len(set(item['Fornecedor'] for item in display_data))
+    
+    col1.metric("💰 Valor Total", f"R$ {total_value:,.2f}")  # 🔧 FIX: Show 2 decimal places
+    col2.metric("🔴 Itens Críticos", critical_items)
+    col3.metric("📦 CBM Total", f"{total_cbm:.1f} m³")
+    col4.metric("🏭 Fornecedores", suppliers)
     
     # Smart Purchase Table
     st.subheader("📋 Tabela de Planejamento de Compras")
