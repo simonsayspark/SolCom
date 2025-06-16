@@ -779,6 +779,205 @@ def show_purchase_planning(timeline_data, empresa_selecionada, filtro):
     else:
         st.info("📋 Nenhum item encontrado para os filtros selecionados.")
 
+def show_debug_raw_data(df, timeline_data, empresa_selecionada, filtro):
+    """Tab 3: Debug Raw Data - Show original Excel data and processed timeline data"""
+    
+    st.subheader(f"🔍 Debug Raw Data - {empresa_selecionada}")
+    st.markdown("**Use this tab to debug data issues by comparing original Excel data with processed timeline data.**")
+    
+    # Filter timeline data if needed
+    if filtro != "Todos":
+        filtered_timeline_data = [item for item in timeline_data if item['Urgencia'] == filtro]
+    else:
+        filtered_timeline_data = timeline_data
+    
+    # Create two columns for side-by-side comparison
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("📊 Original Excel Data")
+        st.markdown(f"**Total rows:** {len(df)}")
+        
+        # Show basic info about the dataframe
+        st.markdown("**📋 Column Information:**")
+        col_info = []
+        for col in df.columns:
+            non_null_count = df[col].notna().sum()
+            col_info.append({
+                'Column': col,
+                'Non-Null Count': non_null_count,
+                'Data Type': str(df[col].dtype),
+                'Sample Value': str(df[col].iloc[0]) if len(df) > 0 else 'N/A'
+            })
+        
+        col_info_df = pd.DataFrame(col_info)
+        st.dataframe(col_info_df, use_container_width=True)
+        
+        # Show key columns for debugging
+        st.markdown("**🔑 Key Columns for Timeline:**")
+        key_columns = ['Item', 'Modelo', 'Fornecedor', 'QTD', 'Preco_Unitario', 'Preço FOB Unitário', 
+                      'Previsão Total com New PO', 'Previsao_Total_New_Pos', 'MOQ', 'Estoque_Total', 'Vendas_Medias', 'CBM']
+        
+        available_key_cols = [col for col in key_columns if col in df.columns]
+        if available_key_cols:
+            key_data = df[available_key_cols].head(10)
+            st.dataframe(key_data, use_container_width=True)
+        else:
+            st.warning("⚠️ No key columns found in the expected format")
+        
+        # Show full raw data with search
+        st.markdown("**📋 Full Raw Data (First 50 rows):**")
+        search_term = st.text_input("🔍 Search in raw data:", key="raw_search")
+        
+        display_df = df.head(50)
+        if search_term:
+            # Search across all string columns
+            mask = df.astype(str).apply(lambda x: x.str.contains(search_term, case=False, na=False)).any(axis=1)
+            display_df = df[mask].head(50)
+            st.info(f"Found {mask.sum()} rows containing '{search_term}'")
+        
+        st.dataframe(display_df, use_container_width=True)
+    
+    with col2:
+        st.subheader("⚙️ Processed Timeline Data")
+        st.markdown(f"**Timeline items:** {len(filtered_timeline_data)}")
+        
+        if filtered_timeline_data:
+            # Convert timeline data to DataFrame for better display
+            timeline_df = pd.DataFrame(filtered_timeline_data)
+            
+            # Show summary statistics
+            st.markdown("**📊 Summary Statistics:**")
+            summary_stats = {
+                'Total Items': len(timeline_df),
+                'Items with Prices > 0': len(timeline_df[timeline_df['Preco_Unitario'] > 0]),
+                'Items with Zero Prices': len(timeline_df[timeline_df['Preco_Unitario'] == 0]),
+                'Total Investment': f"R$ {timeline_df['Valor_Pedido'].sum():,.2f}",
+                'Average Price': f"R$ {timeline_df['Preco_Unitario'].mean():.2f}",
+                'Total CBM': f"{timeline_df['CBM_Pedido'].sum():.2f}",
+                'Unique Suppliers': timeline_df['Fornecedor'].nunique()
+            }
+            
+            for key, value in summary_stats.items():
+                st.metric(key, value)
+            
+            # Show urgency breakdown
+            st.markdown("**🎯 Urgency Breakdown:**")
+            urgency_counts = timeline_df['Urgencia'].value_counts()
+            for urgency, count in urgency_counts.items():
+                st.write(f"• {urgency}: {count} items")
+            
+            # Show processed data with search
+            st.markdown("**📋 Processed Timeline Data:**")
+            timeline_search = st.text_input("🔍 Search in timeline data:", key="timeline_search")
+            
+            display_timeline_df = timeline_df
+            if timeline_search:
+                mask = timeline_df.astype(str).apply(lambda x: x.str.contains(timeline_search, case=False, na=False)).any(axis=1)
+                display_timeline_df = timeline_df[mask]
+                st.info(f"Found {len(display_timeline_df)} items containing '{timeline_search}'")
+            
+            st.dataframe(display_timeline_df, use_container_width=True)
+    
+    # Comparison section
+    st.divider()
+    st.subheader("🔄 Data Comparison & Issues")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("**💰 Price Issues:**")
+        if timeline_data:
+            zero_price_items = [item for item in timeline_data if item['Preco_Unitario'] == 0]
+            if zero_price_items:
+                st.error(f"❌ {len(zero_price_items)} items have zero prices")
+                st.markdown("**Items with zero prices:**")
+                for item in zero_price_items[:5]:  # Show first 5
+                    st.write(f"• {item['Produto']} ({item['Fornecedor']})")
+                if len(zero_price_items) > 5:
+                    st.write(f"... and {len(zero_price_items) - 5} more")
+            else:
+                st.success("✅ All items have valid prices")
+    
+    with col2:
+        st.markdown("**📊 Quantity Issues:**")
+        if timeline_data:
+            zero_qty_items = [item for item in timeline_data if item.get('Qtd_Otimizada', 0) == 0]
+            if zero_qty_items:
+                st.warning(f"⚠️ {len(zero_qty_items)} items have zero quantities")
+            else:
+                st.success("✅ All items have valid quantities")
+    
+    with col3:
+        st.markdown("**📦 Cobertura Issues:**")
+        if timeline_data:
+            zero_cobertura_items = [item for item in timeline_data if item.get('Previsao_Total_New_Pos', 0) == 0]
+            if zero_cobertura_items:
+                st.warning(f"⚠️ {len(zero_cobertura_items)} items have zero cobertura")
+                st.markdown("**Items with zero cobertura:**")
+                for item in zero_cobertura_items[:3]:  # Show first 3
+                    st.write(f"• {item['Produto']}")
+            else:
+                st.success("✅ All items have cobertura data")
+    
+    # Column mapping verification
+    st.divider()
+    st.subheader("🔗 Column Mapping Verification")
+    
+    st.markdown("**Check if your Excel columns are being mapped correctly:**")
+    
+    mapping_checks = [
+        ("Price Column", ["Preco_Unitario", "Preço FOB Unitário", "Preço FOB\nUnitário"], "💰"),
+        ("Quantity Column", ["QTD"], "📦"),
+        ("Supplier Column", ["Fornecedor"], "🏭"),
+        ("Product Column", ["Modelo", "Item"], "📋"),
+        ("Cobertura Column", ["Previsao_Total_New_Pos", "Previsão Total com New PO"], "📊"),
+        ("CBM Column", ["CBM"], "📦"),
+        ("MOQ Column", ["MOQ"], "🎯"),
+        ("Stock Column", ["Estoque_Total"], "📊"),
+        ("Sales Column", ["Vendas_Medias"], "📈")
+    ]
+    
+    for check_name, possible_cols, icon in mapping_checks:
+        found_cols = [col for col in possible_cols if col in df.columns]
+        if found_cols:
+            st.success(f"{icon} **{check_name}**: Found `{found_cols[0]}`")
+            # Show sample values
+            sample_values = df[found_cols[0]].dropna().head(3).tolist()
+            st.write(f"   Sample values: {sample_values}")
+        else:
+            st.error(f"{icon} **{check_name}**: ❌ Not found")
+            st.write(f"   Looking for: {possible_cols}")
+    
+    # Export debug data
+    st.divider()
+    st.subheader("📥 Export Debug Data")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("📊 Export Raw Excel Data", use_container_width=True):
+            csv_data = df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="⬇️ Download Raw Data CSV",
+                data=csv_data,
+                file_name=f"raw_data_{empresa_selecionada}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+    
+    with col2:
+        if timeline_data and st.button("⚙️ Export Processed Timeline Data", use_container_width=True):
+            timeline_df = pd.DataFrame(timeline_data)
+            csv_data = timeline_df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="⬇️ Download Timeline Data CSV",
+                data=csv_data,
+                file_name=f"timeline_data_{empresa_selecionada}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+
 def load_page():
     # Header with company selector
     col1, col2, col3 = st.columns([2, 1, 1])
@@ -1014,13 +1213,16 @@ def load_page():
             filtro = st.sidebar.selectbox("🔍 Filtrar", urgencias)
             
             # TAB STRUCTURE IMPLEMENTATION
-            tab1, tab2 = st.tabs(["📅 Timeline Visual", "🛒 Planejamento de Compras"])
+            tab1, tab2, tab3 = st.tabs(["📅 Timeline Visual", "🛒 Planejamento de Compras", "🔍 Debug Raw Data"])
             
             with tab1:
                 show_timeline_visual(timeline_data, empresa_selecionada, filtro)
             
             with tab2:
                 show_purchase_planning(timeline_data, empresa_selecionada, filtro)
+            
+            with tab3:
+                show_debug_raw_data(df, timeline_data, empresa_selecionada, filtro)
                 
         else:
             st.warning(f"📊 Nenhum dado válido encontrado para criar o timeline de {empresa_selecionada}.")
