@@ -181,6 +181,9 @@ def calcular_timeline(df, meta_meses=6):
         vendas_mensais = pd.to_numeric(row.get('Vendas_Medias', 0), errors='coerce') or 0
         moq = pd.to_numeric(row.get('MOQ', 0), errors='coerce') or 0
         
+        # 🔧 FIX: Get Excel QTD for correct total value calculation
+        excel_qtd = pd.to_numeric(row.get('QTD', 0), errors='coerce') or 0
+        
         # Try multiple column name variations for price
         preco = 0
         price_columns = [
@@ -211,8 +214,25 @@ def calcular_timeline(df, meta_meses=6):
         
         cbm = pd.to_numeric(row.get('CBM', 0), errors='coerce') or 0
         
-        # 🔧 FIX: Get Previsão Total directly from Excel if available
-        excel_previsao_total = pd.to_numeric(row.get('Previsao_Total_New_Pos', 0), errors='coerce') or 0
+        # 🔧 FIX: Get Previsão Total directly from Excel if available - with debugging
+        excel_previsao_total = 0
+        previsao_columns = ['Previsao_Total_New_Pos', 'Previsão Total com New PO', 'Previsão Total com New Pos', 'Previsão Total']
+
+        # Try different column variations
+        for col in previsao_columns:
+            if col in row and pd.notna(row[col]):
+                excel_previsao_total = pd.to_numeric(row[col], errors='coerce') or 0
+                if excel_previsao_total > 0:
+                    break
+
+        # Also check exact column names in dataframe
+        if excel_previsao_total == 0:
+            for col in df.columns:
+                if 'previsao' in col.lower() or 'previsão' in col.lower():
+                    if pd.notna(row[col]):
+                        excel_previsao_total = pd.to_numeric(row[col], errors='coerce') or 0
+                        if excel_previsao_total > 0:
+                            break
         
 
         
@@ -225,7 +245,9 @@ def calcular_timeline(df, meta_meses=6):
                 data_pedido = hoje
             
             qtd_otimizada = otimizar_quantidade_moq(vendas_mensais, moq, meta_meses)
-            valor_pedido = qtd_otimizada * preco
+            
+            # 🔧 FIX: Use Excel QTD for total value, not optimized quantity
+            valor_pedido = excel_qtd * preco if excel_qtd > 0 else qtd_otimizada * preco
             
             # 🔧 FIX: Use Excel CBM value directly instead of calculating CBM per quantity
             # CBM should be the total CBM value from Excel, not CBM per unit * quantity
@@ -269,7 +291,9 @@ def calcular_timeline(df, meta_meses=6):
         elif (estoque_atual > 0 or moq > 0) and produto != 'nan':
             # Products without sales but with stock/MOQ data - show as monitoring
             qtd_otimizada = max(moq, 50) if moq > 0 else 50
-            valor_pedido = qtd_otimizada * preco
+            
+            # 🔧 FIX: Use Excel QTD for monitoring products too
+            valor_pedido = excel_qtd * preco if excel_qtd > 0 else qtd_otimizada * preco
             
             # 🔧 FIX: Use Excel CBM value directly for monitoring products too
             cbm_pedido = cbm if cbm > 0 else (qtd_otimizada * 0.01)  # fallback
