@@ -100,7 +100,7 @@ def carregar_dados(uploaded_file=None):
             'Avg Sales\n': 'Vendas_Medias',
             'Avg Sales': 'Vendas_Medias',
             'Previsão Total com New PO': 'Previsao_Total_New_Pos',
-            'Previsão Total com New Pos': 'Previsao_Total_New_Pos'
+            'Previsão Total com New POs': 'Previsao_Total_New_Pos'
         })
         
         return df
@@ -228,7 +228,7 @@ def calcular_timeline(df, meta_meses=6):
             found_previsao_column = 'Previsao_Total_New_Pos'
         # Try other variations
         else:
-            previsao_columns = ['Previsão Total com New Pos', 'Previsão\nTotal com New PO', 'Previsão Total', 'Previsao Total']
+            previsao_columns = ['Previsão Total com New POs', 'Previsão Total com New PO', 'Previsão\nTotal com New PO', 'Previsão Total', 'Previsao Total']
             for col in previsao_columns:
                 if col in row and pd.notna(row[col]):
                     excel_previsao_total = pd.to_numeric(row[col], errors='coerce') or 0
@@ -264,8 +264,17 @@ def calcular_timeline(df, meta_meses=6):
         
         # Process all products with proper data - exactly like MINIPA
         if vendas_mensais > 0:
-            meses_ate_zerar = estoque_atual / vendas_mensais
-            data_esgotamento = hoje + timedelta(days=int(meses_ate_zerar * 30))
+            # 🔧 FIX: Use Excel Previsão Total to calculate days remaining instead of stock/sales calculation
+            if excel_previsao_total > 0:
+                # Use Excel "Previsão Total" directly - convert months to days
+                meses_ate_zerar = excel_previsao_total
+                dias_restantes = int(excel_previsao_total * 30)  # Convert months to days
+            else:
+                # Fallback to stock/sales calculation if no Excel value
+                meses_ate_zerar = estoque_atual / vendas_mensais
+                dias_restantes = int(meses_ate_zerar * 30)
+                
+            data_esgotamento = hoje + timedelta(days=dias_restantes)
             data_pedido = data_esgotamento - timedelta(days=45)
             if data_pedido < hoje:
                 data_pedido = hoje
@@ -280,19 +289,20 @@ def calcular_timeline(df, meta_meses=6):
             cbm_pedido = cbm if cbm > 0 else (qtd_otimizada * 0.01)  # fallback to small CBM if zero
             
             # 🔧 FIX: Use Excel Previsão Total value directly if available (even if 0), otherwise calculate
-            if 'Previsão Total com New PO' in row or 'Previsao_Total_New_Pos' in row or excel_previsao_total != 0:
+            if 'Previsão Total com New POs' in row or 'Previsao_Total_New_Pos' in row or excel_previsao_total != 0:
                 previsao_total_new_pos = excel_previsao_total
             else:
                 # Fallback calculation if Excel doesn't have the value at all
                 previsao_total_new_pos = qtd_otimizada / vendas_mensais if vendas_mensais > 0 else 0
             
-            if meses_ate_zerar <= 1:
+            # 🔧 FIX: Use the calculated dias_restantes for urgency classification
+            if dias_restantes <= 30:  # 1 month
                 cor = '#FF0000'
                 urgencia = 'CRÍTICO'
-            elif meses_ate_zerar <= 3:
+            elif dias_restantes <= 90:  # 3 months
                 cor = '#FF8C00'
                 urgencia = 'MÉDIO'
-            elif meses_ate_zerar <= 6:
+            elif dias_restantes <= 180:  # 6 months
                 cor = '#FFD700'
                 urgencia = 'ATENÇÃO'
             else:
@@ -302,7 +312,7 @@ def calcular_timeline(df, meta_meses=6):
             timeline_data.append({
                 'Produto': produto,
                 'Fornecedor': fornecedor,
-                'Dias_Restantes': int(meses_ate_zerar * 30),
+                'Dias_Restantes': dias_restantes,  # 🔧 FIX: Use the calculated dias_restantes
                 'Estoque_Atual': estoque_atual,
                 'Vendas_Mensais': vendas_mensais,
                 'MOQ': moq,
@@ -326,14 +336,16 @@ def calcular_timeline(df, meta_meses=6):
             cbm_pedido = cbm if cbm > 0 else (qtd_otimizada * 0.01)  # fallback
             
             # 🔧 FIX: Use Excel Previsão Total if available for monitoring products (even if 0)
-            if 'Previsão Total com New PO' in row or 'Previsao_Total_New_Pos' in row or excel_previsao_total != 0:
+            if 'Previsão Total com New POs' in row or 'Previsao_Total_New_Pos' in row or excel_previsao_total != 0:
                 previsao_total_new_pos = excel_previsao_total
+                # 🔧 FIX: Use Excel Previsão Total for days calculation
+                dias_restantes = int(excel_previsao_total * 30) if excel_previsao_total > 0 else 999
             else:
                 previsao_total_new_pos = 0
+                dias_restantes = 999
             
             cor = '#87CEEB'  # Light blue
             urgencia = 'MONITORAR'
-            dias_restantes = 999
             
             timeline_data.append({
                 'Produto': produto,
@@ -357,15 +369,18 @@ def calcular_timeline(df, meta_meses=6):
                 valor_pedido = excel_qtd * preco if excel_qtd > 0 else preco
                 cbm_pedido = cbm if cbm > 0 else 0.01
                 # 🔧 FIX: Use Excel Previsão Total for REVISAR products (even if 0)
-                if 'Previsão Total com New PO' in row or 'Previsao_Total_New_Pos' in row or excel_previsao_total != 0:
+                if 'Previsão Total com New POs' in row or 'Previsao_Total_New_Pos' in row or excel_previsao_total != 0:
                     previsao_total_new_pos = excel_previsao_total
+                    # 🔧 FIX: Use Excel Previsão Total for days calculation
+                    dias_restantes_revisar = int(excel_previsao_total * 30) if excel_previsao_total > 0 else 999
                 else:
                     previsao_total_new_pos = 0
+                    dias_restantes_revisar = 999
                 
                 timeline_data.append({
                     'Produto': produto,
                     'Fornecedor': fornecedor,
-                    'Dias_Restantes': 999,  # No urgency calculation possible
+                    'Dias_Restantes': dias_restantes_revisar,  # 🔧 FIX: Use calculated days from Excel
                     'Estoque_Atual': estoque_atual,
                     'Vendas_Mensais': vendas_mensais,
                     'MOQ': moq,
@@ -509,10 +524,9 @@ def show_timeline_visual(timeline_data, empresa_selecionada, filtro):
     valor_total = sum(item['Valor_Pedido'] for item in filtered_timeline_data)
     cbm_total = sum(item['CBM_Pedido'] for item in filtered_timeline_data)
     
-    col1, col2 = st.columns(2)
+    col1 = st.columns(1)
     with col1:
-        st.metric(f"💰 Investimento Total", f"R$ {valor_total:,.2f}")  # 🔧 FIX: Show 2 decimal places
-    with col2:
+        # st.metric(f"💰 Investimento Total", f"R$ {valor_total:,.2f}")  # 🔧 FIX: Show 2 decimal places
         st.metric(f"📦 CBM Total", f"{cbm_total:.1f} m³")
     
     # Create and display enhanced charts
