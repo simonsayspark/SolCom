@@ -216,13 +216,16 @@ def calcular_timeline(df, meta_meses=6):
         
         # 🔧 FIX: Get Previsão Total directly from Excel - try exact column names first
         excel_previsao_total = 0
+        found_previsao_column = None
         
         # First try the exact column name from the image
         if 'Previsão Total com New PO' in row and pd.notna(row['Previsão Total com New PO']):
             excel_previsao_total = pd.to_numeric(row['Previsão Total com New PO'], errors='coerce') or 0
+            found_previsao_column = 'Previsão Total com New PO'
         # Then try the mapped column name
         elif 'Previsao_Total_New_Pos' in row and pd.notna(row['Previsao_Total_New_Pos']):
             excel_previsao_total = pd.to_numeric(row['Previsao_Total_New_Pos'], errors='coerce') or 0
+            found_previsao_column = 'Previsao_Total_New_Pos'
         # Try other variations
         else:
             previsao_columns = ['Previsão Total com New Pos', 'Previsão\nTotal com New PO', 'Previsão Total', 'Previsao Total']
@@ -230,6 +233,7 @@ def calcular_timeline(df, meta_meses=6):
                 if col in row and pd.notna(row[col]):
                     excel_previsao_total = pd.to_numeric(row[col], errors='coerce') or 0
                     if excel_previsao_total > 0:
+                        found_previsao_column = col
                         break
         
         # Also check for any column containing "previsao" or "previsão" - make sure we don't miss it
@@ -240,7 +244,18 @@ def calcular_timeline(df, meta_meses=6):
                         test_value = pd.to_numeric(row[col], errors='coerce') or 0
                         if test_value > 0:
                             excel_previsao_total = test_value
+                            found_previsao_column = col
                             break
+        
+        # Store debug info about which column was used (if any)
+        if not hasattr(st.session_state, 'previsao_debug'):
+            st.session_state.previsao_debug = {}
+        
+        if found_previsao_column and produto != 'nan':
+            st.session_state.previsao_debug[produto] = {
+                'column_used': found_previsao_column,
+                'value': excel_previsao_total
+            }
         
 
         
@@ -1140,6 +1155,27 @@ def load_page():
                     if any(keyword in col.lower() for keyword in ['preco', 'price', 'fob', 'unit']):
                         st.write(f"{col}: {first_row.get(col, 'N/A')}")
                 
+                # 🔧 DEBUG: Show Previsão Total column status
+                st.write("**🔍 Previsão Total Column Debug:**")
+                previsao_candidates = [col for col in df.columns if 'previs' in col.lower() or ('total' in col.lower() and 'new' in col.lower())]
+                if previsao_candidates:
+                    st.write(f"✅ Found Previsão Total candidates: {', '.join(previsao_candidates)}")
+                    for col in previsao_candidates:
+                        sample_val = first_row.get(col, 'N/A')
+                        st.write(f"  • {col}: {sample_val}")
+                else:
+                    st.error("❌ NO Previsão Total columns found!")
+                    st.write("Available columns:")
+                    st.write(list(df.columns))
+                
+                # Show what the system used for Previsão Total
+                if hasattr(st.session_state, 'previsao_debug') and st.session_state.previsao_debug:
+                    st.write("**📊 Previsão Total Usage by Product:**")
+                    for produto, info in list(st.session_state.previsao_debug.items())[:5]:
+                        st.write(f"  • {produto}: Column '{info['column_used']}' = {info['value']}")
+                else:
+                    st.warning("⚠️ No Previsão Total debug info available yet")
+                
                 # Show data filtering info
                 if hasattr(st.session_state, 'debug_info'):
                     debug_info = st.session_state.debug_info
@@ -1212,14 +1248,11 @@ def load_page():
             urgencias = ["Todos"] + sorted(list(set(item['Urgencia'] for item in timeline_data)))
             filtro = st.sidebar.selectbox("🔍 Filtrar", urgencias)
             
-            # TAB STRUCTURE IMPLEMENTATION
-            tab1, tab2, tab3 = st.tabs(["📅 Timeline Visual", "🛒 Planejamento de Compras", "🔍 Debug Raw Data"])
+            # TAB STRUCTURE IMPLEMENTATION - REMOVED PLANEJAMENTO DE COMPRAS
+            tab1, tab2 = st.tabs(["📅 Timeline Visual", "🔍 Debug Raw Data"])
             
             with tab1:
                 show_timeline_visual(timeline_data, empresa_selecionada, filtro)
-            
-            # with tab2:
-            #     show_purchase_planning(timeline_data, empresa_selecionada, filtro)
             
             with tab2:
                 show_debug_raw_data(df, timeline_data, empresa_selecionada, filtro)

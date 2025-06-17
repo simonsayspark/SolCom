@@ -91,7 +91,7 @@ def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
                 
                 # 🔧 FIX: Add missing Previsão Total column mapping
                 'Previsão Total com New PO': 'Previsao_Total_New_Pos',
-                'Previsão Total com New Pos': 'Previsao_Total_New_Pos',
+                'Previsão Total com New POs': 'Previsao_Total_New_Pos',
                 'Previsão Total': 'Previsao_Total_New_Pos',
                 'Previsao Total': 'Previsao_Total_New_Pos'
             }
@@ -116,6 +116,21 @@ def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
                 # Show critical price column fix
                 if any('Preco_Unitario' in change for change in changes_made):
                     st.success("🔧 **CORREÇÃO CRÍTICA**: Coluna de preços padronizada - isso deve resolver o problema de preços zero!")
+                
+                # 🔧 DEBUG: Check if Previsão Total column was processed
+                previsao_changes = [change for change in changes_made if 'Previsao_Total_New_Pos' in change]
+                if previsao_changes:
+                    st.success("🔧 **PREVISÃO TOTAL ENCONTRADA**: " + previsao_changes[0])
+                else:
+                    st.warning("⚠️ **PREVISÃO TOTAL NÃO ENCONTRADA** - Verifique se a coluna existe no Excel")
+                    
+                    # Show available columns that might be Previsão Total
+                    previsao_candidates = [col for col in original_columns if 'previs' in col.lower() or 'total' in col.lower()]
+                    if previsao_candidates:
+                        st.info(f"🔍 Colunas candidatas encontradas: {', '.join(previsao_candidates)}")
+                    
+                    # Show exact column names for debugging
+                    st.info(f"📋 Todas as colunas originais: {', '.join(original_columns[:10])}{'...' if len(original_columns) > 10 else ''}")
             
             st.success(f"✅ Detectado automaticamente: planilha '{best_sheet}', linha {best_header_row + 1}")
             return df_full, best_sheet, best_header_row
