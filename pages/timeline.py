@@ -4,6 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
+import plotly.colors as pc
 
 def detect_excel_headers(uploaded_file):
     """Smart detection of Excel headers for different file formats"""
@@ -312,7 +313,7 @@ def calcular_timeline(df, meta_meses=6):
             timeline_data.append({
                 'Produto': produto,
                 'Fornecedor': fornecedor,
-                'Dias_Restantes': dias_restantes,  # 🔧 FIX: Use the calculated dias_restantes
+                'Dias_Restantes': previsao_total_new_pos,
                 'Estoque_Atual': estoque_atual,
                 'Vendas_Mensais': vendas_mensais,
                 'MOQ': moq,
@@ -350,7 +351,7 @@ def calcular_timeline(df, meta_meses=6):
             timeline_data.append({
                 'Produto': produto,
                 'Fornecedor': fornecedor,
-                'Dias_Restantes': dias_restantes,
+                'Dias_Restantes': previsao_total_new_pos,
                 'Estoque_Atual': estoque_atual,
                 'Vendas_Mensais': vendas_mensais,
                 'MOQ': moq,
@@ -380,7 +381,7 @@ def calcular_timeline(df, meta_meses=6):
                 timeline_data.append({
                     'Produto': produto,
                     'Fornecedor': fornecedor,
-                    'Dias_Restantes': dias_restantes_revisar,  # 🔧 FIX: Use calculated days from Excel
+                    'Dias_Restantes': previsao_total_new_pos,
                     'Estoque_Atual': estoque_atual,
                     'Vendas_Mensais': vendas_mensais,
                     'MOQ': moq,
@@ -419,6 +420,16 @@ def calcular_timeline(df, meta_meses=6):
     
     return sorted(timeline_data, key=lambda x: x['Dias_Restantes'])
 
+def get_urgency_color(meses_restantes):
+    if meses_restantes <= 1:
+        return '#FF0000'  # Red - Critical
+    elif meses_restantes <= 3:
+        return '#FF8C00'  # Orange - Medium
+    elif meses_restantes <= 6:
+        return '#FFD700'  # Yellow - Attention
+    else:
+        return '#32CD32'  # Green - OK
+
 def criar_grafico_interativo(timeline_data, filtro_urgencia="Todos"):
     """Create interactive timeline charts"""
     if filtro_urgencia != "Todos":
@@ -433,24 +444,23 @@ def criar_grafico_interativo(timeline_data, filtro_urgencia="Todos"):
         vertical_spacing=0.15
     )
     
-    produtos = [item['Produto'] for item in timeline_data]
-    
-    # Chart 1: Timeline
+    # Chart 1: Timeline (Meses)
     for i, item in enumerate(timeline_data):
+        color = get_urgency_color(item['Dias_Restantes'])
         fig.add_trace(
             go.Bar(
                 y=[i],
                 x=[item['Dias_Restantes']],
                 orientation='h',
-                marker_color=item['Cor'],
-                opacity=0.7,
+                marker_color=color,
+                opacity=0.85,
                 showlegend=False,
                 hovertemplate=(
                     f"<b>{item['Produto']}</b><br>" +
                     f"Fornecedor: {item['Fornecedor']}<br>" +
                     f"Estoque Atual: {item['Estoque_Atual']:.0f} un.<br>" +
                     f"Vendas Mensais: {item['Vendas_Mensais']:.1f} un.<br>" +
-                    f"Dias Restantes: {item['Dias_Restantes']}<br>" +
+                    f"Meses Restantes: {item['Dias_Restantes']:.1f}<br>" +
                     f"MOQ: {item['MOQ']:.0f} un.<br>" +
                     f"Preço FOB Unit.: R$ {item['Preco_Unitario']:.2f}<br>" +
                     f"Total FOB: R$ {item['Valor_Pedido']:,.2f}<br>" +
@@ -461,15 +471,16 @@ def criar_grafico_interativo(timeline_data, filtro_urgencia="Todos"):
             row=1, col=1
         )
     
-    # Chart 2: Quantities
+    # Chart 2: Quantities (same color logic)
     for i, item in enumerate(timeline_data):
+        color = get_urgency_color(item['Dias_Restantes'])
         fig.add_trace(
             go.Bar(
                 y=[i],
                 x=[item['Qtd_Otimizada']],
                 orientation='h',
-                marker_color=item['Cor'],
-                opacity=0.7,
+                marker_color=color,
+                opacity=0.85,
                 showlegend=False,
                 hovertemplate=(
                     f"<b>{item['Produto']}</b><br>" +
@@ -491,9 +502,9 @@ def criar_grafico_interativo(timeline_data, filtro_urgencia="Todos"):
         showlegend=False
     )
     
-    fig.update_yaxes(tickvals=list(range(len(produtos))), ticktext=produtos, row=1, col=1)
-    fig.update_yaxes(tickvals=list(range(len(produtos))), ticktext=produtos, row=2, col=1)
-    fig.update_xaxes(title_text="Dias", row=1, col=1)
+    fig.update_yaxes(tickvals=list(range(len(timeline_data))), ticktext=[item['Produto'] for item in timeline_data], row=1, col=1)
+    fig.update_yaxes(tickvals=list(range(len(timeline_data))), ticktext=[item['Produto'] for item in timeline_data], row=2, col=1)
+    fig.update_xaxes(title_text="Meses", row=1, col=1)
     fig.update_xaxes(title_text="Quantidade", row=2, col=1)
     
     return fig
@@ -546,7 +557,7 @@ def show_timeline_visual(timeline_data, empresa_selecionada, filtro):
         - 🖱️ **Zoom**: Ferramentas no canto superior direito
         - 👆 **Hover**: Informações detalhadas incluindo preços FOB e previsão de cobertura
         - 🔍 **Filtrar**: Use a sidebar para filtrar por urgência
-        - 📊 **Gráfico Superior**: Quando o estoque vai acabar (em dias)
+        - 📊 **Gráfico Superior**: Quando o estoque vai acabar (em meses)
         - 📦 **Gráfico Inferior**: Quanto comprar (MOQ) com valores FOB e previsão
         """)
     else:
