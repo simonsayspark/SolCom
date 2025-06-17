@@ -178,7 +178,7 @@ def calcular_timeline(df, meta_meses=6):
         fornecedor = str(row.get('Fornecedor', 'Fornecedor Desconhecido')) if pd.notna(row.get('Fornecedor')) else 'Fornecedor Desconhecido'
         
         # Handle numeric columns properly - convert NaN to 0
-        estoque_atual = (pd.to_numeric(row.get('Estoque Total', 0), errors='coerce') or 0)
+        estoque_atual = (pd.to_numeric(row.get('Estoque_Total', 0), errors='coerce') or 0)
         vendas_mensais = pd.to_numeric(row.get('Vendas_Medias', 0), errors='coerce') or 0
         moq = pd.to_numeric(row.get('MOQ', 0), errors='coerce') or 0
         
