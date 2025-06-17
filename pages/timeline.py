@@ -524,9 +524,11 @@ def show_timeline_visual(timeline_data, empresa_selecionada, filtro):
     valor_total = sum(item['Valor_Pedido'] for item in filtered_timeline_data)
     cbm_total = sum(item['CBM_Pedido'] for item in filtered_timeline_data)
     
-    col1 = st.columns(1)
+    col1 = st.columns(2)
     with col1:
-        # st.metric(f"💰 Investimento Total", f"R$ {valor_total:,.2f}")  # 🔧 FIX: Show 2 decimal places
+        st.metric(f"💰 Investimento ")  # 🔧 FIX: Show 2 decimal places
+        
+    with col2:    
         st.metric(f"📦 CBM Total", f"{cbm_total:.1f} m³")
     
     # Create and display enhanced charts
