@@ -435,19 +435,21 @@ def build_hovertemplate(item):
     base = [
         f"<b>{item.get('Produto','')}</b>",
         f"Fornecedor: {item.get('Fornecedor','')}",
-        f"Estoque Atual: {item.get('Estoque_Atual','')}",
-        f"Vendas Mensais: {item.get('Vendas_Mensais','')}",
-        f"Meses Restantes: {item.get('Dias_Restantes','')}",
-        f"MOQ: {item.get('MOQ','')}",
+        f"Estoque Atual: {format(item.get('Estoque_Atual',''), '.2f') if isinstance(item.get('Estoque_Atual'), (int, float)) else item.get('Estoque_Atual','')}",
+        f"Vendas Mensais: {format(item.get('Vendas_Mensais',''), '.2f') if isinstance(item.get('Vendas_Mensais'), (int, float)) else item.get('Vendas_Mensais','')}",
+        f"MOQ: {format(item.get('MOQ',''), '.2f') if isinstance(item.get('MOQ'), (int, float)) else item.get('MOQ','')}",
         f"Preço FOB Unit.: R$ {item.get('Preco_Unitario',0):.2f}",
         f"Total FOB: R$ {item.get('Valor_Pedido',0):,.2f}",
         f"Urgência: {item.get('Urgencia','')}",
     ]
-    # Add all other columns not already shown
+    # Add all other columns not already shown, format numbers to 2 decimals
     shown_keys = {'Produto','Fornecedor','Estoque_Atual','Vendas_Mensais','Dias_Restantes','MOQ','Preco_Unitario','Valor_Pedido','Urgencia'}
     for k, v in item.items():
         if k not in shown_keys:
-            base.append(f"{k}: {v}")
+            if isinstance(v, (int, float)):
+                base.append(f"{k}: {v:.2f}")
+            else:
+                base.append(f"{k}: {v}")
     return '<br>'.join(base) + "<extra></extra>"
 
 def criar_grafico_interativo(timeline_data, filtro_urgencia="Todos"):
