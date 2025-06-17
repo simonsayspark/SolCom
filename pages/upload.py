@@ -74,6 +74,7 @@ def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
                 'Modelo\n': 'Modelo',
                 'Estoque Total\n': 'Estoque_Total',
                 'Estoque\nTotal': 'Estoque_Total',
+                'Estoque Total': 'Estoque_Total',
                 'In Transit\n': 'In_Transit',
                 'In\nTransit': 'In_Transit',
                 'Avg Sales\n': 'Vendas_Medias',
