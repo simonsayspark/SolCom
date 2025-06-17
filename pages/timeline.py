@@ -1218,10 +1218,10 @@ def load_page():
             with tab1:
                 show_timeline_visual(timeline_data, empresa_selecionada, filtro)
             
-            with tab2:
-                show_purchase_planning(timeline_data, empresa_selecionada, filtro)
+            # with tab2:
+            #     show_purchase_planning(timeline_data, empresa_selecionada, filtro)
             
-            with tab3:
+            with tab2:
                 show_debug_raw_data(df, timeline_data, empresa_selecionada, filtro)
                 
         else:
