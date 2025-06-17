@@ -430,6 +430,26 @@ def get_urgency_color(meses_restantes):
     else:
         return '#32CD32'  # Green - OK
 
+# Helper function to build a hover string with all columns
+def build_hovertemplate(item):
+    base = [
+        f"<b>{item.get('Produto','')}</b>",
+        f"Fornecedor: {item.get('Fornecedor','')}",
+        f"Estoque Atual: {item.get('Estoque_Atual','')}",
+        f"Vendas Mensais: {item.get('Vendas_Mensais','')}",
+        f"Meses Restantes: {item.get('Dias_Restantes','')}",
+        f"MOQ: {item.get('MOQ','')}",
+        f"Preço FOB Unit.: R$ {item.get('Preco_Unitario',0):.2f}",
+        f"Total FOB: R$ {item.get('Valor_Pedido',0):,.2f}",
+        f"Urgência: {item.get('Urgencia','')}",
+    ]
+    # Add all other columns not already shown
+    shown_keys = {'Produto','Fornecedor','Estoque_Atual','Vendas_Mensais','Dias_Restantes','MOQ','Preco_Unitario','Valor_Pedido','Urgencia'}
+    for k, v in item.items():
+        if k not in shown_keys:
+            base.append(f"{k}: {v}")
+    return '<br>'.join(base) + "<extra></extra>"
+
 def criar_grafico_interativo(timeline_data, filtro_urgencia="Todos"):
     """Create interactive timeline charts"""
     if filtro_urgencia != "Todos":
@@ -455,18 +475,7 @@ def criar_grafico_interativo(timeline_data, filtro_urgencia="Todos"):
                 marker_color=color,
                 opacity=0.85,
                 showlegend=False,
-                hovertemplate=(
-                    f"<b>{item['Produto']}</b><br>" +
-                    f"Fornecedor: {item['Fornecedor']}<br>" +
-                    f"Estoque Atual: {item['Estoque_Atual']:.0f} un.<br>" +
-                    f"Vendas Mensais: {item['Vendas_Mensais']:.1f} un.<br>" +
-                    f"Meses Restantes: {item['Dias_Restantes']:.1f}<br>" +
-                    f"MOQ: {item['MOQ']:.0f} un.<br>" +
-                    f"Preço FOB Unit.: R$ {item['Preco_Unitario']:.2f}<br>" +
-                    f"Total FOB: R$ {item['Valor_Pedido']:,.2f}<br>" +
-                    f"Urgência: {item['Urgencia']}<br>" +
-                    "<extra></extra>"
-                )
+                hovertemplate=build_hovertemplate(item)
             ),
             row=1, col=1
         )
@@ -482,16 +491,7 @@ def criar_grafico_interativo(timeline_data, filtro_urgencia="Todos"):
                 marker_color=color,
                 opacity=0.85,
                 showlegend=False,
-                hovertemplate=(
-                    f"<b>{item['Produto']}</b><br>" +
-                    f"Fornecedor: {item['Fornecedor']}<br>" +
-                    f"Quantidade MOQ: {item['Qtd_Otimizada']:.0f} un.<br>" +
-                    f"Preço FOB Unitário: R$ {item['Preco_Unitario']:.2f}<br>" +
-                    f"Total FOB: R$ {item['Valor_Pedido']:,.2f}<br>" +
-                    f"CBM Total: {item['CBM_Pedido']:.2f}<br>" +
-                    f"Previsão Cobertura: {item['Previsao_Total_New_Pos']:.1f} meses<br>" +
-                    "<extra></extra>"
-                )
+                hovertemplate=build_hovertemplate(item)
             ),
             row=2, col=1
         )
@@ -989,7 +989,7 @@ def load_page():
                 st.write(f"💰 Total FOB: R$ {sample_item.get('Valor_Pedido', 0):,.2f}")
                 st.write(f"📦 CBM: {sample_item.get('CBM_Pedido', 0):.2f}")
                 st.write(f"📅 Previsão: {sample_item.get('Previsao_Total_New_Pos', 0):.1f} meses")
-                st.write(f"📊 MOQ: {sample_item.get('MOQ', 0):.0f}")
+                st.write(f"�� MOQ: {sample_item.get('MOQ', 0):.0f}")
                 st.write(f"🎯 Qty Otimizada: {sample_item.get('Qtd_Otimizada', 0):.0f}")
                 
                 # Show if zero values detected
