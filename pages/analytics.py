@@ -993,6 +993,30 @@ def show_priority_timeline(df, empresa="MINIPA"):
         if has_criticality:
             st.info("💡 Coluna criticality existe mas não contém valores válidos.")
     
+    # Debug: Show which consumption columns are found
+    with st.expander("🔍 Debug: Análise de Colunas", expanded=False):
+        st.write("**Colunas de consumo detectadas:**")
+        for col in ['Média 6 Meses', 'Media_6_Meses', 'media_6_meses', 'Media 6 Meses', 'Consumo 6 Meses', 'consumo_6_meses']:
+            if col in df.columns:
+                non_zero = len(df[df[col] > 0]) if pd.api.types.is_numeric_dtype(df[col]) else 0
+                total = len(df[df[col].notna()]) if col in df.columns else 0
+                st.write(f"- {col}: {non_zero} valores > 0 de {total} total")
+        
+        if 'monthly_volume' in df.columns:
+            non_zero = len(df[df['monthly_volume'] > 0]) if pd.api.types.is_numeric_dtype(df['monthly_volume']) else 0
+            total = len(df[df['monthly_volume'].notna()])
+            st.write(f"- monthly_volume: {non_zero} valores > 0 de {total} total")
+        
+        # Show sample of first product's data
+        if len(df) > 0:
+            st.write("\n**Exemplo do primeiro produto:**")
+            first_row = df.iloc[0]
+            st.write(f"- Produto: {first_row.get('Produto', 'N/A')}")
+            st.write(f"- Estoque: {first_row.get('Estoque', 'N/A')}")
+            for col in ['Média 6 Meses', 'Media_6_Meses', 'media_6_meses']:
+                if col in first_row.index:
+                    st.write(f"- {col}: {first_row.get(col, 'N/A')}")
+    
     # Prepare data for timeline analysis
     timeline_data = []
     hoje = datetime.now()
@@ -1011,38 +1035,38 @@ def show_priority_timeline(df, empresa="MINIPA"):
         media_col_found = None
         
         # First try standard consumption columns
-        for col in ['Media_6_Meses', 'Média 6 Meses', 'media_6_meses', 'Media 6 Meses', 'Consumo 6 Meses', 'consumo_6_meses']:
+        standard_cols_checked = False
+        for col in ['Média 6 Meses', 'Media_6_Meses', 'media_6_meses', 'Media 6 Meses', 'Consumo 6 Meses', 'consumo_6_meses']:
             if col in row.index:
+                standard_cols_checked = True
                 try:
                     value = float(row.get(col, 0) or 0)
-                    if value > 0:
-                        media_mensal = value
-                        media_col_found = col
-                        break
+                    # Even if value is 0, we found the standard column, so use it
+                    media_mensal = value
+                    media_col_found = col
+                    break
                 except (ValueError, TypeError):
                     continue
         
-        # If standard columns are 0 or not found, try monthly_volume from merged Excel
-        if media_mensal == 0 and 'monthly_volume' in row.index:
+        # Only use monthly_volume if NO standard columns exist at all
+        if not standard_cols_checked and 'monthly_volume' in row.index:
             try:
                 # monthly_volume is the sales volume from priority analysis
                 monthly_vol = float(row.get('monthly_volume', 0) or 0)
-                if monthly_vol > 0:
-                    media_mensal = monthly_vol
-                    media_col_found = 'monthly_volume'
+                media_mensal = monthly_vol
+                media_col_found = 'monthly_volume'
             except (ValueError, TypeError):
                 pass
         
-        # If no specific media column found, try other consumption-related columns
-        if media_mensal == 0:
+        # If still no column found, try other consumption-related columns
+        if not standard_cols_checked and media_col_found is None:
             for col in df.columns:
-                if any(keyword in col.lower() for keyword in ['media', 'consumo', 'vendas', 'average', 'volume']):
+                if any(keyword in col.lower() for keyword in ['media', 'consumo', 'vendas', 'average']):
                     try:
                         value = float(row.get(col, 0) or 0)
-                        if value > 0:
-                            media_mensal = value
-                            media_col_found = col
-                            break
+                        media_mensal = value
+                        media_col_found = col
+                        break
                     except (ValueError, TypeError):
                         continue
         
@@ -1256,6 +1280,38 @@ def show_priority_timeline(df, empresa="MINIPA"):
             st.write("📋 Amostra dos dados:")
             st.dataframe(df.head(3))
         return
+    
+    # Debug: Show summary of consumption column usage
+    with st.expander("📊 Debug: Uso de Colunas de Consumo", expanded=False):
+        # Count which columns were used
+        column_usage = {}
+        for item in timeline_data:
+            col_used = "Não detectada"
+            # Check which column was actually used based on the media value
+            if item['Media_Mensal'] > 0:
+                # Try to identify which column it came from
+                produto_idx = df[df['Produto'] == item['Produto']].index
+                if len(produto_idx) > 0:
+                    row = df.loc[produto_idx[0]]
+                    for col in ['Média 6 Meses', 'Media_6_Meses', 'media_6_meses', 'Media 6 Meses', 'Consumo 6 Meses', 'consumo_6_meses', 'monthly_volume']:
+                        if col in row.index:
+                            try:
+                                if float(row.get(col, 0) or 0) == item['Media_Mensal']:
+                                    col_used = col
+                                    break
+                            except:
+                                continue
+            
+            column_usage[col_used] = column_usage.get(col_used, 0) + 1
+        
+        st.write("**Resumo de uso das colunas:**")
+        for col, count in sorted(column_usage.items(), key=lambda x: x[1], reverse=True):
+            st.write(f"- {col}: {count} produtos")
+        
+        total_with_consumption = sum(1 for item in timeline_data if item['Media_Mensal'] > 0)
+        total_without_consumption = sum(1 for item in timeline_data if item['Media_Mensal'] == 0)
+        st.write(f"\n**Total com consumo:** {total_with_consumption}")
+        st.write(f"**Total sem consumo:** {total_without_consumption}")
     
     # Convert to DataFrame for easier manipulation
     timeline_df = pd.DataFrame(timeline_data)
