@@ -765,8 +765,8 @@ def show_tabela_geral(df, empresa="MINIPA"):
     
     with col2:
         # Excel export with xlsxwriter
-        try:
-            import io
+            try:
+                import io
             buffer = io.BytesIO()
             
             # Create a Pandas Excel writer using XlsxWriter
@@ -797,9 +797,9 @@ def show_tabela_geral(df, empresa="MINIPA"):
                     worksheet.set_column(col_idx, col_idx, min(column_width + 2, 50))
             
             # Reset buffer position
-            buffer.seek(0)
-            
-            st.download_button(
+                buffer.seek(0)
+                
+                st.download_button(
                 label="📊 Baixar como Excel",
                 data=buffer,
                 file_name=f'tabela_geral_{empresa}_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.xlsx',
@@ -813,7 +813,7 @@ def show_tabela_geral(df, empresa="MINIPA"):
             filtered_df[display_columns].to_excel(excel_buffer, index=False)
             excel_buffer.seek(0)
             
-            st.download_button(
+                    st.download_button(
                 label="📊 Baixar como Excel",
                 data=excel_buffer,
                 file_name=f'tabela_geral_{empresa}_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.xlsx',
@@ -1002,14 +1002,14 @@ def show_priority_timeline(df, empresa="MINIPA"):
     
     # Filters
     col1, col2, col3 = st.columns(3)
-    
-    with col1:
+        
+        with col1:
         urgencia_filter = st.selectbox(
             "🚨 Filtrar por Urgência:",
             ['Todos', 'COMPRAR AGORA', 'URGENTE', 'PRÓXIMO MÊS', 'MONITORAR']
         )
-    
-    with col2:
+        
+        with col2:
         if has_priority_data:
             criticality_filter = st.selectbox(
                 "🎯 Filtrar por Criticidade:",
@@ -1017,8 +1017,8 @@ def show_priority_timeline(df, empresa="MINIPA"):
             )
         else:
             criticality_filter = 'Todos'
-    
-    with col3:
+        
+        with col3:
         fornecedor_filter = st.selectbox(
             "🏭 Filtrar por Fornecedor:",
             ['Todos'] + timeline_df['Fornecedor'].unique().tolist()
@@ -1068,7 +1068,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
                 with col1:
                     st.write(f"**{prod['Produto']}** - {prod['Fornecedor']}")
-                with col2:
+            with col2:
                     st.write(f"📅 Pedir até: **{prod['Data_Pedido']}**")
                 with col3:
                     st.write(f"📦 Qtd: **{prod[qtd_col]:.0f}**")
