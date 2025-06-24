@@ -98,6 +98,91 @@ def load_page():
             else:
                 st.info("📅 Dados de análise carregados da nuvem")
                 
+            # Show column mapping info for merged Excel
+            if 'monthly_volume' in df.columns or 'priority_score' in df.columns:
+                with st.expander("🔍 Mapeamento de Colunas do Merged Excel", expanded=False):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write("**Colunas Detectadas:**")
+                        if 'monthly_volume' in df.columns:
+                            st.write(f"✅ monthly_volume → Média 6 Meses")
+                        if 'UltimoFornecedor' in df.columns:
+                            st.write(f"✅ UltimoFornecedor presente")
+                        if 'preco_unitario' in df.columns:
+                            st.write(f"✅ preco_unitario presente")
+                        if 'priority_score' in df.columns:
+                            st.write(f"✅ priority_score presente")
+                    with col2:
+                        st.write("**Valores de Exemplo:**")
+                        if 'monthly_volume' in df.columns:
+                            st.write(f"monthly_volume: {df['monthly_volume'].head(3).tolist()}")
+                        if 'UltimoFornecedor' in df.columns:
+                            st.write(f"UltimoFornecedor: {df['UltimoFornecedor'].head(3).tolist()}")
+            
+            # Handle merged Excel format - if Média 6 Meses is 0, try monthly_volume
+            if 'Média 6 Meses' in df.columns and 'monthly_volume' in df.columns:
+                # Check if Média 6 Meses column has all zeros
+                if df['Média 6 Meses'].sum() == 0 and df['monthly_volume'].sum() > 0:
+                    st.info("📊 Detectado formato Merged Excel - usando monthly_volume como consumo mensal")
+                    df['Média 6 Meses'] = df['monthly_volume']
+            
+            # Also copy monthly_volume to Consumo 6 Meses if that's empty
+            if 'Consumo 6 Meses' in df.columns and 'monthly_volume' in df.columns:
+                if df['Consumo 6 Meses'].sum() == 0 and df['monthly_volume'].sum() > 0:
+                    df['Consumo 6 Meses'] = df['monthly_volume']
+            
+            # Ensure UltimoFornecedor has proper values (not empty/nan)
+            if 'UltimoFornecedor' in df.columns:
+                df['UltimoFornecedor'] = df['UltimoFornecedor'].fillna('Brazil')
+                df.loc[df['UltimoFornecedor'].str.strip() == '', 'UltimoFornecedor'] = 'Brazil'
+                df.loc[df['UltimoFornecedor'].str.lower() == 'nan', 'UltimoFornecedor'] = 'Brazil'
+            
+            # Calculate Estoque Cobertura if missing
+            if 'Estoque Cobertura' not in df.columns:
+                if 'Estoque' in df.columns and 'Média 6 Meses' in df.columns:
+                    df['Estoque Cobertura'] = df.apply(
+                        lambda row: row['Estoque'] / row['Média 6 Meses'] if row['Média 6 Meses'] > 0 else 999, 
+                        axis=1
+                    )
+            
+            # Use processed dataframe
+            df = df
+            
+            # Separate new and existing products
+            produtos_novos = df[(df.get('Estoque', 0) == 0) & (df.get('Média 6 Meses', 0) == 0) & (df.get('Qtde Tot Compras', 0) > 0)]
+            produtos_existentes = df[(df.get('Estoque', 0) > 0) | (df.get('Média 6 Meses', 0) > 0)]
+            
+            # Show company context
+            st.info(f"📊 **Análise para {empresa_selecionada}** | Versão: {f'v{selected_version_id}' if 'selected_version_id' in locals() and selected_version_id else 'Ativa'}")
+            
+            # Show analytics tabs with company context
+            tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+                f"📋 Resumo - {empresa_selecionada}", 
+                f"🚨 Lista de Compras - {empresa_selecionada}", 
+                f"📊 Dashboards - {empresa_selecionada}", 
+                f"📞 Contatos Urgentes - {empresa_selecionada}",
+                f"📋 Tabela Geral - {empresa_selecionada}",
+                f"🎯 Timeline Prioritário - {empresa_selecionada}"
+            ])
+            
+            with tab1:
+                show_executive_summary(df, produtos_novos, produtos_existentes, empresa_selecionada)
+            
+            with tab2:
+                show_purchase_list(produtos_existentes, empresa_selecionada)
+            
+            with tab3:
+                show_analytics_dashboard(produtos_existentes, produtos_novos, empresa_selecionada)
+            
+            with tab4:
+                show_urgent_contacts(produtos_existentes, empresa_selecionada)
+            
+            with tab5:
+                show_tabela_geral(df, empresa_selecionada)
+                
+            with tab6:
+                show_priority_timeline(df, empresa_selecionada)
+            
         else:
             st.info(f"💡 Nenhum dado de análise encontrado para {empresa_selecionada}.")
             st.markdown("👉 **Vá para 'Upload de Dados' e selecione '📊 Análise de Estoque (Export)' para enviar dados para esta empresa primeiro.**")
@@ -179,7 +264,10 @@ def load_page():
             'Modelo': 'Produto', 
             'Estoque_Total': 'Estoque',
             'Vendas_Medias': 'Média 6 Meses',
-            'UltimoFor': 'UltimoFornecedor'  # NEW MAPPING
+            'UltimoFor': 'UltimoFornecedor',  # NEW MAPPING
+            'ultimo_fornecedor': 'UltimoFornecedor',  # Merged Excel variation
+            'Preco_Unitario': 'preco_unitario',  # Ensure price mapping
+            'Preco_FOB_Unitario': 'preco_unitario'
         }
         
         for old_col, new_col in column_mapping.items():
@@ -198,6 +286,12 @@ def load_page():
             if df_processed['Consumo 6 Meses'].sum() == 0 and df_processed['monthly_volume'].sum() > 0:
                 df_processed['Consumo 6 Meses'] = df_processed['monthly_volume']
         
+        # Ensure UltimoFornecedor has proper values (not empty/nan)
+        if 'UltimoFornecedor' in df_processed.columns:
+            df_processed['UltimoFornecedor'] = df_processed['UltimoFornecedor'].fillna('Brazil')
+            df_processed.loc[df_processed['UltimoFornecedor'].str.strip() == '', 'UltimoFornecedor'] = 'Brazil'
+            df_processed.loc[df_processed['UltimoFornecedor'].str.lower() == 'nan', 'UltimoFornecedor'] = 'Brazil'
+        
         # Calculate Estoque Cobertura if missing
         if 'Estoque Cobertura' not in df_processed.columns:
             if 'Estoque' in df_processed.columns and 'Média 6 Meses' in df_processed.columns:
@@ -205,6 +299,27 @@ def load_page():
                     lambda row: row['Estoque'] / row['Média 6 Meses'] if row['Média 6 Meses'] > 0 else 999, 
                     axis=1
                 )
+        
+        # Show column mapping info for merged Excel
+        if 'monthly_volume' in df_processed.columns or 'priority_score' in df_processed.columns:
+            with st.expander("🔍 Mapeamento de Colunas do Merged Excel", expanded=False):
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write("**Colunas Detectadas:**")
+                    if 'monthly_volume' in df_processed.columns:
+                        st.write(f"✅ monthly_volume → Média 6 Meses")
+                    if 'UltimoFornecedor' in df_processed.columns:
+                        st.write(f"✅ UltimoFornecedor presente")
+                    if 'preco_unitario' in df_processed.columns:
+                        st.write(f"✅ preco_unitario presente")
+                    if 'priority_score' in df_processed.columns:
+                        st.write(f"✅ priority_score presente")
+                with col2:
+                    st.write("**Valores de Exemplo:**")
+                    if 'monthly_volume' in df_processed.columns:
+                        st.write(f"monthly_volume: {df_processed['monthly_volume'].head(3).tolist()}")
+                    if 'UltimoFornecedor' in df_processed.columns:
+                        st.write(f"UltimoFornecedor: {df_processed['UltimoFornecedor'].head(3).tolist()}")
         
         # Use processed dataframe
         df = df_processed
@@ -378,7 +493,15 @@ def calculate_purchase_suggestions(produtos_existentes):
         estoque = row['Estoque']
         consumo = row['Média 6 Meses']
         moq = row.get('MOQ', 0) if 'MOQ' in row.index else 0
-        fornecedor = row.get('UltimoFornecedor', 'Brazil') if 'UltimoFornecedor' in row.index else 'Brazil'
+        fornecedor = 'Brazil'
+        
+        # Handle supplier column variations - check UltimoFornecedor first since it's in merged Excel
+        for col in ['UltimoFornecedor', 'ultimo_fornecedor', 'UltimoFor']:
+            if col in row.index:
+                value = str(row.get(col, 'Brazil'))
+                if value and value.strip() and value.lower() not in ['nan', 'none', '']:
+                    fornecedor = value
+                    break
         
         quando_acaba, meses_num = calcular_quando_vai_acabar(estoque, consumo)
         qtd_comprar = quanto_comprar(consumo, estoque, moq)
@@ -926,12 +1049,13 @@ def show_priority_timeline(df, empresa="MINIPA"):
         
         moq = float(row.get('MOQ', 0) or 0)
         
-        # Handle supplier column variations
+        # Handle supplier column variations - check UltimoFornecedor first since it's in merged Excel
         fornecedor = 'Brazil'
-        for col in ['ultimo_fornecedor', 'UltimoFornecedor', 'UltimoFor']:
+        for col in ['UltimoFornecedor', 'ultimo_fornecedor', 'UltimoFor']:
             if col in row.index:
-                fornecedor = str(row.get(col, 'Brazil'))
-                if fornecedor and fornecedor != 'nan':
+                value = str(row.get(col, 'Brazil'))
+                if value and value.strip() and value.lower() not in ['nan', 'none', '']:
+                    fornecedor = value
                     break
         
         # Handle price column variations
@@ -970,9 +1094,19 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 lead_time_days = 90   # 3 months advance
             
             # Calculate when to order
-            data_esgotamento = hoje + timedelta(days=dias_restantes)
-            data_pedido = data_esgotamento - timedelta(days=lead_time_days)
-            dias_ate_pedido = (data_pedido - hoje).days
+            # Add bounds checking to prevent overflow
+            max_days = 365 * 10  # Max 10 years
+            dias_restantes = min(dias_restantes, max_days)
+            
+            try:
+                data_esgotamento = hoje + timedelta(days=dias_restantes)
+                data_pedido = data_esgotamento - timedelta(days=lead_time_days)
+                dias_ate_pedido = (data_pedido - hoje).days
+            except OverflowError:
+                # If still overflow, use max values
+                data_esgotamento = hoje + timedelta(days=max_days)
+                data_pedido = data_esgotamento - timedelta(days=lead_time_days)
+                dias_ate_pedido = max_days - lead_time_days
             
             # Calculate three scenarios: MOQ, Negotiated, Ideal
             # Scenario 1: MOQ (minimum order)
