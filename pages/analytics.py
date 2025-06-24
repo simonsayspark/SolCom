@@ -186,6 +186,18 @@ def load_page():
             if old_col in df.columns and new_col not in df.columns:
                 df_processed[new_col] = df[old_col]
         
+        # Handle merged Excel format - if Média 6 Meses is 0, try monthly_volume
+        if 'Média 6 Meses' in df_processed.columns and 'monthly_volume' in df_processed.columns:
+            # Check if Média 6 Meses column has all zeros
+            if df_processed['Média 6 Meses'].sum() == 0 and df_processed['monthly_volume'].sum() > 0:
+                st.info("📊 Detectado formato Merged Excel - usando monthly_volume como consumo mensal")
+                df_processed['Média 6 Meses'] = df_processed['monthly_volume']
+        
+        # Also copy monthly_volume to Consumo 6 Meses if that's empty
+        if 'Consumo 6 Meses' in df_processed.columns and 'monthly_volume' in df_processed.columns:
+            if df_processed['Consumo 6 Meses'].sum() == 0 and df_processed['monthly_volume'].sum() > 0:
+                df_processed['Consumo 6 Meses'] = df_processed['monthly_volume']
+        
         # Calculate Estoque Cobertura if missing
         if 'Estoque Cobertura' not in df_processed.columns:
             if 'Estoque' in df_processed.columns and 'Média 6 Meses' in df_processed.columns:
@@ -875,6 +887,8 @@ def show_priority_timeline(df, empresa="MINIPA"):
         # Handle different naming conventions for monthly average
         media_mensal = 0
         media_col_found = None
+        
+        # First try standard consumption columns
         for col in ['Media_6_Meses', 'Média 6 Meses', 'media_6_meses', 'Media 6 Meses', 'Consumo 6 Meses', 'consumo_6_meses']:
             if col in row.index:
                 try:
@@ -886,10 +900,21 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 except (ValueError, TypeError):
                     continue
         
+        # If standard columns are 0 or not found, try monthly_volume from merged Excel
+        if media_mensal == 0 and 'monthly_volume' in row.index:
+            try:
+                # monthly_volume is the sales volume from priority analysis
+                monthly_vol = float(row.get('monthly_volume', 0) or 0)
+                if monthly_vol > 0:
+                    media_mensal = monthly_vol
+                    media_col_found = 'monthly_volume'
+            except (ValueError, TypeError):
+                pass
+        
         # If no specific media column found, try other consumption-related columns
         if media_mensal == 0:
             for col in df.columns:
-                if any(keyword in col.lower() for keyword in ['media', 'consumo', 'vendas', 'average']):
+                if any(keyword in col.lower() for keyword in ['media', 'consumo', 'vendas', 'average', 'volume']):
                     try:
                         value = float(row.get(col, 0) or 0)
                         if value > 0:
