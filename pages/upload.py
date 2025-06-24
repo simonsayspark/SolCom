@@ -100,38 +100,56 @@ def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
                 'Previsao Total': 'Previsao_Total_New_Pos',
                 'Previsão': 'Previsao',
                 
-                # NEW: Merged Excel columns from priority analysis
-                'Produto': 'Produto',
-                'produto': 'Produto',
-                'Estoque': 'Estoque',
+                # NEW: Merged Excel columns from priority analysis (only map variations, not exact matches)
+                'produto': 'Produto',  # Only lowercase to uppercase
                 'Qtde Embarque': 'Qtde_Embarque',
                 'Compras Até 30 Dias': 'Compras_Ate_30_Dias',
                 'Compras 31 a 60 Dias': 'Compras_31_60_Dias',
                 'Compras 61 a 90 Dias': 'Compras_61_90_Dias',
                 'Compras > 90 Dias': 'Compras_Mais_90_Dias',
-                'Qtde Tot Compras': 'Qtde_Tot_Compras',
+                'Qtde Tot Compras': 'Qtde_Tot_Compras'
                 
-                # Priority analysis columns
-                'priority_score': 'priority_score',
-                'criticality': 'criticality',
-                'relevance_class': 'relevance_class',
-                'volume_normalized': 'volume_normalized',
-                'price_normalized': 'price_normalized',
-                'raw_multiplication': 'raw_multiplication',
-                'annual_impact': 'annual_impact',
-                'monthly_volume': 'monthly_volume'
+                # NOTE: Removed redundant mappings like 'Produto': 'Produto' that cause duplicates
+                # Priority analysis columns are already correctly named in merged Excel files
             }
             
-            # Apply renaming
+            # Apply renaming - IMPROVED LOGIC to avoid duplicates
             original_columns = list(df_full.columns)
-            df_full = df_full.rename(columns=colunas_rename)
+            
+            # Create a safe renaming dictionary that avoids duplicates
+            safe_rename = {}
+            existing_columns = set(original_columns)
+            target_columns = set()
+            
+            for old_col, new_col in colunas_rename.items():
+                if old_col in existing_columns:
+                    # Only add the mapping if it won't create a duplicate
+                    if new_col not in existing_columns or old_col == new_col:
+                        if new_col not in target_columns:
+                            safe_rename[old_col] = new_col
+                            target_columns.add(new_col)
+                        else:
+                            # Skip this mapping to avoid duplicate
+                            st.warning(f"⚠️ Skipping duplicate mapping: '{old_col}' → '{new_col}'")
+            
+            # Apply the safe renaming
+            df_full = df_full.rename(columns=safe_rename)
             renamed_columns = list(df_full.columns)
+            
+            # 🔧 CHECK for duplicate columns after renaming
+            if len(renamed_columns) != len(set(renamed_columns)):
+                duplicate_cols = [col for col in renamed_columns if renamed_columns.count(col) > 1]
+                st.error(f"❌ **ERRO**: Colunas duplicadas detectadas após renomeação: {duplicate_cols}")
+                
+                # Try to fix by removing duplicates
+                df_full = df_full.loc[:, ~df_full.columns.duplicated()]
+                st.info("🔧 **CORREÇÃO**: Colunas duplicadas removidas automaticamente")
+                renamed_columns = list(df_full.columns)
             
             # Show what was renamed
             changes_made = []
-            for old_col, new_col in zip(original_columns, renamed_columns):
-                if old_col != new_col:
-                    changes_made.append(f"'{old_col}' → '{new_col}'")
+            for old_col, new_col in safe_rename.items():
+                changes_made.append(f"'{old_col}' → '{new_col}'")
             
             if changes_made:
                 st.success(f"✅ Colunas padronizadas: {len(changes_made)} alterações")
@@ -144,7 +162,7 @@ def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
                     st.success("🔧 **CORREÇÃO CRÍTICA**: Coluna de preços padronizada - isso deve resolver o problema de preços zero!")
                 
                 # 🔧 DEBUG: Check if Previsão Total column was processed
-                previsao_changes = [change for change in changes_made if 'Previsao_Total_New_Pos' in change]
+                previsao_changes = [change for change in changes_made if 'Previsao_Total_New_Pos' in change or 'Previsao' in change]
                 if previsao_changes:
                     st.success("🔧 **PREVISÃO TOTAL ENCONTRADA**: " + previsao_changes[0])
                 else:
@@ -157,6 +175,17 @@ def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
                     
                     # Show exact column names for debugging
                     st.info(f"📋 Todas as colunas originais: {', '.join(original_columns[:10])}{'...' if len(original_columns) > 10 else ''}")
+            
+            # 🔧 NEW: Detect if this is a merged Excel file with priority analysis
+            priority_columns = ['priority_score', 'criticality', 'relevance_class', 'preco_unitario']
+            has_priority_data = any(col in df_full.columns for col in priority_columns)
+            
+            if has_priority_data:
+                st.success("🎯 **MERGED EXCEL DETECTADO**: Este arquivo contém dados de análise prioritária!")
+                detected_priority_cols = [col for col in priority_columns if col in df_full.columns]
+                st.info(f"📊 Colunas de prioridade encontradas: {', '.join(detected_priority_cols)}")
+            else:
+                st.info("📊 **EXCEL PADRÃO**: Dados básicos de estoque detectados")
             
             st.success(f"✅ Detectado automaticamente: planilha '{best_sheet}', linha {best_header_row + 1}")
             return df_full, best_sheet, best_header_row
