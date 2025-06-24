@@ -144,45 +144,7 @@ def load_page():
                         lambda row: row['Estoque'] / row['Média 6 Meses'] if row['Média 6 Meses'] > 0 else 999, 
                         axis=1
                     )
-            
-            # Use processed dataframe
-            df = df
-            
-            # Separate new and existing products
-            produtos_novos = df[(df.get('Estoque', 0) == 0) & (df.get('Média 6 Meses', 0) == 0) & (df.get('Qtde Tot Compras', 0) > 0)]
-            produtos_existentes = df[(df.get('Estoque', 0) > 0) | (df.get('Média 6 Meses', 0) > 0)]
-            
-            # Show company context
-            st.info(f"📊 **Análise para {empresa_selecionada}** | Versão: {f'v{selected_version_id}' if 'selected_version_id' in locals() and selected_version_id else 'Ativa'}")
-            
-            # Show analytics tabs with company context
-            tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-                f"📋 Resumo - {empresa_selecionada}", 
-                f"🚨 Lista de Compras - {empresa_selecionada}", 
-                f"📊 Dashboards - {empresa_selecionada}", 
-                f"📞 Contatos Urgentes - {empresa_selecionada}",
-                f"📋 Tabela Geral - {empresa_selecionada}",
-                f"🎯 Timeline Prioritário - {empresa_selecionada}"
-            ])
-            
-            with tab1:
-                show_executive_summary(df, produtos_novos, produtos_existentes, empresa_selecionada)
-            
-            with tab2:
-                show_purchase_list(produtos_existentes, empresa_selecionada)
-            
-            with tab3:
-                show_analytics_dashboard(produtos_existentes, produtos_novos, empresa_selecionada)
-            
-            with tab4:
-                show_urgent_contacts(produtos_existentes, empresa_selecionada)
-            
-            with tab5:
-                show_tabela_geral(df, empresa_selecionada)
-                
-            with tab6:
-                show_priority_timeline(df, empresa_selecionada)
-            
+        
         else:
             st.info(f"💡 Nenhum dado de análise encontrado para {empresa_selecionada}.")
             st.markdown("👉 **Vá para 'Upload de Dados' e selecione '📊 Análise de Estoque (Export)' para enviar dados para esta empresa primeiro.**")
