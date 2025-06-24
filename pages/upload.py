@@ -425,6 +425,23 @@ def show_data_upload():
         with col2:
             st.info("🔗 Snowflake (monitoring disabled)")
             
+            # Add database migration button
+            if st.button("🔄 Migração do BD", 
+                        use_container_width=True,
+                        help="Atualiza o banco de dados para suportar Excel merged com análise de prioridade"):
+                try:
+                    from bd.snowflake_migration import migrate_to_merged_excel_support
+                    with st.spinner("🔄 Executando migração do banco de dados..."):
+                        if migrate_to_merged_excel_support():
+                            st.success("✅ Migração concluída! O banco agora suporta dados merged Excel.")
+                            st.info("💡 Agora você pode fazer upload de arquivos Excel merged com análise de prioridade.")
+                        else:
+                            st.error("❌ Erro na migração do banco de dados")
+                except ImportError:
+                    st.error("❌ Módulo de migração não disponível")
+                except Exception as e:
+                    st.error(f"❌ Erro na migração: {str(e)}")
+            
             # Add repair button for version issues
             if st.button("🔧 Reparar Versões", 
                         use_container_width=True,
