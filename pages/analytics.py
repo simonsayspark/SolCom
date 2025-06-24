@@ -765,8 +765,8 @@ def show_tabela_geral(df, empresa="MINIPA"):
     
     with col2:
         # Excel export with xlsxwriter
-            try:
-                import io
+        try:
+            import io
             buffer = io.BytesIO()
             
             # Create a Pandas Excel writer using XlsxWriter
@@ -797,9 +797,9 @@ def show_tabela_geral(df, empresa="MINIPA"):
                     worksheet.set_column(col_idx, col_idx, min(column_width + 2, 50))
             
             # Reset buffer position
-                buffer.seek(0)
-                
-                st.download_button(
+            buffer.seek(0)
+            
+            st.download_button(
                 label="📊 Baixar como Excel",
                 data=buffer,
                 file_name=f'tabela_geral_{empresa}_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.xlsx',
@@ -809,11 +809,12 @@ def show_tabela_geral(df, empresa="MINIPA"):
         except ImportError:
             st.warning("⚠️ xlsxwriter não instalado. Usando método alternativo para Excel.")
             # Fallback method without xlsxwriter
+            import io
             excel_buffer = io.BytesIO()
             filtered_df[display_columns].to_excel(excel_buffer, index=False)
             excel_buffer.seek(0)
             
-                    st.download_button(
+            st.download_button(
                 label="📊 Baixar como Excel",
                 data=excel_buffer,
                 file_name=f'tabela_geral_{empresa}_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.xlsx',
@@ -832,13 +833,31 @@ def show_priority_timeline(df, empresa="MINIPA"):
     # Debug: Show available columns
     st.info(f"🔍 Colunas disponíveis: {', '.join(df.columns[:15])}...")
     
-    # Check if we have priority data - handle different column name formats
-    has_priority_data = 'priority_score' in df.columns and df['priority_score'].notna().any()
+    # Enhanced priority data detection with debugging
+    has_priority_score = 'priority_score' in df.columns
+    has_criticality = 'criticality' in df.columns
+    has_priority_values = False
+    
+    if has_priority_score:
+        priority_values = df['priority_score'].dropna()
+        has_priority_values = len(priority_values) > 0
+        st.info(f"🔍 Priority Score: Coluna existe: {has_priority_score}, Valores não-nulos: {len(priority_values)}")
+    
+    if has_criticality:
+        criticality_values = df['criticality'].dropna()
+        st.info(f"🔍 Criticality: Coluna existe: {has_criticality}, Valores não-nulos: {len(criticality_values)}")
+    
+    # Check if we have priority data - more flexible detection
+    has_priority_data = (has_priority_score and has_priority_values) or (has_criticality and len(df['criticality'].dropna()) > 0)
     
     if has_priority_data:
         st.success("✅ Dados de prioridade detectados! Usando análise prioritária 85/15.")
     else:
         st.info("📊 Dados de prioridade não encontrados. Usando análise básica de timeline.")
+        if has_priority_score:
+            st.info("💡 Coluna priority_score existe mas não contém valores válidos.")
+        if has_criticality:
+            st.info("💡 Coluna criticality existe mas não contém valores válidos.")
     
     # Prepare data for timeline analysis
     timeline_data = []
@@ -855,11 +874,30 @@ def show_priority_timeline(df, empresa="MINIPA"):
         
         # Handle different naming conventions for monthly average
         media_mensal = 0
-        for col in ['Media_6_Meses', 'Média 6 Meses', 'media_6_meses', 'Media 6 Meses']:
+        media_col_found = None
+        for col in ['Media_6_Meses', 'Média 6 Meses', 'media_6_meses', 'Media 6 Meses', 'Consumo 6 Meses', 'consumo_6_meses']:
             if col in row.index:
-                media_mensal = float(row.get(col, 0) or 0)
-                if media_mensal > 0:
-                    break
+                try:
+                    value = float(row.get(col, 0) or 0)
+                    if value > 0:
+                        media_mensal = value
+                        media_col_found = col
+                        break
+                except (ValueError, TypeError):
+                    continue
+        
+        # If no specific media column found, try other consumption-related columns
+        if media_mensal == 0:
+            for col in df.columns:
+                if any(keyword in col.lower() for keyword in ['media', 'consumo', 'vendas', 'average']):
+                    try:
+                        value = float(row.get(col, 0) or 0)
+                        if value > 0:
+                            media_mensal = value
+                            media_col_found = col
+                            break
+                    except (ValueError, TypeError):
+                        continue
         
         moq = float(row.get('MOQ', 0) or 0)
         
@@ -977,6 +1015,31 @@ def show_priority_timeline(df, empresa="MINIPA"):
     if not timeline_data:
         st.warning("⚠️ Nenhum produto com dados suficientes para análise de timeline.")
         st.info("💡 Verifique se o Excel contém as colunas: Produto, Estoque, Média 6 Meses (ou Media_6_Meses)")
+        
+        # Enhanced debugging information
+        st.subheader("🔍 Diagnóstico de Dados")
+        
+        # Show column analysis
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write("**Colunas relacionadas a consumo encontradas:**")
+            consumo_cols = [col for col in df.columns if any(keyword in col.lower() for keyword in ['media', 'consumo', 'vendas', 'average'])]
+            if consumo_cols:
+                for col in consumo_cols:
+                    non_zero_count = len(df[df[col] > 0]) if pd.api.types.is_numeric_dtype(df[col]) else 0
+                    st.write(f"- {col}: {non_zero_count} valores > 0")
+            else:
+                st.write("❌ Nenhuma coluna de consumo encontrada")
+        
+        with col2:
+            st.write("**Análise de produtos:**")
+            produtos_validos = len(df[df['Produto'].notna() & (df['Produto'] != 'nan')])
+            st.write(f"- Produtos válidos: {produtos_validos}")
+            
+            if 'Estoque' in df.columns:
+                estoque_positivo = len(df[df['Estoque'] > 0])
+                st.write(f"- Com estoque > 0: {estoque_positivo}")
+        
         # Show sample of data for debugging
         if len(df) > 0:
             st.write("📋 Amostra dos dados:")
@@ -1002,14 +1065,14 @@ def show_priority_timeline(df, empresa="MINIPA"):
     
     # Filters
     col1, col2, col3 = st.columns(3)
-        
-        with col1:
+    
+    with col1:
         urgencia_filter = st.selectbox(
             "🚨 Filtrar por Urgência:",
             ['Todos', 'COMPRAR AGORA', 'URGENTE', 'PRÓXIMO MÊS', 'MONITORAR']
         )
-        
-        with col2:
+    
+    with col2:
         if has_priority_data:
             criticality_filter = st.selectbox(
                 "🎯 Filtrar por Criticidade:",
@@ -1017,8 +1080,8 @@ def show_priority_timeline(df, empresa="MINIPA"):
             )
         else:
             criticality_filter = 'Todos'
-        
-        with col3:
+    
+    with col3:
         fornecedor_filter = st.selectbox(
             "🏭 Filtrar por Fornecedor:",
             ['Todos'] + timeline_df['Fornecedor'].unique().tolist()
@@ -1068,7 +1131,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
                 with col1:
                     st.write(f"**{prod['Produto']}** - {prod['Fornecedor']}")
-            with col2:
+                with col2:
                     st.write(f"📅 Pedir até: **{prod['Data_Pedido']}**")
                 with col3:
                     st.write(f"📦 Qtd: **{prod[qtd_col]:.0f}**")
