@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+from datetime import datetime, timedelta
 
 def load_page():
     """Análise avançada de dados Excel - Sistema Multi-Empresa de Gestão de Estoque"""
@@ -104,8 +105,15 @@ def load_page():
                     col1, col2 = st.columns(2)
                     with col1:
                         st.write("**Colunas Detectadas:**")
+                        if 'Media_6_Meses' in df.columns:
+                            st.write(f"✅ Media_6_Meses presente ({len(df[df['Media_6_Meses'] > 0])} valores > 0)")
+                        if 'Média 6 Meses' in df.columns:
+                            st.write(f"✅ Média 6 Meses presente ({len(df[df['Média 6 Meses'] > 0])} valores > 0)")
                         if 'monthly_volume' in df.columns:
-                            st.write(f"✅ monthly_volume → Média 6 Meses")
+                            if 'Média 6 Meses' in df.columns and df['Média 6 Meses'].sum() == 0:
+                                st.write(f"✅ monthly_volume → Média 6 Meses (fallback)")
+                            else:
+                                st.write(f"✅ monthly_volume presente (não usado)")
                         if 'UltimoFornecedor' in df.columns:
                             st.write(f"✅ UltimoFornecedor presente")
                         if 'preco_unitario' in df.columns:
@@ -121,10 +129,21 @@ def load_page():
             
             # Handle merged Excel format - if Média 6 Meses is 0, try monthly_volume
             if 'Média 6 Meses' in df.columns and 'monthly_volume' in df.columns:
-                # Check if Média 6 Meses column has all zeros
-                if df['Média 6 Meses'].sum() == 0 and df['monthly_volume'].sum() > 0:
+                # Check if Média 6 Meses column has all zeros or is empty
+                media_sum = df['Média 6 Meses'].sum()
+                valid_media_count = len(df[df['Média 6 Meses'] > 0])
+                
+                # Only use monthly_volume if Média 6 Meses is truly empty/zero
+                if media_sum == 0 and valid_media_count == 0 and df['monthly_volume'].sum() > 0:
                     st.info("📊 Detectado formato Merged Excel - usando monthly_volume como consumo mensal")
                     df['Média 6 Meses'] = df['monthly_volume']
+                elif valid_media_count > 0:
+                    st.success(f"✅ Usando dados originais de Média 6 Meses ({valid_media_count} produtos com consumo)")
+            
+            # Also handle Media_6_Meses (with underscore) mapping to Média 6 Meses (with space)
+            if 'Media_6_Meses' in df.columns and 'Média 6 Meses' not in df.columns:
+                df['Média 6 Meses'] = df['Media_6_Meses']
+                st.info("📊 Mapeando Media_6_Meses → Média 6 Meses")
             
             # Also copy monthly_volume to Consumo 6 Meses if that's empty
             if 'Consumo 6 Meses' in df.columns and 'monthly_volume' in df.columns:
@@ -238,10 +257,21 @@ def load_page():
         
         # Handle merged Excel format - if Média 6 Meses is 0, try monthly_volume
         if 'Média 6 Meses' in df_processed.columns and 'monthly_volume' in df_processed.columns:
-            # Check if Média 6 Meses column has all zeros
-            if df_processed['Média 6 Meses'].sum() == 0 and df_processed['monthly_volume'].sum() > 0:
+            # Check if Média 6 Meses column has all zeros or is empty
+            media_sum = df_processed['Média 6 Meses'].sum()
+            valid_media_count = len(df_processed[df_processed['Média 6 Meses'] > 0])
+            
+            # Only use monthly_volume if Média 6 Meses is truly empty/zero
+            if media_sum == 0 and valid_media_count == 0 and df_processed['monthly_volume'].sum() > 0:
                 st.info("📊 Detectado formato Merged Excel - usando monthly_volume como consumo mensal")
                 df_processed['Média 6 Meses'] = df_processed['monthly_volume']
+            elif valid_media_count > 0:
+                st.success(f"✅ Usando dados originais de Média 6 Meses ({valid_media_count} produtos com consumo)")
+        
+        # Also handle Media_6_Meses (with underscore) mapping to Média 6 Meses (with space)
+        if 'Media_6_Meses' in df_processed.columns and 'Média 6 Meses' not in df_processed.columns:
+            df_processed['Média 6 Meses'] = df_processed['Media_6_Meses']
+            st.info("📊 Mapeando Media_6_Meses → Média 6 Meses")
         
         # Also copy monthly_volume to Consumo 6 Meses if that's empty
         if 'Consumo 6 Meses' in df_processed.columns and 'monthly_volume' in df_processed.columns:
@@ -268,8 +298,15 @@ def load_page():
                 col1, col2 = st.columns(2)
                 with col1:
                     st.write("**Colunas Detectadas:**")
+                    if 'Media_6_Meses' in df_processed.columns:
+                        st.write(f"✅ Media_6_Meses presente ({len(df_processed[df_processed['Media_6_Meses'] > 0])} valores > 0)")
+                    if 'Média 6 Meses' in df_processed.columns:
+                        st.write(f"✅ Média 6 Meses presente ({len(df_processed[df_processed['Média 6 Meses'] > 0])} valores > 0)")
                     if 'monthly_volume' in df_processed.columns:
-                        st.write(f"✅ monthly_volume → Média 6 Meses")
+                        if 'Média 6 Meses' in df_processed.columns and df_processed['Média 6 Meses'].sum() == 0:
+                            st.write(f"✅ monthly_volume → Média 6 Meses (fallback)")
+                        else:
+                            st.write(f"✅ monthly_volume presente (não usado)")
                     if 'UltimoFornecedor' in df_processed.columns:
                         st.write(f"✅ UltimoFornecedor presente")
                     if 'preco_unitario' in df_processed.columns:
@@ -1040,7 +1077,46 @@ def show_priority_timeline(df, empresa="MINIPA"):
         previsao = float(row.get('Previsão', row.get('Previsao', 0)) or 0)
         
         # Calculate timeline metrics
-        if media_mensal > 0:
+        # Handle case where there's no consumption data
+        if media_mensal == 0:
+            # For products with no consumption, check if they're critical and have stock
+            if estoque > 0 and criticality in ['🔴 Critical', '🟡 High', '🟠 Medium']:
+                # Show them as monitoring with special handling
+                dias_ate_pedido = 3650  # 10 years - effectively "no urgency" 
+                data_pedido = hoje + timedelta(days=3650)
+                data_esgotamento = hoje + timedelta(days=3650)
+                urgencia = 'MONITORAR'
+                cor = '#32CD32'
+                meses_cobertura = 999
+                
+                # Still add to timeline for visibility
+                timeline_data.append({
+                    'Produto': produto,
+                    'Fornecedor': fornecedor,
+                    'Estoque_Atual': estoque,
+                    'Media_Mensal': media_mensal,
+                    'Meses_Cobertura': meses_cobertura,
+                    'Dias_Ate_Pedido': dias_ate_pedido,
+                    'Data_Pedido': 'Sem consumo',
+                    'Data_Esgotamento': 'Sem consumo',
+                    'MOQ': moq,
+                    'Qtd_MOQ': moq if moq > 0 else 0,
+                    'Qtd_Negotiated': 0,
+                    'Qtd_Ideal': 0,
+                    'Investimento_MOQ': moq * preco if moq > 0 and preco > 0 else 0,
+                    'Investimento_Negotiated': 0,
+                    'Investimento_Ideal': 0,
+                    'Preco_Unit': preco,
+                    'Priority_Score': priority_score,
+                    'Criticality': criticality,
+                    'Relevance': relevance_class,
+                    'Annual_Impact': annual_impact,
+                    'Urgencia': urgencia,
+                    'Cor': cor,
+                    'Lead_Time': 0
+                })
+        else:
+            # Normal calculation when there's consumption data
             # Use Estoque Cobertura if available, otherwise calculate
             if estoque_cobertura > 0:
                 meses_cobertura = estoque_cobertura
@@ -1060,15 +1136,43 @@ def show_priority_timeline(df, empresa="MINIPA"):
             max_days = 365 * 10  # Max 10 years
             dias_restantes = min(dias_restantes, max_days)
             
-            try:
+            # For critical products, check if we need to order now
+            if dias_restantes <= lead_time_days:
+                # We're already within or past the lead time - order NOW
+                dias_ate_pedido = 0
+                data_pedido = hoje
                 data_esgotamento = hoje + timedelta(days=dias_restantes)
-                data_pedido = data_esgotamento - timedelta(days=lead_time_days)
-                dias_ate_pedido = (data_pedido - hoje).days
-            except OverflowError:
-                # If still overflow, use max values
-                data_esgotamento = hoje + timedelta(days=max_days)
-                data_pedido = data_esgotamento - timedelta(days=lead_time_days)
-                dias_ate_pedido = max_days - lead_time_days
+                urgencia = 'COMPRAR AGORA'
+                cor = '#FF0000'
+            else:
+                try:
+                    data_esgotamento = hoje + timedelta(days=dias_restantes)
+                    data_pedido = data_esgotamento - timedelta(days=lead_time_days)
+                    dias_ate_pedido = (data_pedido - hoje).days
+                    
+                    # Determine urgency based on days until order
+                    if dias_ate_pedido <= 0:
+                        urgencia = 'COMPRAR AGORA'
+                        cor = '#FF0000'
+                        data_pedido = hoje  # Reset to today
+                        dias_ate_pedido = 0
+                    elif dias_ate_pedido <= 30:
+                        urgencia = 'URGENTE'
+                        cor = '#FF8C00'
+                    elif dias_ate_pedido <= 60:
+                        urgencia = 'PRÓXIMO MÊS'
+                        cor = '#FFD700'
+                    else:
+                        urgencia = 'MONITORAR'
+                        cor = '#32CD32'
+                        
+                except OverflowError:
+                    # If overflow, set to max reasonable values
+                    data_esgotamento = hoje + timedelta(days=max_days)
+                    data_pedido = hoje + timedelta(days=max_days - lead_time_days)
+                    dias_ate_pedido = max_days - lead_time_days
+                    urgencia = 'MONITORAR'
+                    cor = '#32CD32'
             
             # Calculate three scenarios: MOQ, Negotiated, Ideal
             # Scenario 1: MOQ (minimum order)
@@ -1093,20 +1197,6 @@ def show_priority_timeline(df, empresa="MINIPA"):
             investimento_negotiated = qtd_negotiated * preco if preco > 0 else 0
             investimento_ideal = qtd_ideal * preco if preco > 0 else 0
             
-            # Determine urgency
-            if dias_ate_pedido <= 0:
-                urgencia = 'COMPRAR AGORA'
-                cor = '#FF0000'
-            elif dias_ate_pedido <= 30:
-                urgencia = 'URGENTE'
-                cor = '#FF8C00'
-            elif dias_ate_pedido <= 60:
-                urgencia = 'PRÓXIMO MÊS'
-                cor = '#FFD700'
-            else:
-                urgencia = 'MONITORAR'
-                cor = '#32CD32'
-            
             timeline_data.append({
                 'Produto': produto,
                 'Fornecedor': fornecedor,
@@ -1114,8 +1204,8 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 'Media_Mensal': media_mensal,
                 'Meses_Cobertura': meses_cobertura,
                 'Dias_Ate_Pedido': dias_ate_pedido,
-                'Data_Pedido': data_pedido.strftime('%d/%m/%Y'),
-                'Data_Esgotamento': data_esgotamento.strftime('%d/%m/%Y'),
+                'Data_Pedido': data_pedido.strftime('%d/%m/%Y') if isinstance(data_pedido, datetime) else data_pedido,
+                'Data_Esgotamento': data_esgotamento.strftime('%d/%m/%Y') if isinstance(data_esgotamento, datetime) else data_esgotamento,
                 'MOQ': moq,
                 'Qtd_MOQ': qtd_moq,
                 'Qtd_Negotiated': qtd_negotiated,
@@ -1253,7 +1343,10 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 with col1:
                     st.write(f"**{prod['Produto']}** - {prod['Fornecedor']}")
                 with col2:
-                    st.write(f"📅 Pedir até: **{prod['Data_Pedido']}**")
+                    if prod['Dias_Ate_Pedido'] == 0:
+                        st.write(f"📅 **PEDIR AGORA**")
+                    else:
+                        st.write(f"📅 Pedir até: **{prod['Data_Pedido']}**")
                 with col3:
                     st.write(f"📦 Qtd: **{prod[qtd_col]:.0f}**")
                 with col4:
