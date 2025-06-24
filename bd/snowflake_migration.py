@@ -115,4 +115,173 @@ def migrate_existing_tables():
     """
     Simple migration helper - wrapper for main migration function
     """
-    return migrate_to_multi_company_versioned() 
+    return migrate_to_multi_company_versioned()
+
+def fix_active_versions():
+    """
+    Repair version status issues
+    """
+    conn = get_snowflake_connection()
+    if not conn:
+        return False
+        
+    try:
+        cursor = conn.cursor()
+        st.info("🔄 Reparando versões ativas...")
+        
+        # Check and update version status
+        cursor.execute("UPDATE CONFIG.VERSIONS SET STATUS = 'ACTIVE' WHERE STATUS = 'INACTIVE'")
+        
+        # Commit changes
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        st.info("✅ Versões ativas reparadas com sucesso!")
+        return True
+    except Exception as e:
+        st.error(f"❌ Erro ao reparar versões ativas: {str(e)}")
+        return False
+
+def migrate_to_merged_excel_support():
+    """
+    Comprehensive migration to support merged Excel data with pricing and priority analysis
+    This adds all necessary columns for the new data structure
+    """
+    conn = get_snowflake_connection()
+    if not conn:
+        return False
+        
+    try:
+        cursor = conn.cursor()
+        
+        st.info("🔄 Starting migration for merged Excel support...")
+        
+        # Check and add columns to ANALYTICS_DATA table
+        st.info("📊 Updating ANALYTICS_DATA table...")
+        
+        analytics_columns = [
+            # Basic pricing column
+            ('PRECO_UNITARIO', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN preco_unitario DECIMAL(10,2)"),
+            
+            # Priority analysis columns
+            ('PRIORITY_SCORE', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN priority_score DECIMAL(5,4)"),
+            ('CRITICALITY', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN criticality VARCHAR(20)"),
+            ('RELEVANCE_CLASS', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN relevance_class VARCHAR(20)"),
+            ('ANNUAL_IMPACT', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN annual_impact DECIMAL(12,2)"),
+            ('MONTHLY_VOLUME', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN monthly_volume DECIMAL(10,2)"),
+            ('VOLUME_NORMALIZED', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN volume_normalized DECIMAL(5,4)"),
+            ('PRICE_NORMALIZED', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN price_normalized DECIMAL(5,4)"),
+            ('RAW_MULTIPLICATION', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN raw_multiplication DECIMAL(12,2)"),
+            
+            # Purchase planning columns
+            ('QTDE_EMBARQUE', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN qtde_embarque DECIMAL(10,2)"),
+            ('COMPRAS_ATE_30_DIAS', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN compras_ate_30_dias DECIMAL(10,2)"),
+            ('COMPRAS_31_60_DIAS', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN compras_31_60_dias DECIMAL(10,2)"),
+            ('COMPRAS_61_90_DIAS', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN compras_61_90_dias DECIMAL(10,2)"),
+            ('COMPRAS_MAIS_90_DIAS', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN compras_mais_90_dias DECIMAL(10,2)"),
+            ('PREVISAO', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN previsao DECIMAL(10,2)"),
+            ('QTDE_TOT_COMPRAS', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN qtde_tot_compras DECIMAL(10,2)")
+        ]
+        
+        # Get current columns
+        cursor.execute("DESCRIBE TABLE ESTOQUE.ANALYTICS_DATA")
+        current_columns = [col[0].upper() for col in cursor.fetchall()]
+        
+        analytics_added = 0
+        for col_name, alter_sql in analytics_columns:
+            if col_name not in current_columns:
+                try:
+                    cursor.execute(alter_sql)
+                    st.success(f"✅ Added {col_name.lower()} to ANALYTICS_DATA")
+                    analytics_added += 1
+                except Exception as e:
+                    if "already exists" not in str(e).lower():
+                        st.error(f"❌ Error adding {col_name.lower()}: {str(e)}")
+                    else:
+                        st.info(f"ℹ️ {col_name.lower()} already exists")
+            else:
+                st.info(f"ℹ️ {col_name.lower()} already exists in ANALYTICS_DATA")
+        
+        # Check and add columns to PRODUTOS table (timeline)
+        st.info("📅 Updating PRODUTOS table...")
+        
+        produtos_columns = [
+            ('PRIORITY_SCORE', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN priority_score DECIMAL(5,4)"),
+            ('CRITICALITY', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN criticality VARCHAR(20)"),
+            ('RELEVANCE_CLASS', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN relevance_class VARCHAR(20)"),
+            ('ANNUAL_IMPACT', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN annual_impact DECIMAL(12,2)"),
+            ('MONTHLY_VOLUME', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN monthly_volume DECIMAL(10,2)"),
+            ('VOLUME_NORMALIZED', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN volume_normalized DECIMAL(5,4)"),
+            ('PRICE_NORMALIZED', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN price_normalized DECIMAL(5,4)"),
+            ('RAW_MULTIPLICATION', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN raw_multiplication DECIMAL(12,2)")
+        ]
+        
+        # Get current columns
+        cursor.execute("DESCRIBE TABLE ESTOQUE.PRODUTOS")
+        current_columns = [col[0].upper() for col in cursor.fetchall()]
+        
+        produtos_added = 0
+        for col_name, alter_sql in produtos_columns:
+            if col_name not in current_columns:
+                try:
+                    cursor.execute(alter_sql)
+                    st.success(f"✅ Added {col_name.lower()} to PRODUTOS")
+                    produtos_added += 1
+                except Exception as e:
+                    if "already exists" not in str(e).lower():
+                        st.error(f"❌ Error adding {col_name.lower()}: {str(e)}")
+                    else:
+                        st.info(f"ℹ️ {col_name.lower()} already exists")
+            else:
+                st.info(f"ℹ️ {col_name.lower()} already exists in PRODUTOS")
+        
+        # Commit changes
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        st.success(f"""
+        🎉 Migration completed successfully!
+        - Added {analytics_added} columns to ANALYTICS_DATA
+        - Added {produtos_added} columns to PRODUTOS
+        
+        Your database now supports:
+        ✅ Pricing data (preco_unitario)
+        ✅ Priority analysis (priority_score, criticality)
+        ✅ Financial impact analysis
+        ✅ Purchase planning columns
+        """)
+        
+        return True
+        
+    except Exception as e:
+        st.error(f"❌ Migration failed: {str(e)}")
+        return False
+        
+def run_all_migrations():
+    """Run all necessary migrations for the system"""
+    st.header("🔄 Database Migration Tool")
+    
+    migrations = [
+        {
+            "name": "Merged Excel Support",
+            "description": "Add columns for pricing, priority analysis, and purchase planning",
+            "function": migrate_to_merged_excel_support
+        },
+        {
+            "name": "Fix Active Versions",
+            "description": "Repair version status issues",
+            "function": fix_active_versions
+        }
+    ]
+    
+    for migration in migrations:
+        with st.expander(f"🔧 {migration['name']}", expanded=True):
+            st.write(migration['description'])
+            if st.button(f"Run {migration['name']}", key=migration['name']):
+                with st.spinner(f"Running {migration['name']}..."):
+                    if migration['function']():
+                        st.success(f"✅ {migration['name']} completed!")
+                    else:
+                        st.error(f"❌ {migration['name']} failed!") 

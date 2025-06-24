@@ -67,6 +67,7 @@ def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
                 'Preço FOB': 'Preco_Unitario',
                 'Preço Unit.': 'Preco_Unitario',
                 'Price': 'Preco_Unitario',
+                'preco_unitario': 'Preco_Unitario',  # Standard merged column
                 
                 # Other standard columns
                 'Fornecedor\n': 'Fornecedor',
@@ -96,7 +97,29 @@ def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
                 'Previsão Total com New PO': 'Previsao_Total_New_Pos',
                 'Previsão Total com New POs': 'Previsao_Total_New_Pos',
                 'Previsão Total': 'Previsao_Total_New_Pos',
-                'Previsao Total': 'Previsao_Total_New_Pos'
+                'Previsao Total': 'Previsao_Total_New_Pos',
+                'Previsão': 'Previsao',
+                
+                # NEW: Merged Excel columns from priority analysis
+                'Produto': 'Produto',
+                'produto': 'Produto',
+                'Estoque': 'Estoque',
+                'Qtde Embarque': 'Qtde_Embarque',
+                'Compras Até 30 Dias': 'Compras_Ate_30_Dias',
+                'Compras 31 a 60 Dias': 'Compras_31_60_Dias',
+                'Compras 61 a 90 Dias': 'Compras_61_90_Dias',
+                'Compras > 90 Dias': 'Compras_Mais_90_Dias',
+                'Qtde Tot Compras': 'Qtde_Tot_Compras',
+                
+                # Priority analysis columns
+                'priority_score': 'priority_score',
+                'criticality': 'criticality',
+                'relevance_class': 'relevance_class',
+                'volume_normalized': 'volume_normalized',
+                'price_normalized': 'price_normalized',
+                'raw_multiplication': 'raw_multiplication',
+                'annual_impact': 'annual_impact',
+                'monthly_volume': 'monthly_volume'
             }
             
             # Apply renaming
@@ -392,7 +415,7 @@ def show_data_upload():
     # Create two distinct upload options
     upload_type = st.radio(
         "📋 Selecione o tipo de dados:",
-        ["📅 Timeline de Compras (MOQ/Fornecedores)", "📊 Análise de Estoque (Export)"],
+        ["📊 Análise de Estoque com Prioridades (Merged Excel)", "📅 Timeline de Compras (MOQ/Fornecedores)", "📊 Análise de Estoque (Export)"],
         help="Escolha o tipo correto para que os dados sejam processados adequadamente"
     )
     
@@ -404,7 +427,20 @@ def show_data_upload():
         help="Adicione uma descrição para identificar facilmente esta versão"
     )
     
-    if upload_type == "📅 Timeline de Compras (MOQ/Fornecedores)":
+    if upload_type == "📊 Análise de Estoque com Prioridades (Merged Excel)":
+        st.info("""
+        🎯 **Para Análise com Prioridades:** Upload de Excel que já passou pelo processo de merge e priority analysis
+        - Colunas esperadas: Produto, Estoque, Média 6 Meses, preco_unitario, priority_score, criticality, etc.
+        - Este formato é gerado pelos scripts do Test folder (data_merger.py + priority_analysis.py)
+        """)
+        table_prefix = "ANALYTICS"
+        uploaded_file = st.file_uploader(
+            "📁 Arquivo Excel Merged com Prioridades",
+            type=['xlsx', 'xls'],
+            help="Arquivo que já passou pelo data merger e priority analysis",
+            key="merged_upload"
+        )
+    elif upload_type == "📅 Timeline de Compras (MOQ/Fornecedores)":
         st.info("📝 **Para Timeline:** Upload com colunas Item, Fornecedor, QTD, Modelo, Preço FOB, MOQ, etc.")
         table_prefix = "TIMELINE"
         uploaded_file = st.file_uploader(

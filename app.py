@@ -32,10 +32,6 @@ def main():
             st.session_state.current_page = "upload"
             st.rerun()
 
-        if st.button("📅 Timeline de Compras", use_container_width=True):
-            st.session_state.current_page = "timeline"
-            st.rerun()
-
         if st.button("📊 Análise de Estoque", use_container_width=True):
             st.session_state.current_page = "analytics"
             st.rerun()
@@ -67,9 +63,6 @@ def main():
         elif page == "upload":
             from pages.upload import show_data_upload
             show_data_upload()
-        elif page == "timeline":
-            from pages.timeline import load_page
-            load_page()
         elif page == "analytics":
             from pages.analytics import load_page
             load_page()

@@ -205,12 +205,13 @@ def load_page():
         st.info(f"📊 **Análise para {empresa_selecionada}** | Versão: {f'v{selected_version_id}' if 'selected_version_id' in locals() and selected_version_id else 'Ativa'}")
         
         # Show analytics tabs with company context
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
             f"📋 Resumo - {empresa_selecionada}", 
             f"🚨 Lista de Compras - {empresa_selecionada}", 
             f"📊 Dashboards - {empresa_selecionada}", 
             f"📞 Contatos Urgentes - {empresa_selecionada}",
-            f"📋 Tabela Geral - {empresa_selecionada}"
+            f"📋 Tabela Geral - {empresa_selecionada}",
+            f"🎯 Timeline Prioritário - {empresa_selecionada}"
         ])
         
         with tab1:
@@ -227,6 +228,9 @@ def load_page():
         
         with tab5:
             show_tabela_geral(df, empresa_selecionada)
+            
+        with tab6:
+            show_priority_timeline(df, empresa_selecionada)
 
 def show_executive_summary(df, produtos_novos, produtos_existentes, empresa="MINIPA"):
     """Resumo executivo dos dados por empresa"""
@@ -680,197 +684,459 @@ def show_urgent_contacts(produtos_existentes, empresa="MINIPA"):
             st.info("Lista de produtos críticos exportada")
 
 def show_tabela_geral(df, empresa="MINIPA"):
-    """Show complete data table with search, filter and export functionality"""
+    """Show general table by company"""
     
-    st.subheader(f"📋 Tabela Geral - {empresa}")
+    st.subheader(f"📋 Tabela Geral de Produtos - {empresa}")
     
-    if df is None or len(df) == 0:
-        st.info("Nenhum dado disponível para exibir")
-        return
+    # Select columns to display (exclude metadata columns)
+    display_columns = [col for col in df.columns if col not in [
+        'empresa', 'upload_version', 'version_id', 'is_active', 
+        'data_upload', 'usuario', 'table_type', 'version_description', 
+        'created_by', 'id', 'relevance_class'  # Add metadata columns to exclude
+    ]]
     
-    # Remove metadata columns from display - FORCE REMOVAL
-    metadata_columns = ['data_upload', 'upload_version', 'version_id', 'upload_date', 'created_by', 'is_active']
-    clean_df = df.copy()
-    
-    # Remove metadata columns if they exist - more comprehensive
-    for col in metadata_columns:
-        if col in clean_df.columns:
-            clean_df = clean_df.drop(columns=[col])
-    
-    # Also remove any columns that start with these patterns
-    columns_to_remove = []
-    for col in clean_df.columns:
-        if any(pattern in col.lower() for pattern in ['upload', 'version', 'created', 'active']):
-            columns_to_remove.append(col)
-    
-    for col in columns_to_remove:
-        clean_df = clean_df.drop(columns=[col])
-    
-    # Search and filter controls
-    col1, col2, col3 = st.columns([2, 1, 1])
+    # Create search filters
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        search_term = st.text_input("🔍 Buscar produto:", placeholder="Digite o nome do produto...")
+        search_produto = st.text_input("🔍 Buscar por produto:", key=f"search_prod_{empresa}")
     
     with col2:
-        # Filter by stock coverage if available
-        if 'Estoque Cobertura' in clean_df.columns:
-            coverage_filter = st.selectbox(
-                "📊 Filtrar por cobertura:",
-                ["Todos", "Críticos (≤1 mês)", "Alerta (1-3 meses)", "Saudáveis (>3 meses)"]
-            )
+        if 'UltimoFornecedor' in df.columns:
+            fornecedores = ['Todos'] + sorted(df['UltimoFornecedor'].dropna().unique().tolist())
+        elif 'ultimo_fornecedor' in df.columns:
+            fornecedores = ['Todos'] + sorted(df['ultimo_fornecedor'].dropna().unique().tolist())
         else:
-            coverage_filter = "Todos"
+            fornecedores = ['Todos']
+        
+        selected_fornecedor = st.selectbox("🏭 Filtrar por fornecedor:", fornecedores, key=f"filter_forn_{empresa}")
     
     with col3:
-        # Export button
-        if st.button("📥 Exportar Excel", use_container_width=True):
-            # Create Excel export
-            try:
-                import io
-                from datetime import datetime
-                
-                # Prepare clean data for export (no metadata columns)
-                export_df = clean_df.copy()
-                
-                # Create a BytesIO buffer
-                buffer = io.BytesIO()
-                
-                # Write to Excel using openpyxl (built into pandas)
-                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                    export_df.to_excel(writer, sheet_name=f'{empresa}_Dados_Completos', index=False)
-                
-                # Get the data
-                buffer.seek(0)
-                
-                # Download button
-                st.download_button(
-                    label="⬇️ Download Excel",
-                    data=buffer.getvalue(),
-                    file_name=f"{empresa}_dados_completos_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-                st.success("✅ Arquivo Excel preparado para download!")
-                
-            except Exception as e:
-                st.error(f"❌ Erro ao gerar Excel: {str(e)}")
-                st.info("💡 Tentando método alternativo...")
-                
-                # Fallback method using CSV
-                try:
-                    csv_data = export_df.to_csv(index=False)
-                    st.download_button(
-                        label="⬇️ Download CSV (alternativo)",
-                        data=csv_data,
-                        file_name=f"{empresa}_dados_completos_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                        mime="text/csv"
-                    )
-                    st.success("✅ Arquivo CSV preparado para download!")
-                except Exception as e2:
-                    st.error(f"❌ Erro no método alternativo: {str(e2)}")
+        sort_column = st.selectbox("📊 Ordenar por:", display_columns, key=f"sort_col_{empresa}")
     
     # Apply filters
-    filtered_df = clean_df.copy()
+    filtered_df = df.copy()
     
-    # Search filter
-    if search_term:
-        if 'Produto' in filtered_df.columns:
-            mask = filtered_df['Produto'].astype(str).str.contains(search_term, case=False, na=False)
-            filtered_df = filtered_df[mask]
+    if search_produto:
+        filtered_df = filtered_df[filtered_df['Produto'].str.contains(search_produto, case=False, na=False)]
     
-    # Coverage filter
-    if coverage_filter != "Todos" and 'Estoque Cobertura' in filtered_df.columns:
-        if coverage_filter == "Críticos (≤1 mês)":
-            filtered_df = filtered_df[filtered_df['Estoque Cobertura'] <= 1]
-        elif coverage_filter == "Alerta (1-3 meses)":
-            filtered_df = filtered_df[(filtered_df['Estoque Cobertura'] > 1) & (filtered_df['Estoque Cobertura'] <= 3)]
-        elif coverage_filter == "Saudáveis (>3 meses)":
-            filtered_df = filtered_df[filtered_df['Estoque Cobertura'] > 3]
+    if selected_fornecedor != 'Todos':
+        if 'UltimoFornecedor' in filtered_df.columns:
+            filtered_df = filtered_df[filtered_df['UltimoFornecedor'] == selected_fornecedor]
+        elif 'ultimo_fornecedor' in filtered_df.columns:
+            filtered_df = filtered_df[filtered_df['ultimo_fornecedor'] == selected_fornecedor]
     
-    # Show results count
-    st.info(f"📊 Exibindo {len(filtered_df)} de {len(clean_df)} produtos")
+    # Sort data
+    filtered_df = filtered_df.sort_values(by=sort_column, ascending=False)
     
-    # Display the table
-    if len(filtered_df) > 0:
-        # Format numeric columns for better display
-        display_df = filtered_df.copy()
+    # Show results
+    st.info(f"📊 Mostrando {len(filtered_df)} de {len(df)} produtos")
+    
+    # Format numeric columns for better display
+    formatted_df = filtered_df[display_columns].copy()
+    
+    # Round numeric columns to 2 decimal places
+    numeric_columns = formatted_df.select_dtypes(include=[np.number]).columns
+    for col in numeric_columns:
+        formatted_df[col] = formatted_df[col].round(2)
+    
+    # Display the dataframe with formatting
+    st.dataframe(
+        formatted_df,
+        use_container_width=True,
+        height=600,
+        hide_index=True
+    )
+    
+    # Export options
+    st.subheader("📥 Exportar Dados")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        csv = filtered_df[display_columns].to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📄 Baixar como CSV",
+            data=csv,
+            file_name=f'tabela_geral_{empresa}_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.csv',
+            mime='text/csv',
+            use_container_width=True
+        )
+    
+    with col2:
+        # Excel export with xlsxwriter
+        try:
+            import io
+            buffer = io.BytesIO()
+            
+            # Create a Pandas Excel writer using XlsxWriter
+            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                filtered_df[display_columns].to_excel(writer, sheet_name='Tabela Geral', index=False)
+                
+                # Get the xlsxwriter workbook and worksheet objects
+                workbook = writer.book
+                worksheet = writer.sheets['Tabela Geral']
+                
+                # Add some cell formatting
+                header_format = workbook.add_format({
+                    'bold': True,
+                    'text_wrap': True,
+                    'valign': 'top',
+                    'fg_color': '#D7E4BD',
+                    'border': 1
+                })
+                
+                # Write the column headers with the defined format
+                for col_num, value in enumerate(filtered_df[display_columns].columns.values):
+                    worksheet.write(0, col_num, value, header_format)
+                
+                # Auto-adjust columns width
+                for column in filtered_df[display_columns]:
+                    column_width = max(filtered_df[display_columns][column].astype(str).map(len).max(), len(column))
+                    col_idx = filtered_df[display_columns].columns.get_loc(column)
+                    worksheet.set_column(col_idx, col_idx, min(column_width + 2, 50))
+            
+            # Reset buffer position
+            buffer.seek(0)
+            
+            st.download_button(
+                label="📊 Baixar como Excel",
+                data=buffer,
+                file_name=f'tabela_geral_{empresa}_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.xlsx',
+                mime='application/vnd.ms-excel',
+                use_container_width=True
+            )
+        except ImportError:
+            st.warning("⚠️ xlsxwriter não instalado. Usando método alternativo para Excel.")
+            # Fallback method without xlsxwriter
+            excel_buffer = io.BytesIO()
+            filtered_df[display_columns].to_excel(excel_buffer, index=False)
+            excel_buffer.seek(0)
+            
+            st.download_button(
+                label="📊 Baixar como Excel",
+                data=excel_buffer,
+                file_name=f'tabela_geral_{empresa}_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.xlsx',
+                mime='application/vnd.ms-excel',
+                use_container_width=True
+            )
+
+def show_priority_timeline(df, empresa="MINIPA"):
+    """Show priority-driven timeline with merged data support"""
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+    from datetime import datetime, timedelta
+    
+    st.subheader(f"🎯 Timeline de Compras Prioritário - {empresa}")
+    
+    # Check if we have priority data
+    has_priority_data = 'priority_score' in df.columns and df['priority_score'].notna().any()
+    
+    if has_priority_data:
+        st.success("✅ Dados de prioridade detectados! Usando análise prioritária 85/15.")
+    else:
+        st.info("📊 Dados de prioridade não encontrados. Usando análise básica de timeline.")
+    
+    # Prepare data for timeline analysis
+    timeline_data = []
+    hoje = datetime.now()
+    
+    for idx, row in df.iterrows():
+        # Skip empty rows
+        produto = str(row.get('Produto', '')).strip()
+        if not produto or produto == 'nan':
+            continue
         
-        # Round numeric columns
-        numeric_columns = display_df.select_dtypes(include=[np.number]).columns
-        for col in numeric_columns:
-            if col in ['Estoque', 'Consumo 6 Meses', 'Média 6 Meses']:
-                display_df[col] = display_df[col].round(0).astype(int)
-            elif col in ['Estoque Cobertura']:
-                display_df[col] = display_df[col].round(2)
+        # Get basic data
+        estoque = float(row.get('Estoque', 0) or 0)
+        media_mensal = float(row.get('Media_6_Meses', row.get('Média 6 Meses', 0)) or 0)
+        moq = float(row.get('MOQ', 0) or 0)
+        fornecedor = str(row.get('ultimo_fornecedor', row.get('UltimoFornecedor', 'Brazil')))
+        preco = float(row.get('preco_unitario', row.get('Preco_Unitario', 0)) or 0)
+        
+        # Get priority data if available
+        priority_score = float(row.get('priority_score', 0) or 0)
+        criticality = str(row.get('criticality', 'N/A'))
+        relevance_class = str(row.get('relevance_class', 'N/A'))
+        annual_impact = float(row.get('annual_impact', 0) or 0)
+        
+        # Calculate timeline metrics
+        if media_mensal > 0:
+            meses_cobertura = estoque / media_mensal
+            dias_restantes = int(meses_cobertura * 30)
+            
+            # Determine lead time based on criticality
+            if criticality in ['🔴 Critical', '🟡 High', '🟠 Medium']:
+                lead_time_days = 120  # 4 months advance
             else:
-                display_df[col] = display_df[col].round(1)
+                lead_time_days = 90   # 3 months advance
+            
+            # Calculate when to order
+            data_esgotamento = hoje + timedelta(days=dias_restantes)
+            data_pedido = data_esgotamento - timedelta(days=lead_time_days)
+            dias_ate_pedido = (data_pedido - hoje).days
+            
+            # Calculate optimal quantity (6 months target)
+            qtd_ideal = media_mensal * 6
+            if moq > 0:
+                multiplos = max(1, int(np.ceil(qtd_ideal / moq)))
+                qtd_comprar = multiplos * moq
+            else:
+                qtd_comprar = int(np.ceil(qtd_ideal / 50) * 50)  # Round to 50s
+            
+            # Calculate investment
+            investimento = qtd_comprar * preco if preco > 0 else 0
+            
+            # Determine urgency
+            if dias_ate_pedido <= 0:
+                urgencia = 'COMPRAR AGORA'
+                cor = '#FF0000'
+            elif dias_ate_pedido <= 30:
+                urgencia = 'URGENTE'
+                cor = '#FF8C00'
+            elif dias_ate_pedido <= 60:
+                urgencia = 'PRÓXIMO MÊS'
+                cor = '#FFD700'
+            else:
+                urgencia = 'MONITORAR'
+                cor = '#32CD32'
+            
+            timeline_data.append({
+                'Produto': produto,
+                'Fornecedor': fornecedor,
+                'Estoque_Atual': estoque,
+                'Media_Mensal': media_mensal,
+                'Meses_Cobertura': meses_cobertura,
+                'Dias_Ate_Pedido': dias_ate_pedido,
+                'MOQ': moq,
+                'Qtd_Comprar': qtd_comprar,
+                'Investimento': investimento,
+                'Preco_Unit': preco,
+                'Priority_Score': priority_score,
+                'Criticality': criticality,
+                'Relevance': relevance_class,
+                'Annual_Impact': annual_impact,
+                'Urgencia': urgencia,
+                'Cor': cor
+            })
+    
+    if not timeline_data:
+        st.warning("⚠️ Nenhum produto com dados suficientes para análise de timeline.")
+        return
+    
+    # Convert to DataFrame for easier manipulation
+    timeline_df = pd.DataFrame(timeline_data)
+    
+    # Sort by priority if available, otherwise by urgency
+    if has_priority_data:
+        timeline_df = timeline_df.sort_values(['Priority_Score'], ascending=False)
+    else:
+        timeline_df = timeline_df.sort_values(['Dias_Ate_Pedido'])
+    
+    # Filters
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        urgencia_filter = st.selectbox(
+            "🚨 Filtrar por Urgência:",
+            ['Todos', 'COMPRAR AGORA', 'URGENTE', 'PRÓXIMO MÊS', 'MONITORAR']
+        )
+    
+    with col2:
+        if has_priority_data:
+            criticality_filter = st.selectbox(
+                "🎯 Filtrar por Criticidade:",
+                ['Todos'] + timeline_df['Criticality'].unique().tolist()
+            )
+        else:
+            criticality_filter = 'Todos'
+    
+    with col3:
+        fornecedor_filter = st.selectbox(
+            "🏭 Filtrar por Fornecedor:",
+            ['Todos'] + timeline_df['Fornecedor'].unique().tolist()
+        )
+    
+    # Apply filters
+    filtered_df = timeline_df.copy()
+    
+    if urgencia_filter != 'Todos':
+        filtered_df = filtered_df[filtered_df['Urgencia'] == urgencia_filter]
+    
+    if criticality_filter != 'Todos' and has_priority_data:
+        filtered_df = filtered_df[filtered_df['Criticality'] == criticality_filter]
+    
+    if fornecedor_filter != 'Todos':
+        filtered_df = filtered_df[filtered_df['Fornecedor'] == fornecedor_filter]
+    
+    # Metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    comprar_agora = len(filtered_df[filtered_df['Urgencia'] == 'COMPRAR AGORA'])
+    urgentes = len(filtered_df[filtered_df['Urgencia'] == 'URGENTE'])
+    proximo_mes = len(filtered_df[filtered_df['Urgencia'] == 'PRÓXIMO MÊS'])
+    investimento_total = filtered_df['Investimento'].sum()
+    
+    col1.metric("🔴 Comprar Agora", comprar_agora)
+    col2.metric("🟠 Urgentes", urgentes)
+    col3.metric("🟡 Próximo Mês", proximo_mes)
+    col4.metric("💰 Investimento", f"R$ {investimento_total:,.0f}")
+    
+    # Interactive Timeline Chart
+    if len(filtered_df) > 0:
+        # Limit display to top 50 for readability
+        display_df = filtered_df.head(50)
         
-        # Create dynamic column config based on available columns
-        column_config = {}
-        if "Produto" in display_df.columns:
-            column_config["Produto"] = st.column_config.TextColumn("Produto", width="medium")
-        if "Estoque" in display_df.columns:
-            column_config["Estoque"] = st.column_config.NumberColumn("Estoque", format="%d")
-        if "Consumo 6 Meses" in display_df.columns:
-            column_config["Consumo 6 Meses"] = st.column_config.NumberColumn("Consumo 6M", format="%d")
-        if "Média 6 Meses" in display_df.columns:
-            column_config["Média 6 Meses"] = st.column_config.NumberColumn("Média 6M", format="%d")
-        if "Estoque Cobertura" in display_df.columns:
-            column_config["Estoque Cobertura"] = st.column_config.NumberColumn("Cobertura", format="%.2f meses")
-        if "MOQ" in display_df.columns:
-            column_config["MOQ"] = st.column_config.NumberColumn("MOQ", format="%d")
-        if "UltimoFornecedor" in display_df.columns:
-            column_config["UltimoFornecedor"] = st.column_config.TextColumn("Último Fornecedor", width="medium")
-        
-        # Show the dataframe with pagination
-        st.dataframe(
-            display_df,
-            use_container_width=True,
-            height=600,
-            column_config=column_config
+        # Create figure with subplots
+        fig = make_subplots(
+            rows=1, cols=2,
+            subplot_titles=('📅 Dias até Pedido', '💰 Investimento Necessário'),
+            column_widths=[0.6, 0.4]
         )
         
-        # Summary statistics
-        st.subheader("📈 Estatísticas Resumidas")
+        # Timeline bar chart
+        fig.add_trace(
+            go.Bar(
+                y=display_df['Produto'],
+                x=display_df['Dias_Ate_Pedido'],
+                orientation='h',
+                marker_color=display_df['Cor'],
+                text=display_df['Urgencia'],
+                textposition='auto',
+                hovertemplate=(
+                    '<b>%{y}</b><br>' +
+                    'Dias até pedido: %{x}<br>' +
+                    'Urgência: %{text}<br>' +
+                    'Estoque: %{customdata[0]:.0f}<br>' +
+                    'Consumo: %{customdata[1]:.1f}/mês<br>' +
+                    'Cobertura: %{customdata[2]:.1f} meses<br>' +
+                    '<extra></extra>'
+                ),
+                customdata=np.column_stack((
+                    display_df['Estoque_Atual'],
+                    display_df['Media_Mensal'],
+                    display_df['Meses_Cobertura']
+                ))
+            ),
+            row=1, col=1
+        )
         
-        col1, col2, col3, col4 = st.columns(4)
+        # Investment bar chart
+        fig.add_trace(
+            go.Bar(
+                y=display_df['Produto'],
+                x=display_df['Investimento'],
+                orientation='h',
+                marker_color='lightblue',
+                text=[f'R$ {x:,.0f}' for x in display_df['Investimento']],
+                textposition='auto',
+                hovertemplate=(
+                    '<b>%{y}</b><br>' +
+                    'Investimento: R$ %{x:,.2f}<br>' +
+                    'Quantidade: %{customdata[0]:.0f}<br>' +
+                    'Preço Unit: R$ %{customdata[1]:.2f}<br>' +
+                    'MOQ: %{customdata[2]:.0f}<br>' +
+                    '<extra></extra>'
+                ),
+                customdata=np.column_stack((
+                    display_df['Qtd_Comprar'],
+                    display_df['Preco_Unit'],
+                    display_df['MOQ']
+                ))
+            ),
+            row=1, col=2
+        )
         
-        with col1:
-            if 'Estoque' in filtered_df.columns:
-                total_estoque = filtered_df['Estoque'].sum()
-                st.metric("📦 Estoque Total", f"{total_estoque:,.0f}")
+        # Update layout
+        fig.update_layout(
+            title=f'Timeline de Compras - {empresa} (Top 50 produtos)',
+            height=max(600, len(display_df) * 20),
+            showlegend=False
+        )
         
-        with col2:
-            if 'Média 6 Meses' in filtered_df.columns:
-                media_consumo = filtered_df['Média 6 Meses'].mean()
-                st.metric("📊 Consumo Médio", f"{media_consumo:.1f}")
+        fig.update_xaxes(title_text="Dias até Pedido", row=1, col=1)
+        fig.update_xaxes(title_text="Investimento (R$)", row=1, col=2)
         
-        with col3:
-            if 'Estoque Cobertura' in filtered_df.columns:
-                cobertura_media = filtered_df['Estoque Cobertura'].mean()
-                st.metric("⏱️ Cobertura Média", f"{cobertura_media:.1f} meses")
-        
-        with col4:
-            if 'MOQ' in filtered_df.columns:
-                moq_medio = filtered_df['MOQ'].mean()
-                st.metric("📋 MOQ Médio", f"{moq_medio:.0f}")
-        
-        # Show distribution by supplier if available
-        if 'UltimoFornecedor' in filtered_df.columns:
-            st.subheader("🏭 Distribuição por Fornecedor")
-            
-            supplier_counts = filtered_df['UltimoFornecedor'].value_counts()
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.bar_chart(supplier_counts.head(10))
-            
-            with col2:
-                st.dataframe(
-                    supplier_counts.reset_index().rename(columns={'index': 'Fornecedor', 'UltimoFornecedor': 'Produtos'}),
-                    use_container_width=True
-                )
+        st.plotly_chart(fig, use_container_width=True)
     
+    # Detailed table with priority information
+    st.subheader("📋 Detalhamento de Compras")
+    
+    # Select columns to display based on available data
+    if has_priority_data:
+        display_columns = [
+            'Produto', 'Fornecedor', 'Urgencia', 'Dias_Ate_Pedido',
+            'Qtd_Comprar', 'MOQ', 'Investimento', 'Priority_Score',
+            'Criticality', 'Annual_Impact'
+        ]
     else:
-        st.warning("🔍 Nenhum produto encontrado com os filtros aplicados") 
+        display_columns = [
+            'Produto', 'Fornecedor', 'Urgencia', 'Dias_Ate_Pedido',
+            'Qtd_Comprar', 'MOQ', 'Investimento', 'Estoque_Atual',
+            'Media_Mensal', 'Meses_Cobertura'
+        ]
+    
+    # Format the dataframe for display
+    display_timeline_df = filtered_df[display_columns].copy()
+    
+    # Format numeric columns
+    if 'Investimento' in display_timeline_df.columns:
+        display_timeline_df['Investimento'] = display_timeline_df['Investimento'].apply(lambda x: f'R$ {x:,.2f}')
+    if 'Annual_Impact' in display_timeline_df.columns:
+        display_timeline_df['Annual_Impact'] = display_timeline_df['Annual_Impact'].apply(lambda x: f'R$ {x:,.2f}')
+    if 'Priority_Score' in display_timeline_df.columns:
+        display_timeline_df['Priority_Score'] = display_timeline_df['Priority_Score'].round(3)
+    
+    st.dataframe(
+        display_timeline_df,
+        use_container_width=True,
+        height=400,
+        hide_index=True
+    )
+    
+    # Export options
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        csv = filtered_df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📄 Baixar Timeline CSV",
+            data=csv,
+            file_name=f'timeline_prioritario_{empresa}_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.csv',
+            mime='text/csv',
+            use_container_width=True
+        )
+    
+    with col2:
+        # Create purchase order summary
+        if len(filtered_df[filtered_df['Urgencia'].isin(['COMPRAR AGORA', 'URGENTE'])]) > 0:
+            urgent_items = filtered_df[filtered_df['Urgencia'].isin(['COMPRAR AGORA', 'URGENTE'])]
+            
+            summary_text = f"""ORDEM DE COMPRA - {empresa}
+Data: {datetime.now().strftime('%d/%m/%Y')}
+
+ITENS URGENTES:
+{'='*50}
+"""
+            for _, item in urgent_items.iterrows():
+                summary_text += f"""
+Produto: {item['Produto']}
+Fornecedor: {item['Fornecedor']}
+Quantidade: {item['Qtd_Comprar']:.0f} unidades
+MOQ: {item['MOQ']:.0f}
+Investimento: R$ {item['Investimento']:,.2f}
+{'Priority: ' + item['Criticality'] if has_priority_data else ''}
+{'-'*30}
+"""
+            
+            summary_text += f"""
+TOTAL URGENTE: R$ {urgent_items['Investimento'].sum():,.2f}
+"""
+            
+            st.download_button(
+                label="📝 Baixar Ordem de Compra",
+                data=summary_text,
+                file_name=f'ordem_compra_{empresa}_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.txt',
+                mime='text/plain',
+                use_container_width=True
+            ) 

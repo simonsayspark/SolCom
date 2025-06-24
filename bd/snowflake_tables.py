@@ -45,6 +45,14 @@ def create_tables():
             table_type VARCHAR(20) DEFAULT 'TIMELINE',
             version_description TEXT,
             created_by VARCHAR(50),
+            priority_score DECIMAL(5,4),
+            criticality VARCHAR(20),
+            relevance_class VARCHAR(20),
+            annual_impact DECIMAL(12,2),
+            monthly_volume DECIMAL(10,2),
+            volume_normalized DECIMAL(5,4),
+            price_normalized DECIMAL(5,4),
+            raw_multiplication DECIMAL(12,2),
             UNIQUE(empresa, upload_version, item, modelo)
         )
         """)
@@ -69,6 +77,22 @@ def create_tables():
             table_type VARCHAR(20) DEFAULT 'ANALYTICS',
             version_description TEXT,
             created_by VARCHAR(50),
+            preco_unitario DECIMAL(10,2),
+            priority_score DECIMAL(5,4),
+            criticality VARCHAR(20),
+            relevance_class VARCHAR(20),
+            annual_impact DECIMAL(12,2),
+            monthly_volume DECIMAL(10,2),
+            volume_normalized DECIMAL(5,4),
+            price_normalized DECIMAL(5,4),
+            raw_multiplication DECIMAL(12,2),
+            qtde_embarque DECIMAL(10,2),
+            compras_ate_30_dias DECIMAL(10,2),
+            compras_31_60_dias DECIMAL(10,2),
+            compras_61_90_dias DECIMAL(10,2),
+            compras_mais_90_dias DECIMAL(10,2),
+            previsao DECIMAL(10,2),
+            qtde_tot_compras DECIMAL(10,2),
             UNIQUE(empresa, upload_version, produto)
         )
         """)
@@ -306,6 +330,38 @@ def add_analytics_columns():
                 st.error(f"❌ Erro ao adicionar coluna ultimo_fornecedor: {str(e)}")
         else:
             st.info("✅ Coluna ultimo_fornecedor já existe")
+        
+        # Add priority analysis columns if missing
+        priority_columns = [
+            ('PRECO_UNITARIO', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN preco_unitario DECIMAL(10,2)"),
+            ('PRIORITY_SCORE', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN priority_score DECIMAL(5,4)"),
+            ('CRITICALITY', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN criticality VARCHAR(20)"),
+            ('RELEVANCE_CLASS', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN relevance_class VARCHAR(20)"),
+            ('ANNUAL_IMPACT', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN annual_impact DECIMAL(12,2)"),
+            ('MONTHLY_VOLUME', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN monthly_volume DECIMAL(10,2)"),
+            ('VOLUME_NORMALIZED', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN volume_normalized DECIMAL(5,4)"),
+            ('PRICE_NORMALIZED', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN price_normalized DECIMAL(5,4)"),
+            ('RAW_MULTIPLICATION', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN raw_multiplication DECIMAL(12,2)"),
+            ('QTDE_EMBARQUE', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN qtde_embarque DECIMAL(10,2)"),
+            ('COMPRAS_ATE_30_DIAS', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN compras_ate_30_dias DECIMAL(10,2)"),
+            ('COMPRAS_31_60_DIAS', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN compras_31_60_dias DECIMAL(10,2)"),
+            ('COMPRAS_61_90_DIAS', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN compras_61_90_dias DECIMAL(10,2)"),
+            ('COMPRAS_MAIS_90_DIAS', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN compras_mais_90_dias DECIMAL(10,2)"),
+            ('PREVISAO', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN previsao DECIMAL(10,2)"),
+            ('QTDE_TOT_COMPRAS', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN qtde_tot_compras DECIMAL(10,2)")
+        ]
+        
+        for col_name, alter_sql in priority_columns:
+            if col_name not in column_names:
+                try:
+                    cursor.execute(alter_sql)
+                    st.success(f"✅ Coluna {col_name.lower()} adicionada com sucesso!")
+                    changes_made = True
+                except Exception as e:
+                    if "already exists" not in str(e).lower():
+                        st.error(f"❌ Erro ao adicionar coluna {col_name.lower()}: {str(e)}")
+            else:
+                st.info(f"✅ Coluna {col_name.lower()} já existe")
         
         if changes_made:
             conn.commit()
