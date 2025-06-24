@@ -829,7 +829,10 @@ def show_priority_timeline(df, empresa="MINIPA"):
     
     st.subheader(f"🎯 Timeline de Compras Prioritário - {empresa}")
     
-    # Check if we have priority data
+    # Debug: Show available columns
+    st.info(f"🔍 Colunas disponíveis: {', '.join(df.columns[:15])}...")
+    
+    # Check if we have priority data - handle different column name formats
     has_priority_data = 'priority_score' in df.columns and df['priority_score'].notna().any()
     
     if has_priority_data:
@@ -847,12 +850,34 @@ def show_priority_timeline(df, empresa="MINIPA"):
         if not produto or produto == 'nan':
             continue
         
-        # Get basic data
+        # Get basic data - handle multiple column name formats
         estoque = float(row.get('Estoque', 0) or 0)
-        media_mensal = float(row.get('Media_6_Meses', row.get('Média 6 Meses', 0)) or 0)
+        
+        # Handle different naming conventions for monthly average
+        media_mensal = 0
+        for col in ['Media_6_Meses', 'Média 6 Meses', 'media_6_meses', 'Media 6 Meses']:
+            if col in row.index:
+                media_mensal = float(row.get(col, 0) or 0)
+                if media_mensal > 0:
+                    break
+        
         moq = float(row.get('MOQ', 0) or 0)
-        fornecedor = str(row.get('ultimo_fornecedor', row.get('UltimoFornecedor', 'Brazil')))
-        preco = float(row.get('preco_unitario', row.get('Preco_Unitario', 0)) or 0)
+        
+        # Handle supplier column variations
+        fornecedor = 'Brazil'
+        for col in ['ultimo_fornecedor', 'UltimoFornecedor', 'UltimoFor']:
+            if col in row.index:
+                fornecedor = str(row.get(col, 'Brazil'))
+                if fornecedor and fornecedor != 'nan':
+                    break
+        
+        # Handle price column variations
+        preco = 0
+        for col in ['preco_unitario', 'Preco_Unitario', 'preco_unitário']:
+            if col in row.index:
+                preco = float(row.get(col, 0) or 0)
+                if preco > 0:
+                    break
         
         # Get priority data if available
         priority_score = float(row.get('priority_score', 0) or 0)
@@ -860,9 +885,19 @@ def show_priority_timeline(df, empresa="MINIPA"):
         relevance_class = str(row.get('relevance_class', 'N/A'))
         annual_impact = float(row.get('annual_impact', 0) or 0)
         
+        # Get additional timeline data from merged Excel
+        estoque_cobertura = float(row.get('Estoque Cobertura', row.get('Estoque_Cobertura', 0)) or 0)
+        qtde_embarque = float(row.get('Qtde Embarque', row.get('Qtde_Embarque', 0)) or 0)
+        previsao = float(row.get('Previsão', row.get('Previsao', 0)) or 0)
+        
         # Calculate timeline metrics
         if media_mensal > 0:
-            meses_cobertura = estoque / media_mensal
+            # Use Estoque Cobertura if available, otherwise calculate
+            if estoque_cobertura > 0:
+                meses_cobertura = estoque_cobertura
+            else:
+                meses_cobertura = estoque / media_mensal
+                
             dias_restantes = int(meses_cobertura * 30)
             
             # Determine lead time based on criticality
@@ -876,16 +911,28 @@ def show_priority_timeline(df, empresa="MINIPA"):
             data_pedido = data_esgotamento - timedelta(days=lead_time_days)
             dias_ate_pedido = (data_pedido - hoje).days
             
-            # Calculate optimal quantity (6 months target)
+            # Calculate three scenarios: MOQ, Negotiated, Ideal
+            # Scenario 1: MOQ (minimum order)
+            qtd_moq = moq if moq > 0 else 50
+            
+            # Scenario 2: Negotiated (based on 4-6 months coverage)
+            qtd_negotiated = media_mensal * 5  # 5 months average
+            if moq > 0 and qtd_negotiated < moq:
+                qtd_negotiated = moq
+            qtd_negotiated = int(np.ceil(qtd_negotiated / 10) * 10)  # Round to 10s
+            
+            # Scenario 3: Ideal (based on 6 months coverage)
             qtd_ideal = media_mensal * 6
             if moq > 0:
                 multiplos = max(1, int(np.ceil(qtd_ideal / moq)))
-                qtd_comprar = multiplos * moq
+                qtd_ideal = multiplos * moq
             else:
-                qtd_comprar = int(np.ceil(qtd_ideal / 50) * 50)  # Round to 50s
+                qtd_ideal = int(np.ceil(qtd_ideal / 50) * 50)  # Round to 50s
             
-            # Calculate investment
-            investimento = qtd_comprar * preco if preco > 0 else 0
+            # Calculate investments for each scenario
+            investimento_moq = qtd_moq * preco if preco > 0 else 0
+            investimento_negotiated = qtd_negotiated * preco if preco > 0 else 0
+            investimento_ideal = qtd_ideal * preco if preco > 0 else 0
             
             # Determine urgency
             if dias_ate_pedido <= 0:
@@ -908,20 +955,32 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 'Media_Mensal': media_mensal,
                 'Meses_Cobertura': meses_cobertura,
                 'Dias_Ate_Pedido': dias_ate_pedido,
+                'Data_Pedido': data_pedido.strftime('%d/%m/%Y'),
+                'Data_Esgotamento': data_esgotamento.strftime('%d/%m/%Y'),
                 'MOQ': moq,
-                'Qtd_Comprar': qtd_comprar,
-                'Investimento': investimento,
+                'Qtd_MOQ': qtd_moq,
+                'Qtd_Negotiated': qtd_negotiated,
+                'Qtd_Ideal': qtd_ideal,
+                'Investimento_MOQ': investimento_moq,
+                'Investimento_Negotiated': investimento_negotiated,
+                'Investimento_Ideal': investimento_ideal,
                 'Preco_Unit': preco,
                 'Priority_Score': priority_score,
                 'Criticality': criticality,
                 'Relevance': relevance_class,
                 'Annual_Impact': annual_impact,
                 'Urgencia': urgencia,
-                'Cor': cor
+                'Cor': cor,
+                'Lead_Time': lead_time_days
             })
     
     if not timeline_data:
         st.warning("⚠️ Nenhum produto com dados suficientes para análise de timeline.")
+        st.info("💡 Verifique se o Excel contém as colunas: Produto, Estoque, Média 6 Meses (ou Media_6_Meses)")
+        # Show sample of data for debugging
+        if len(df) > 0:
+            st.write("📋 Amostra dos dados:")
+            st.dataframe(df.head(3))
         return
     
     # Convert to DataFrame for easier manipulation
@@ -932,6 +991,14 @@ def show_priority_timeline(df, empresa="MINIPA"):
         timeline_df = timeline_df.sort_values(['Priority_Score'], ascending=False)
     else:
         timeline_df = timeline_df.sort_values(['Dias_Ate_Pedido'])
+    
+    # Show scenario selector
+    st.subheader("📊 Cenários de Compra")
+    scenario = st.radio(
+        "Selecione o cenário de análise:",
+        ["📦 MOQ (Quantidade Mínima)", "🤝 Negociado (5 meses)", "🎯 Ideal (6 meses)"],
+        horizontal=True
+    )
     
     # Filters
     col1, col2, col3 = st.columns(3)
@@ -969,174 +1036,262 @@ def show_priority_timeline(df, empresa="MINIPA"):
     if fornecedor_filter != 'Todos':
         filtered_df = filtered_df[filtered_df['Fornecedor'] == fornecedor_filter]
     
+    # Determine which scenario columns to use
+    if "MOQ" in scenario:
+        qtd_col = 'Qtd_MOQ'
+        inv_col = 'Investimento_MOQ'
+    elif "Negociado" in scenario:
+        qtd_col = 'Qtd_Negotiated'
+        inv_col = 'Investimento_Negotiated'
+    else:  # Ideal
+        qtd_col = 'Qtd_Ideal'
+        inv_col = 'Investimento_Ideal'
+    
     # Metrics
     col1, col2, col3, col4 = st.columns(4)
     
     comprar_agora = len(filtered_df[filtered_df['Urgencia'] == 'COMPRAR AGORA'])
     urgentes = len(filtered_df[filtered_df['Urgencia'] == 'URGENTE'])
     proximo_mes = len(filtered_df[filtered_df['Urgencia'] == 'PRÓXIMO MÊS'])
-    investimento_total = filtered_df['Investimento'].sum()
+    investimento_total = filtered_df[inv_col].sum()
     
     col1.metric("🔴 Comprar Agora", comprar_agora)
     col2.metric("🟠 Urgentes", urgentes)
     col3.metric("🟡 Próximo Mês", proximo_mes)
-    col4.metric("💰 Investimento", f"R$ {investimento_total:,.0f}")
+    col4.metric("💰 Investimento Total", f"R$ {investimento_total:,.0f}")
+    
+    # Show critical products summary
+    if comprar_agora > 0 or urgentes > 0:
+        with st.expander("⚡ Produtos Críticos - Ação Imediata", expanded=True):
+            critical_products = filtered_df[filtered_df['Urgencia'].isin(['COMPRAR AGORA', 'URGENTE'])]
+            for _, prod in critical_products.iterrows():
+                col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+                with col1:
+                    st.write(f"**{prod['Produto']}** - {prod['Fornecedor']}")
+                with col2:
+                    st.write(f"📅 Pedir até: **{prod['Data_Pedido']}**")
+                with col3:
+                    st.write(f"📦 Qtd: **{prod[qtd_col]:.0f}**")
+                with col4:
+                    st.write(f"💰 R$ **{prod[inv_col]:,.0f}**")
     
     # Interactive Timeline Chart
     if len(filtered_df) > 0:
-        # Limit display to top 50 for readability
-        display_df = filtered_df.head(50)
+        # Limit display to top 30 for readability
+        display_df = filtered_df.head(30)
         
         # Create figure with subplots
         fig = make_subplots(
-            rows=1, cols=2,
-            subplot_titles=('📅 Dias até Pedido', '💰 Investimento Necessário'),
-            column_widths=[0.6, 0.4]
+            rows=2, cols=2,
+            subplot_titles=(
+                '📅 Timeline de Pedidos', 
+                '📦 Quantidades por Cenário',
+                '💰 Investimento por Cenário',
+                '📊 Análise de Lead Time'
+            ),
+            row_heights=[0.5, 0.5],
+            specs=[[{"colspan": 2}, None],
+                   [{}, {}]]
         )
         
-        # Timeline bar chart
+        # 1. Timeline bar chart (main chart spanning 2 columns)
         fig.add_trace(
             go.Bar(
                 y=display_df['Produto'],
                 x=display_df['Dias_Ate_Pedido'],
                 orientation='h',
                 marker_color=display_df['Cor'],
-                text=display_df['Urgencia'],
+                text=[f"{dias} dias<br>{urg}" for dias, urg in zip(display_df['Dias_Ate_Pedido'], display_df['Urgencia'])],
                 textposition='auto',
                 hovertemplate=(
                     '<b>%{y}</b><br>' +
                     'Dias até pedido: %{x}<br>' +
-                    'Urgência: %{text}<br>' +
-                    'Estoque: %{customdata[0]:.0f}<br>' +
-                    'Consumo: %{customdata[1]:.1f}/mês<br>' +
-                    'Cobertura: %{customdata[2]:.1f} meses<br>' +
+                    'Data do pedido: %{customdata[0]}<br>' +
+                    'Data esgotamento: %{customdata[1]}<br>' +
+                    'Estoque atual: %{customdata[2]:.0f}<br>' +
+                    'Consumo mensal: %{customdata[3]:.1f}<br>' +
+                    'Cobertura: %{customdata[4]:.1f} meses<br>' +
+                    'Lead time: %{customdata[5]} dias<br>' +
                     '<extra></extra>'
                 ),
                 customdata=np.column_stack((
+                    display_df['Data_Pedido'],
+                    display_df['Data_Esgotamento'],
                     display_df['Estoque_Atual'],
                     display_df['Media_Mensal'],
-                    display_df['Meses_Cobertura']
-                ))
+                    display_df['Meses_Cobertura'],
+                    display_df['Lead_Time']
+                )),
+                name='Timeline'
             ),
             row=1, col=1
         )
         
-        # Investment bar chart
+        # 2. Quantity comparison chart
         fig.add_trace(
             go.Bar(
                 y=display_df['Produto'],
-                x=display_df['Investimento'],
+                x=display_df['Qtd_MOQ'],
+                orientation='h',
+                marker_color='lightcoral',
+                name='MOQ',
+                showlegend=True,
+                hovertemplate='<b>%{y}</b><br>MOQ: %{x:.0f}<extra></extra>'
+            ),
+            row=2, col=1
+        )
+        
+        fig.add_trace(
+            go.Bar(
+                y=display_df['Produto'],
+                x=display_df['Qtd_Negotiated'],
                 orientation='h',
                 marker_color='lightblue',
-                text=[f'R$ {x:,.0f}' for x in display_df['Investimento']],
-                textposition='auto',
-                hovertemplate=(
-                    '<b>%{y}</b><br>' +
-                    'Investimento: R$ %{x:,.2f}<br>' +
-                    'Quantidade: %{customdata[0]:.0f}<br>' +
-                    'Preço Unit: R$ %{customdata[1]:.2f}<br>' +
-                    'MOQ: %{customdata[2]:.0f}<br>' +
-                    '<extra></extra>'
-                ),
-                customdata=np.column_stack((
-                    display_df['Qtd_Comprar'],
-                    display_df['Preco_Unit'],
-                    display_df['MOQ']
-                ))
+                name='Negociado',
+                showlegend=True,
+                hovertemplate='<b>%{y}</b><br>Negociado: %{x:.0f}<extra></extra>'
             ),
-            row=1, col=2
+            row=2, col=1
+        )
+        
+        fig.add_trace(
+            go.Bar(
+                y=display_df['Produto'],
+                x=display_df['Qtd_Ideal'],
+                orientation='h',
+                marker_color='lightgreen',
+                name='Ideal',
+                showlegend=True,
+                hovertemplate='<b>%{y}</b><br>Ideal: %{x:.0f}<extra></extra>'
+            ),
+            row=2, col=1
+        )
+        
+        # 3. Investment comparison chart
+        fig.add_trace(
+            go.Bar(
+                y=display_df['Produto'],
+                x=display_df['Investimento_MOQ'],
+                orientation='h',
+                marker_color='salmon',
+                name='Inv. MOQ',
+                showlegend=True,
+                text=[f'R$ {x:,.0f}' for x in display_df['Investimento_MOQ']],
+                textposition='auto',
+                hovertemplate='<b>%{y}</b><br>Investimento MOQ: R$ %{x:,.2f}<extra></extra>'
+            ),
+            row=2, col=2
+        )
+        
+        fig.add_trace(
+            go.Bar(
+                y=display_df['Produto'],
+                x=display_df['Investimento_Negotiated'],
+                orientation='h',
+                marker_color='skyblue',
+                name='Inv. Negociado',
+                showlegend=True,
+                text=[f'R$ {x:,.0f}' for x in display_df['Investimento_Negotiated']],
+                textposition='auto',
+                hovertemplate='<b>%{y}</b><br>Investimento Negociado: R$ %{x:,.2f}<extra></extra>'
+            ),
+            row=2, col=2
+        )
+        
+        fig.add_trace(
+            go.Bar(
+                y=display_df['Produto'],
+                x=display_df['Investimento_Ideal'],
+                orientation='h',
+                marker_color='mediumseagreen',
+                name='Inv. Ideal',
+                showlegend=True,
+                text=[f'R$ {x:,.0f}' for x in display_df['Investimento_Ideal']],
+                textposition='auto',
+                hovertemplate='<b>%{y}</b><br>Investimento Ideal: R$ %{x:,.2f}<extra></extra>'
+            ),
+            row=2, col=2
         )
         
         # Update layout
         fig.update_layout(
-            title=f'Timeline de Compras - {empresa} (Top 50 produtos)',
-            height=max(600, len(display_df) * 20),
-            showlegend=False
+            title=f'📊 Timeline de Compras Prioritário - {empresa}',
+            height=max(800, len(display_df) * 25),
+            showlegend=True,
+            barmode='group'
         )
         
+        # Update axes
         fig.update_xaxes(title_text="Dias até Pedido", row=1, col=1)
-        fig.update_xaxes(title_text="Investimento (R$)", row=1, col=2)
+        fig.update_xaxes(title_text="Quantidade", row=2, col=1)
+        fig.update_xaxes(title_text="Investimento (R$)", row=2, col=2)
+        
+        # Add zero line to timeline
+        fig.add_vline(x=0, line_dash="dash", line_color="red", row=1, col=1)
+        fig.add_annotation(
+            x=0, y=len(display_df)/2,
+            text="Prazo Limite",
+            showarrow=True,
+            arrowhead=2,
+            row=1, col=1
+        )
         
         st.plotly_chart(fig, use_container_width=True)
     
     # Detailed table with priority information
     st.subheader("📋 Detalhamento de Compras")
     
-    # Select columns to display based on available data
-    if has_priority_data:
-        display_columns = [
-            'Produto', 'Fornecedor', 'Urgencia', 'Dias_Ate_Pedido',
-            'Qtd_Comprar', 'MOQ', 'Investimento', 'Priority_Score',
-            'Criticality', 'Annual_Impact'
-        ]
+    # Select columns to display based on selected scenario
+    base_columns = ['Produto', 'Fornecedor', 'Urgencia', 'Data_Pedido', 'Dias_Ate_Pedido']
+    
+    if "MOQ" in scenario:
+        scenario_columns = ['Qtd_MOQ', 'Investimento_MOQ']
+    elif "Negociado" in scenario:
+        scenario_columns = ['Qtd_Negotiated', 'Investimento_Negotiated']
     else:
-        display_columns = [
-            'Produto', 'Fornecedor', 'Urgencia', 'Dias_Ate_Pedido',
-            'Qtd_Comprar', 'MOQ', 'Investimento', 'Estoque_Atual',
-            'Media_Mensal', 'Meses_Cobertura'
-        ]
+        scenario_columns = ['Qtd_Ideal', 'Investimento_Ideal']
+    
+    extra_columns = ['MOQ', 'Preco_Unit', 'Estoque_Atual', 'Media_Mensal']
+    
+    if has_priority_data:
+        priority_columns = ['Priority_Score', 'Criticality', 'Annual_Impact']
+    else:
+        priority_columns = []
+    
+    display_columns = base_columns + scenario_columns + extra_columns + priority_columns
     
     # Format the dataframe for display
     display_timeline_df = filtered_df[display_columns].copy()
     
+    # Rename columns for better display
+    column_rename = {
+        'Qtd_MOQ': 'Qtd (MOQ)',
+        'Qtd_Negotiated': 'Qtd (Negociado)',
+        'Qtd_Ideal': 'Qtd (Ideal)',
+        'Investimento_MOQ': 'Invest. (MOQ)',
+        'Investimento_Negotiated': 'Invest. (Negociado)', 
+        'Investimento_Ideal': 'Invest. (Ideal)',
+        'Preco_Unit': 'Preço Unit.',
+        'Media_Mensal': 'Consumo Mensal',
+        'Estoque_Atual': 'Estoque'
+    }
+    
+    display_timeline_df = display_timeline_df.rename(columns=column_rename)
+    
     # Format numeric columns
-    if 'Investimento' in display_timeline_df.columns:
-        display_timeline_df['Investimento'] = display_timeline_df['Investimento'].apply(lambda x: f'R$ {x:,.2f}')
-    if 'Annual_Impact' in display_timeline_df.columns:
-        display_timeline_df['Annual_Impact'] = display_timeline_df['Annual_Impact'].apply(lambda x: f'R$ {x:,.2f}')
-    if 'Priority_Score' in display_timeline_df.columns:
-        display_timeline_df['Priority_Score'] = display_timeline_df['Priority_Score'].round(3)
+    for col in display_timeline_df.columns:
+        if 'Invest.' in col:
+            display_timeline_df[col] = display_timeline_df[col].apply(lambda x: f'R$ {x:,.2f}')
+        elif 'Annual_Impact' in col:
+            display_timeline_df[col] = display_timeline_df[col].apply(lambda x: f'R$ {x:,.2f}')
+        elif 'Priority_Score' in col:
+            display_timeline_df[col] = display_timeline_df[col].round(3)
+        elif col in ['Preço Unit.', 'Consumo Mensal', 'Estoque']:
+            display_timeline_df[col] = display_timeline_df[col].round(2)
     
     st.dataframe(
         display_timeline_df,
         use_container_width=True,
         height=400,
         hide_index=True
-    )
-    
-    # Export options
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        csv = filtered_df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📄 Baixar Timeline CSV",
-            data=csv,
-            file_name=f'timeline_prioritario_{empresa}_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.csv',
-            mime='text/csv',
-            use_container_width=True
-        )
-    
-    with col2:
-        # Create purchase order summary
-        if len(filtered_df[filtered_df['Urgencia'].isin(['COMPRAR AGORA', 'URGENTE'])]) > 0:
-            urgent_items = filtered_df[filtered_df['Urgencia'].isin(['COMPRAR AGORA', 'URGENTE'])]
-            
-            summary_text = f"""ORDEM DE COMPRA - {empresa}
-Data: {datetime.now().strftime('%d/%m/%Y')}
-
-ITENS URGENTES:
-{'='*50}
-"""
-            for _, item in urgent_items.iterrows():
-                summary_text += f"""
-Produto: {item['Produto']}
-Fornecedor: {item['Fornecedor']}
-Quantidade: {item['Qtd_Comprar']:.0f} unidades
-MOQ: {item['MOQ']:.0f}
-Investimento: R$ {item['Investimento']:,.2f}
-{'Priority: ' + item['Criticality'] if has_priority_data else ''}
-{'-'*30}
-"""
-            
-            summary_text += f"""
-TOTAL URGENTE: R$ {urgent_items['Investimento'].sum():,.2f}
-"""
-            
-            st.download_button(
-                label="📝 Baixar Ordem de Compra",
-                data=summary_text,
-                file_name=f'ordem_compra_{empresa}_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.txt',
-                mime='text/plain',
-                use_container_width=True
-            ) 
+    ) 
