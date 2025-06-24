@@ -282,19 +282,47 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
                     if not ultimo_fornecedor or ultimo_fornecedor.lower() in ['nan', 'none', '']:
                         ultimo_fornecedor = 'Brazil'  # Default value
                     
+                    # NEW: Handle priority analysis columns from merged Excel
+                    preco_unitario = safe_float(row.get('preco_unitario', row.get('Preco_Unitario', 0.0)))
+                    priority_score = safe_float(row.get('priority_score', 0.0))
+                    criticality = str(row.get('criticality', ''))
+                    relevance_class = str(row.get('relevance_class', ''))
+                    annual_impact = safe_float(row.get('annual_impact', 0.0))
+                    monthly_volume = safe_float(row.get('monthly_volume', 0.0))
+                    volume_normalized = safe_float(row.get('volume_normalized', 0.0))
+                    price_normalized = safe_float(row.get('price_normalized', 0.0))
+                    raw_multiplication = safe_float(row.get('raw_multiplication', 0.0))
+                    
+                    # Handle additional purchase planning columns
+                    qtde_embarque = safe_float(row.get('Qtde Embarque', row.get('Qtde_Embarque', 0.0)))
+                    compras_ate_30_dias = safe_float(row.get('Compras Até 30 Dias', row.get('Compras_Ate_30_Dias', 0.0)))
+                    compras_31_60_dias = safe_float(row.get('Compras 31 a 60 Dias', row.get('Compras_31_60_Dias', 0.0)))
+                    compras_61_90_dias = safe_float(row.get('Compras 61 a 90 Dias', row.get('Compras_61_90_Dias', 0.0)))
+                    compras_mais_90_dias = safe_float(row.get('Compras > 90 Dias', row.get('Compras_Mais_90_Dias', 0.0)))
+                    previsao = safe_float(row.get('Previsão', row.get('Previsao', 0.0)))
+                    qtde_tot_compras = safe_float(row.get('Qtde Tot Compras', row.get('Qtde_Tot_Compras', 0.0)))
+                    
                     # Skip completely empty rows
                     if not produto and all(v == 0 for v in [estoque, consumo_6_meses, media_6_meses]):
                         continue
                     
-                    # Insert analytics data with versioning - UPDATED WITH NEW COLUMNS
+                    # Insert analytics data with versioning - UPDATED WITH ALL NEW COLUMNS
                     cursor.execute("""
                     INSERT INTO ESTOQUE.ANALYTICS_DATA 
                     (empresa, upload_version, version_id, is_active, produto, estoque, 
                      consumo_6_meses, media_6_meses, estoque_cobertura, moq, ultimo_fornecedor,
+                     preco_unitario, priority_score, criticality, relevance_class, annual_impact,
+                     monthly_volume, volume_normalized, price_normalized, raw_multiplication,
+                     qtde_embarque, compras_ate_30_dias, compras_31_60_dias, compras_61_90_dias,
+                     compras_mais_90_dias, previsao, qtde_tot_compras,
                      usuario, table_type, version_description, created_by)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (empresa, upload_version, version_id, True, produto, estoque, 
                           consumo_6_meses, media_6_meses, estoque_cobertura, moq, ultimo_fornecedor,
+                          preco_unitario, priority_score, criticality, relevance_class, annual_impact,
+                          monthly_volume, volume_normalized, price_normalized, raw_multiplication,
+                          qtde_embarque, compras_ate_30_dias, compras_31_60_dias, compras_61_90_dias,
+                          compras_mais_90_dias, previsao, qtde_tot_compras,
                           usuario, table_type, description, usuario))
                     
                     success_count += 1
