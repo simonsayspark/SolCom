@@ -1161,9 +1161,15 @@ def show_priority_timeline(df, empresa="MINIPA"):
             dias_restantes = min(dias_restantes, max_days)
             
             # Calculate when to order - allow negative values for overdue products
-            data_esgotamento = hoje + timedelta(days=dias_restantes)
-            data_pedido = data_esgotamento - timedelta(days=lead_time_days)
-            dias_ate_pedido = (data_pedido - hoje).days
+            try:
+                data_esgotamento = hoje + timedelta(days=dias_restantes)
+                data_pedido = data_esgotamento - timedelta(days=lead_time_days)
+                dias_ate_pedido = (data_pedido - hoje).days
+            except OverflowError:
+                # If overflow, set to max reasonable values
+                data_esgotamento = hoje + timedelta(days=max_days)
+                data_pedido = hoje + timedelta(days=max_days - lead_time_days)
+                dias_ate_pedido = max_days - lead_time_days
             
             # For products that are overdue, dias_ate_pedido will be negative
             if dias_ate_pedido <= -30:
@@ -1181,6 +1187,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
             elif dias_ate_pedido <= 60:
                 urgencia = 'PRÓXIMO MÊS'
                 cor = '#FFD700'
+            else:
                 urgencia = 'MONITORAR'
                 cor = '#32CD32'
             
@@ -1319,7 +1326,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
     with col1:
         urgencia_filter = st.selectbox(
             "🚨 Filtrar por Urgência:",
-            ['Todos', 'URGENTE', 'PRÓXIMO MÊS', 'MONITORAR']
+            ['Todos', 'URGENTE - MUITO ATRASADO', 'URGENTE', 'PRÓXIMO MÊS', 'MONITORAR']
         )
     
     with col2:
@@ -1361,12 +1368,14 @@ def show_priority_timeline(df, empresa="MINIPA"):
     # Metrics
     col1, col2, col3, col4 = st.columns(4)
     
-    urgentes = len(filtered_df[filtered_df['Urgencia'] == 'URGENTE'])
+    # Count all urgent categories
+    muito_atrasado = len(filtered_df[filtered_df['Urgencia'] == 'URGENTE - MUITO ATRASADO'])
+    urgentes = len(filtered_df[filtered_df['Urgencia'].str.contains('URGENTE')])  # This will include MUITO ATRASADO
     proximo_mes = len(filtered_df[filtered_df['Urgencia'] == 'PRÓXIMO MÊS'])
     monitorar = len(filtered_df[filtered_df['Urgencia'] == 'MONITORAR'])
     investimento_total = filtered_df[inv_col].sum()
     
-    col1.metric("🔴 Urgentes", urgentes)
+    col1.metric("🔴 Urgentes", urgentes, delta=f"{muito_atrasado} muito atrasados" if muito_atrasado > 0 else None)
     col2.metric("🟡 Próximo Mês", proximo_mes)
     col3.metric("🟢 Monitorar", monitorar)
     col4.metric("💰 Investimento Total", f"R$ {investimento_total:,.0f}")
@@ -1374,7 +1383,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
     # Show critical products summary
     if urgentes > 0:
         with st.expander("⚡ Produtos Urgentes - Ação Imediata", expanded=True):
-            critical_products = filtered_df[filtered_df['Urgencia'] == 'URGENTE']
+            critical_products = filtered_df[filtered_df['Urgencia'].str.contains('URGENTE')]
             for _, prod in critical_products.iterrows():
                 col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
                 with col1:
