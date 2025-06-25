@@ -330,32 +330,20 @@ def load_page():
         # Show company context
         st.info(f"📊 **Análise para {empresa_selecionada}** | Versão: {f'v{selected_version_id}' if 'selected_version_id' in locals() and selected_version_id else 'Ativa'}")
         
-        # Show analytics tabs with company context
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-            f"📋 Resumo - {empresa_selecionada}", 
-            f"🚨 Lista de Compras - {empresa_selecionada}", 
+        # Show analytics tabs with company context - REDUCED TO 3 TABS
+        tab1, tab2, tab3 = st.tabs([
             f"📊 Dashboards - {empresa_selecionada}", 
-            f"📞 Contatos Urgentes - {empresa_selecionada}",
             f"📋 Tabela Geral - {empresa_selecionada}",
             f"🎯 Timeline Prioritário - {empresa_selecionada}"
         ])
         
         with tab1:
-            show_executive_summary(df, produtos_novos, produtos_existentes, empresa_selecionada)
-        
-        with tab2:
-            show_purchase_list(produtos_existentes, empresa_selecionada)
-        
-        with tab3:
             show_analytics_dashboard(produtos_existentes, produtos_novos, empresa_selecionada)
         
-        with tab4:
-            show_urgent_contacts(produtos_existentes, empresa_selecionada)
-        
-        with tab5:
+        with tab2:
             show_tabela_geral(df, empresa_selecionada)
             
-        with tab6:
+        with tab3:
             show_priority_timeline(df, empresa_selecionada)
 
 def show_executive_summary(df, produtos_novos, produtos_existentes, empresa="MINIPA"):
@@ -1183,25 +1171,22 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 data_pedido = hoje + timedelta(days=max_days - lead_time_days)
                 dias_ate_pedido = max_days - lead_time_days
             
-            # For products that are overdue, dias_ate_pedido will be negative
-            if dias_ate_pedido <= -30:
-                # Very overdue - more than 30 days late
-                urgencia = 'URGENTE - MUITO ATRASADO'
-                cor = '#8B0000'  # Dark red
-            elif dias_ate_pedido <= 0:
-                # Overdue but less than 30 days
+            # SIMPLIFIED urgency logic based on 4-month lead time
+            if dias_ate_pedido <= 120:  # 4 months = 120 days
+                # Anything within lead time is URGENT
                 urgencia = 'URGENTE'
-                cor = '#FF0000'  # Red
-            elif dias_ate_pedido <= 30:
-                # Due within 30 days
-                urgencia = 'URGENTE'
-                cor = '#FF4500'  # Orange red
-            elif dias_ate_pedido <= 60:
-                urgencia = 'PRÓXIMO MÊS'
-                cor = '#FFD700'
+                # Color gradient based on urgency within the 4 months
+                if dias_ate_pedido <= 0:
+                    cor = '#8B0000'  # Dark red for overdue
+                elif dias_ate_pedido <= 30:
+                    cor = '#FF0000'  # Red for within 1 month
+                elif dias_ate_pedido <= 60:
+                    cor = '#FF4500'  # Orange red for within 2 months
+                else:
+                    cor = '#FFA500'  # Orange for within 4 months
             else:
                 urgencia = 'MONITORAR'
-                cor = '#32CD32'
+                cor = '#32CD32'  # Green
             
             # Calculate three scenarios: MOQ, Negotiated, Ideal
             # Scenario 1: MOQ (minimum order)
@@ -1338,7 +1323,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
     with col1:
         urgencia_filter = st.selectbox(
             "🚨 Filtrar por Urgência:",
-            ['Todos', 'URGENTE - MUITO ATRASADO', 'URGENTE', 'PRÓXIMO MÊS', 'MONITORAR']
+            ['Todos', 'URGENTE', 'MONITORAR']
         )
     
     with col2:
@@ -1377,23 +1362,20 @@ def show_priority_timeline(df, empresa="MINIPA"):
         qtd_col = 'Qtd_Ideal'
         inv_col = 'Investimento_Ideal'
     
-    # Metrics - removed investment total as requested
-    col1, col2, col3 = st.columns(3)
+    # Metrics - simplified
+    col1, col2 = st.columns(2)
     
-    # Count all urgent categories
-    muito_atrasado = len(filtered_df[filtered_df['Urgencia'] == 'URGENTE - MUITO ATRASADO'])
-    urgentes = len(filtered_df[filtered_df['Urgencia'].str.contains('URGENTE')])  # This will include MUITO ATRASADO
-    proximo_mes = len(filtered_df[filtered_df['Urgencia'] == 'PRÓXIMO MÊS'])
+    # Count urgency categories
+    urgentes = len(filtered_df[filtered_df['Urgencia'] == 'URGENTE'])
     monitorar = len(filtered_df[filtered_df['Urgencia'] == 'MONITORAR'])
     
-    col1.metric("🔴 Urgentes", urgentes, delta=f"{muito_atrasado} muito atrasados" if muito_atrasado > 0 else None)
-    col2.metric("🟡 Próximo Mês", proximo_mes)
-    col3.metric("🟢 Monitorar", monitorar)
+    col1.metric("🔴 Urgentes (≤ 4 meses)", urgentes)
+    col2.metric("🟢 Monitorar (> 4 meses)", monitorar)
     
     # Show critical products summary
     if urgentes > 0:
-        with st.expander("⚡ Produtos Urgentes - Ação Imediata", expanded=True):
-            critical_products = filtered_df[filtered_df['Urgencia'].str.contains('URGENTE')]
+        with st.expander("⚡ Produtos Urgentes - Ação Imediata (Lead time ≤ 4 meses)", expanded=True):
+            critical_products = filtered_df[filtered_df['Urgencia'] == 'URGENTE']
             for _, prod in critical_products.iterrows():
                 col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
                 with col1:
