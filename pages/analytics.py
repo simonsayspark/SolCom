@@ -1344,12 +1344,20 @@ def show_priority_timeline(df, empresa="MINIPA"):
     with col3:
         # Show top N products selector - now based on filtered results
         if len(filtered_df) > 0:
+            # Make "show all" more prominent when there are many filtered products
+            if len(filtered_df) > 50:
+                st.warning(f"⚠️ {len(filtered_df)} produtos encontrados após filtros. Recomendamos usar 'Mostrar todos' para ver todos.")
+            
             # Add a checkbox to show all
-            show_all = st.checkbox("Mostrar todos os produtos filtrados", value=False)
+            show_all = st.checkbox(
+                f"✅ Mostrar todos os {len(filtered_df)} produtos filtrados", 
+                value=False,
+                help="Marque para exibir todos os produtos que atendem aos filtros selecionados"
+            )
             
             if show_all:
                 n_produtos = len(filtered_df)
-                st.info(f"Mostrando todos os {n_produtos} produtos filtrados")
+                st.success(f"✅ Exibindo todos os {n_produtos} produtos filtrados")
             else:
                 n_produtos = st.number_input(
                     "📊 Mostrar Top N produtos:",
@@ -1357,7 +1365,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
                     max_value=len(filtered_df),  # Now based on filtered count
                     value=min(50, len(filtered_df)),
                     step=10,
-                    help=f"Total de produtos após filtros: {len(filtered_df)}"
+                    help=f"Total disponível após filtros: {len(filtered_df)} produtos"
                 )
         else:
             n_produtos = 0
@@ -1408,18 +1416,25 @@ def show_priority_timeline(df, empresa="MINIPA"):
     
     # Interactive Timeline Chart
     if len(filtered_df) > 0:
+        # Debug: Show filtering info
+        st.info(f"🔍 **Debug Info:** Total produtos após filtros: {len(filtered_df)} | N produtos selecionado: {n_produtos}")
+        
         # Limit display based on user selection
         display_df = filtered_df.head(n_produtos)
         
         # Show info about displayed products
+        st.success(f"📊 **Exibindo {len(display_df)} produtos** (de {len(filtered_df)} produtos filtrados)")
         if len(display_df) < len(filtered_df):
-            st.warning(f"📊 Mostrando {len(display_df)} de {len(filtered_df)} produtos filtrados. Use o seletor acima ou marque 'Mostrar todos' para ver mais produtos.")
+            st.warning(f"⚠️ Alguns produtos não estão sendo exibidos. Use o seletor acima ou marque 'Mostrar todos' para ver todos os {len(filtered_df)} produtos.")
         
         # Convert days to months and handle negative values for display
         display_df['Meses_Ate_Pedido'] = display_df['Dias_Ate_Pedido'] / 30
         display_df['Meses_Adicional_Embarque'] = display_df.apply(lambda row: 
             (row['Qtde_Embarque'] + row['Compras_Ate_30_Dias']) / row['Media_Mensal'] 
             if row['Media_Mensal'] > 0 else 0, axis=1)
+        
+        # Debug: Show chart info
+        st.write(f"🎯 **Produtos no gráfico:** {len(display_df)} | **Altura do gráfico:** {max(1800, len(display_df) * 60)} pixels")
         
         # Create figure with vertical subplot layout for better visibility
         fig = make_subplots(
