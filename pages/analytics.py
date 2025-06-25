@@ -1582,8 +1582,8 @@ def show_priority_timeline(df, empresa="MINIPA"):
         
         # Update y-axes to show all products
         fig.update_yaxes(tickfont_size=11, row=1, col=1)
-        fig.update_yaxes(visible=False, row=2, col=1)  # Hide y-axis for cleaner look
-        fig.update_yaxes(visible=False, row=3, col=1)  # Hide y-axis for cleaner look
+        fig.update_yaxes(tickfont_size=11, row=2, col=1)  # Show product names
+        fig.update_yaxes(tickfont_size=11, row=3, col=1)  # Show product names
         
         # Add zero line to timeline at 4 months (lead time threshold)
         fig.add_vline(x=4, line_dash="dash", line_color="orange", row=1, col=1)
