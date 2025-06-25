@@ -1341,6 +1341,22 @@ def show_priority_timeline(df, empresa="MINIPA"):
     if fornecedor_filter != 'Todos':
         filtered_df = filtered_df[filtered_df['Fornecedor'] == fornecedor_filter]
     
+    # NEW: Additional filter for urgent products that still need ordering even with incoming stock
+    filter_critical_with_incoming = False
+    if urgencia_filter == 'URGENTE':
+        # Show checkbox only when URGENTE is selected
+        st.markdown("---")  # Separator
+        filter_critical_with_incoming = st.checkbox(
+            "🚨 Mostrar apenas produtos que continuam críticos mesmo com estoque futuro",
+            value=False,
+            help="Filtra produtos onde estoque atual + pedidos em trânsito ainda não atingem 4 meses de cobertura"
+        )
+        
+        if filter_critical_with_incoming:
+            # Filter products where expected coverage is still under 4 months
+            filtered_df = filtered_df[filtered_df['Meses_Cobertura_Esperada'] < 4]
+            st.info(f"🎯 {len(filtered_df)} produtos precisam de pedido mesmo com entregas futuras")
+    
     with col3:
         # Show top N products selector - now based on filtered results
         if len(filtered_df) > 0:
@@ -1434,7 +1450,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
             if row['Media_Mensal'] > 0 else 0, axis=1)
         
         # Debug: Show chart info
-        st.write(f"🎯 **Produtos no gráfico:** {len(display_df)} | **Altura do gráfico:** {max(1800, len(display_df) * 60)} pixels")
+        st.write(f"🎯 **Produtos no gráfico:** {len(display_df)} | **Altura do gráfico:** {max(1800, len(display_df) * 80)} pixels | **Pixels por produto:** 80")
         
         # Create figure with vertical subplot layout for better visibility
         fig = make_subplots(
@@ -1621,13 +1637,17 @@ def show_priority_timeline(df, empresa="MINIPA"):
         )
         
         # Update layout - make graphs much taller for better visibility
+        # Increased height per product to ensure proper alignment
         fig.update_layout(
             title=f'📊 Timeline de Compras - {empresa}',
-            height=max(1800, len(display_df) * 60),  # Significantly increased height
+            height=max(1800, len(display_df) * 80),  # Increased from 60 to 80 pixels per product
             showlegend=True,
             barmode='stack',  # Changed to stack for timeline chart
             font=dict(size=14),  # Larger font
-            margin=dict(l=250, r=100, t=100, b=100)  # More space for product names
+            margin=dict(l=300, r=100, t=100, b=100),  # Increased left margin for product names
+            yaxis=dict(tickmode='array', tickvals=display_df['Produto'].tolist(), ticktext=display_df['Produto'].tolist()),
+            yaxis2=dict(tickmode='array', tickvals=display_df['Produto'].tolist(), ticktext=display_df['Produto'].tolist()),
+            yaxis3=dict(tickmode='array', tickvals=display_df['Produto'].tolist(), ticktext=display_df['Produto'].tolist())
         )
         
         # Update axes
@@ -1641,10 +1661,18 @@ def show_priority_timeline(df, empresa="MINIPA"):
         fig.update_traces(row=2, col=1, offsetgroup=2)
         fig.update_traces(row=3, col=1, offsetgroup=3)
         
-        # Update y-axes to show all products with larger font
-        fig.update_yaxes(tickfont_size=13, row=1, col=1)
-        fig.update_yaxes(tickfont_size=13, row=2, col=1)  # Show product names
-        fig.update_yaxes(tickfont_size=13, row=3, col=1)  # Show product names
+        # Update y-axes to show all products with proper alignment
+        # Fix alignment issue by ensuring consistent y-axis configuration
+        for row_num in [1, 2, 3]:
+            fig.update_yaxes(
+                tickfont_size=13, 
+                row=row_num, 
+                col=1,
+                automargin=True,  # Auto adjust margins
+                fixedrange=True,  # Prevent zooming which can cause misalignment
+                categoryorder='array',  # Ensure consistent ordering
+                categoryarray=display_df['Produto'].tolist()  # Explicit product order
+            )
         
         # Add zero line to timeline at 4 months (lead time threshold)
         fig.add_vline(x=4, line_dash="dash", line_color="orange", row=1, col=1)
