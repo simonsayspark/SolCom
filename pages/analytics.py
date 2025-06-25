@@ -1072,11 +1072,11 @@ def show_priority_timeline(df, empresa="MINIPA"):
         
         moq = float(row.get('MOQ', 0) or 0)
         
-        # Handle supplier column variations - check UltimoFornecedor first since it's in merged Excel
+        # Handle supplier column variations - check mapped name first, then original names
         fornecedor = 'Brazil'
-        for col in ['UltimoFornecedor', 'ultimo_fornecedor', 'UltimoFor']:
+        for col in ['ultimo_fornecedor', 'UltimoFornecedor', 'UltimoFor']:  # Check mapped name first
             if col in row.index:
-                value = str(row.get(col, 'Brazil'))
+                value = str(row[col])  # Use direct indexing instead of .get()
                 if value and value.strip() and value.lower() not in ['nan', 'none', '']:
                     fornecedor = value
                     break

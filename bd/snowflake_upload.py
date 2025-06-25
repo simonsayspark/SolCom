@@ -383,20 +383,30 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
                         elif 'Qtde Embarque' in row.index:
                             st.write("    → Encontrado como 'Qtde Embarque'")
                         
-                        # Debug UltimoFornecedor
-                        st.write(f"  UltimoFornecedor: {ultimo_fornecedor}")
-                        if 'ultimo_fornecedor' in row.index:
-                            st.write("    → Encontrado como 'ultimo_fornecedor' (após mapeamento)")
-                        elif 'UltimoFornecedor' in row.index:
-                            st.write("    → Encontrado como 'UltimoFornecedor' (original)")
-                        elif 'UltimoFor' in row.index:
-                            st.write("    → Encontrado como 'UltimoFor' (original)")
-                        else:
-                            st.write("    → Não encontrado - usando default 'Brazil'")
-                            # Show what columns are available
-                            available_cols = [col for col in row.index if 'ultimo' in col.lower() or 'fornec' in col.lower()]
-                            if available_cols:
-                                st.write(f"    → Colunas similares encontradas: {available_cols}")
+                        # Debug UltimoFornecedor - ENHANCED
+                        st.write(f"  UltimoFornecedor FINAL: '{ultimo_fornecedor}'")
+                        
+                        # Show all available columns for debugging
+                        all_cols = list(row.index)
+                        st.write(f"  Todas as colunas disponíveis na linha: {all_cols}")
+                        
+                        # Check each possible column and show its raw value
+                        for col_check in ['ultimo_fornecedor', 'UltimoFornecedor', 'UltimoFor']:
+                            if col_check in row.index:
+                                raw_value = row[col_check]
+                                str_value = str(raw_value)
+                                st.write(f"    ✅ '{col_check}': valor bruto = '{raw_value}' (tipo: {type(raw_value)}), str = '{str_value}'")
+                                st.write(f"        → strip: '{str_value.strip()}', lower: '{str_value.lower()}', is valid: {str_value.strip() and str_value.lower() not in ['nan', 'none', '']}")
+                            else:
+                                st.write(f"    ❌ '{col_check}': NÃO ENCONTRADO")
+                        
+                        # Show similar columns
+                        similar_cols = [col for col in row.index if 'ultimo' in col.lower() or 'fornec' in col.lower()]
+                        if similar_cols:
+                            st.write(f"    🔍 Colunas similares: {similar_cols}")
+                            for sim_col in similar_cols:
+                                sim_value = row[sim_col]
+                                st.write(f"        '{sim_col}' = '{sim_value}'")
                     
                     # Skip completely empty rows
                     if not produto and all(v == 0 for v in [estoque, consumo_6_meses, media_6_meses]):
