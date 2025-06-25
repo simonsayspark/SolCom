@@ -1312,13 +1312,8 @@ def show_priority_timeline(df, empresa="MINIPA"):
     # Sort by days to order to show most urgent first
     timeline_df = timeline_df.sort_values(['Dias_Ate_Pedido'])
     
-    # Show scenario selector
-    st.subheader("📊 Cenários de Compra")
-    scenario = st.radio(
-        "Selecione o cenário de análise:",
-        ["📦 MOQ (Quantidade Mínima)", "🤝 Negociado (5 meses)", "🎯 Ideal (6 meses)"],
-        horizontal=True
-    )
+    # Default scenario - removing the selector as requested
+    scenario = "📦 MOQ (Quantidade Mínima)"  # Default to MOQ
     
     # Filters
     col1, col2, col3 = st.columns(3)
@@ -1365,20 +1360,18 @@ def show_priority_timeline(df, empresa="MINIPA"):
         qtd_col = 'Qtd_Ideal'
         inv_col = 'Investimento_Ideal'
     
-    # Metrics
-    col1, col2, col3, col4 = st.columns(4)
+    # Metrics - removed investment total as requested
+    col1, col2, col3 = st.columns(3)
     
     # Count all urgent categories
     muito_atrasado = len(filtered_df[filtered_df['Urgencia'] == 'URGENTE - MUITO ATRASADO'])
     urgentes = len(filtered_df[filtered_df['Urgencia'].str.contains('URGENTE')])  # This will include MUITO ATRASADO
     proximo_mes = len(filtered_df[filtered_df['Urgencia'] == 'PRÓXIMO MÊS'])
     monitorar = len(filtered_df[filtered_df['Urgencia'] == 'MONITORAR'])
-    investimento_total = filtered_df[inv_col].sum()
     
     col1.metric("🔴 Urgentes", urgentes, delta=f"{muito_atrasado} muito atrasados" if muito_atrasado > 0 else None)
     col2.metric("🟡 Próximo Mês", proximo_mes)
     col3.metric("🟢 Monitorar", monitorar)
-    col4.metric("💰 Investimento Total", f"R$ {investimento_total:,.0f}")
     
     # Show critical products summary
     if urgentes > 0:
@@ -1414,8 +1407,8 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 '📦 Quantidades por Cenário',
                 '💰 Investimento por Cenário'
             ),
-            row_heights=[0.5, 0.25, 0.25],
-            vertical_spacing=0.1
+            row_heights=[0.4, 0.3, 0.3],  # More balanced heights
+            vertical_spacing=0.15  # More space between graphs
         )
         
         # 1. Timeline bar chart (main chart) - show in months
@@ -1565,14 +1558,14 @@ def show_priority_timeline(df, empresa="MINIPA"):
             row=3, col=1
         )
         
-        # Update layout - make graphs taller and more visible
+        # Update layout - make graphs much taller for better visibility
         fig.update_layout(
             title=f'📊 Timeline de Compras - {empresa}',
-            height=max(1200, len(display_df) * 40),  # Increased height
+            height=max(1800, len(display_df) * 60),  # Significantly increased height
             showlegend=True,
             barmode='group',
-            font=dict(size=12),
-            margin=dict(l=200, r=50, t=100, b=50)  # More space for product names
+            font=dict(size=14),  # Larger font
+            margin=dict(l=250, r=100, t=100, b=100)  # More space for product names
         )
         
         # Update axes
@@ -1580,10 +1573,10 @@ def show_priority_timeline(df, empresa="MINIPA"):
         fig.update_xaxes(title_text="Quantidade", row=2, col=1, title_font_size=14)
         fig.update_xaxes(title_text="Investimento (R$)", row=3, col=1, title_font_size=14, tickformat=",.0f")
         
-        # Update y-axes to show all products
-        fig.update_yaxes(tickfont_size=11, row=1, col=1)
-        fig.update_yaxes(tickfont_size=11, row=2, col=1)  # Show product names
-        fig.update_yaxes(tickfont_size=11, row=3, col=1)  # Show product names
+        # Update y-axes to show all products with larger font
+        fig.update_yaxes(tickfont_size=13, row=1, col=1)
+        fig.update_yaxes(tickfont_size=13, row=2, col=1)  # Show product names
+        fig.update_yaxes(tickfont_size=13, row=3, col=1)  # Show product names
         
         # Add zero line to timeline at 4 months (lead time threshold)
         fig.add_vline(x=4, line_dash="dash", line_color="orange", row=1, col=1)
