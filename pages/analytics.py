@@ -1160,42 +1160,29 @@ def show_priority_timeline(df, empresa="MINIPA"):
             max_days = 365 * 10  # Max 10 years
             dias_restantes = min(dias_restantes, max_days)
             
-            # For critical products, check if we need to order now
-            if dias_restantes <= lead_time_days:
-                # We're already within or past the lead time - order NOW
-                dias_ate_pedido = 0
-                data_pedido = hoje
-                data_esgotamento = hoje + timedelta(days=dias_restantes)
-                urgencia = 'URGENTE'  # Merged with URGENTE
-                cor = '#FF0000'
-            else:
-                try:
-                    data_esgotamento = hoje + timedelta(days=dias_restantes)
-                    data_pedido = data_esgotamento - timedelta(days=lead_time_days)
-                    dias_ate_pedido = (data_pedido - hoje).days
-                    
-                    # Determine urgency based on days until order
-                    # Merge COMPRAR AGORA and URGENTE into one URGENTE category
-                    if dias_ate_pedido <= 30:
-                        urgencia = 'URGENTE'
-                        cor = '#FF0000'
-                        if dias_ate_pedido <= 0:
-                            data_pedido = hoje  # Reset to today
-                            dias_ate_pedido = 0
-                    elif dias_ate_pedido <= 60:
-                        urgencia = 'PRÓXIMO MÊS'
-                        cor = '#FFD700'
-                    else:
-                        urgencia = 'MONITORAR'
-                        cor = '#32CD32'
-                        
-                except OverflowError:
-                    # If overflow, set to max reasonable values
-                    data_esgotamento = hoje + timedelta(days=max_days)
-                    data_pedido = hoje + timedelta(days=max_days - lead_time_days)
-                    dias_ate_pedido = max_days - lead_time_days
-                    urgencia = 'MONITORAR'
-                    cor = '#32CD32'
+            # Calculate when to order - allow negative values for overdue products
+            data_esgotamento = hoje + timedelta(days=dias_restantes)
+            data_pedido = data_esgotamento - timedelta(days=lead_time_days)
+            dias_ate_pedido = (data_pedido - hoje).days
+            
+            # For products that are overdue, dias_ate_pedido will be negative
+            if dias_ate_pedido <= -30:
+                # Very overdue - more than 30 days late
+                urgencia = 'URGENTE - MUITO ATRASADO'
+                cor = '#8B0000'  # Dark red
+            elif dias_ate_pedido <= 0:
+                # Overdue but less than 30 days
+                urgencia = 'URGENTE'
+                cor = '#FF0000'  # Red
+            elif dias_ate_pedido <= 30:
+                # Due within 30 days
+                urgencia = 'URGENTE'
+                cor = '#FF4500'  # Orange red
+            elif dias_ate_pedido <= 60:
+                urgencia = 'PRÓXIMO MÊS'
+                cor = '#FFD700'
+                urgencia = 'MONITORAR'
+                cor = '#32CD32'
             
             # Calculate three scenarios: MOQ, Negotiated, Ideal
             # Scenario 1: MOQ (minimum order)
@@ -1423,24 +1410,38 @@ def show_priority_timeline(df, empresa="MINIPA"):
         )
         
         # 1. Timeline bar chart (main chart) - show in months
+        # Create custom text and hover info based on whether product is overdue
+        text_labels = []
+        for idx, row in display_df.iterrows():
+            meses = row['Meses_Ate_Pedido']
+            urg = row['Urgencia']
+            if meses < 0:
+                text_labels.append(f"ATRASADO {abs(meses):.1f} meses<br>{urg}")
+            elif meses == 0:
+                text_labels.append(f"PEDIR HOJE!<br>{urg}")
+            else:
+                text_labels.append(f"{meses:.1f} meses<br>{urg}")
+        
         fig.add_trace(
             go.Bar(
                 y=display_df['Produto'],
                 x=display_df['Meses_Ate_Pedido'],
                 orientation='h',
                 marker_color=display_df['Cor'],
-                text=[f"{meses:.1f} meses<br>{urg}" for meses, urg in zip(display_df['Meses_Ate_Pedido'], display_df['Urgencia'])],
+                text=text_labels,
                 textposition='auto',
                 hovertemplate=(
                     '<b>%{y}</b><br>' +
+                    '<b>Status: %{customdata[7]}</b><br>' +
                     'Meses até pedido: %{x:.1f}<br>' +
-                    'Data do pedido: %{customdata[0]}<br>' +
-                    'Data esgotamento: %{customdata[1]}<br>' +
-                    'Estoque atual: %{customdata[2]:.0f}<br>' +
-                    'Consumo mensal: %{customdata[3]:.1f}<br>' +
-                    'Cobertura: %{customdata[4]:.1f} meses<br>' +
-                    'Lead time: %{customdata[5]} dias<br>' +
+                    'Data do pedido recomendada: %{customdata[0]}<br>' +
+                    'Data prevista de esgotamento: %{customdata[1]}<br>' +
+                    'Estoque atual: %{customdata[2]:.0f} unidades<br>' +
+                    'Consumo mensal: %{customdata[3]:.1f} unidades<br>' +
+                    'Cobertura atual: %{customdata[4]:.1f} meses<br>' +
+                    'Lead time necessário: %{customdata[5]} dias<br>' +
                     'Fornecedor: %{customdata[6]}<br>' +
+                    '%{customdata[8]}<br>' +
                     '<extra></extra>'
                 ),
                 customdata=np.column_stack((
@@ -1450,7 +1451,13 @@ def show_priority_timeline(df, empresa="MINIPA"):
                     display_df['Media_Mensal'],
                     display_df['Meses_Cobertura'],
                     display_df['Lead_Time'],
-                    display_df['Fornecedor']
+                    display_df['Fornecedor'],
+                    display_df['Urgencia'],
+                    display_df.apply(lambda row: 
+                        '⚠️ ATENÇÃO: Pedido atrasado!' if row['Meses_Ate_Pedido'] < 0 
+                        else '🚨 CRÍTICO: Pedir imediatamente!' if row['Meses_Ate_Pedido'] == 0
+                        else '✅ Dentro do prazo' if row['Meses_Ate_Pedido'] > 4
+                        else '⏰ Prazo se aproximando', axis=1)
                 )),
                 name='Timeline'
             ),
@@ -1582,10 +1589,33 @@ def show_priority_timeline(df, empresa="MINIPA"):
         
         # Add zero line
         fig.add_vline(x=0, line_dash="solid", line_color="red", line_width=2, row=1, col=1)
+        fig.add_annotation(
+            x=0, y=0,
+            text="Prazo Esgotado",
+            showarrow=True,
+            arrowhead=2,
+            row=1, col=1,
+            font=dict(color="red", size=12, weight="bold"),
+            xshift=-10
+        )
+        
+        # Check if we have overdue products to show
+        min_months = display_df['Meses_Ate_Pedido'].min()
+        if min_months < 0:
+            # Add shaded region for overdue products
+            fig.add_vrect(
+                x0=min_months - 0.5, x1=0,
+                fillcolor="red", opacity=0.1,
+                line_width=0,
+                annotation_text="ATRASADO",
+                annotation_position="top left",
+                row=1, col=1
+            )
         
         # Extend x-axis range to show negative values for products with less than 4 months
         max_months = max(display_df['Meses_Ate_Pedido'].max(), 12)
-        fig.update_xaxes(range=[-2, max_months], row=1, col=1)
+        x_min = min(min_months - 1, -2) if min_months < 0 else -1
+        fig.update_xaxes(range=[x_min, max_months], row=1, col=1)
         
         st.plotly_chart(fig, use_container_width=True)
     
