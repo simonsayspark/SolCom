@@ -1430,7 +1430,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
     
     # Show critical products summary
     if urgentes > 0:
-        with st.expander("⚡ Produtos Urgentes - Ação Imediata (Lead time ≤ 4 meses)", expanded=True):
+        with st.expander("⚡ Produtos Urgentes - Ação Imediata (Lead time ≤ 4 meses)", expanded=False):
             critical_products = filtered_df[filtered_df['Urgencia'] == 'URGENTE']
             for _, prod in critical_products.iterrows():
                 col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
