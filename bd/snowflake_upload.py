@@ -314,12 +314,14 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
                         moq = safe_numeric(row['MOQ'])
                     
                     ultimo_fornecedor = 'Brazil'  # Default value
-                    if 'UltimoFornecedor' in row.index:
-                        valor = str(row['UltimoFornecedor'])
+                    # Check for the mapped column name first (after upload.py column renaming)
+                    if 'ultimo_fornecedor' in row.index:
+                        valor = str(row['ultimo_fornecedor'])
                         if valor and valor.strip() and valor.lower() not in ['nan', 'none', '']:
                             ultimo_fornecedor = valor
-                    elif 'ultimo_fornecedor' in row.index:
-                        valor = str(row['ultimo_fornecedor'])
+                    # Fallback to original column names (in case mapping didn't happen)
+                    elif 'UltimoFornecedor' in row.index:
+                        valor = str(row['UltimoFornecedor'])
                         if valor and valor.strip() and valor.lower() not in ['nan', 'none', '']:
                             ultimo_fornecedor = valor
                     elif 'UltimoFor' in row.index:
@@ -383,14 +385,18 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
                         
                         # Debug UltimoFornecedor
                         st.write(f"  UltimoFornecedor: {ultimo_fornecedor}")
-                        if 'UltimoFornecedor' in row.index:
-                            st.write("    → Encontrado como 'UltimoFornecedor'")
-                        elif 'ultimo_fornecedor' in row.index:
-                            st.write("    → Encontrado como 'ultimo_fornecedor'")
+                        if 'ultimo_fornecedor' in row.index:
+                            st.write("    → Encontrado como 'ultimo_fornecedor' (após mapeamento)")
+                        elif 'UltimoFornecedor' in row.index:
+                            st.write("    → Encontrado como 'UltimoFornecedor' (original)")
                         elif 'UltimoFor' in row.index:
-                            st.write("    → Encontrado como 'UltimoFor'")
+                            st.write("    → Encontrado como 'UltimoFor' (original)")
                         else:
                             st.write("    → Não encontrado - usando default 'Brazil'")
+                            # Show what columns are available
+                            available_cols = [col for col in row.index if 'ultimo' in col.lower() or 'fornec' in col.lower()]
+                            if available_cols:
+                                st.write(f"    → Colunas similares encontradas: {available_cols}")
                     
                     # Skip completely empty rows
                     if not produto and all(v == 0 for v in [estoque, consumo_6_meses, media_6_meses]):
