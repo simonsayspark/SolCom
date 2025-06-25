@@ -308,11 +308,24 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
                     if idx < 3:
                         st.write(f"  Valores convertidos: consumo={consumo_6_meses}, media={media_6_meses}, cobertura={estoque_cobertura}")
                     
-                    # NEW: Handle MOQ and UltimoFornecedor columns
-                    moq = safe_numeric(row.get('MOQ', 0))
-                    ultimo_fornecedor = str(row.get('UltimoFor', '') or row.get('UltimoFornecedor', ''))
-                    if not ultimo_fornecedor or ultimo_fornecedor.lower() in ['nan', 'none', '']:
-                        ultimo_fornecedor = 'Brazil'  # Default value
+                    # NEW: Handle MOQ and UltimoFornecedor columns - use direct indexing
+                    moq = 0
+                    if 'MOQ' in row.index:
+                        moq = safe_numeric(row['MOQ'])
+                    
+                    ultimo_fornecedor = 'Brazil'  # Default value
+                    if 'UltimoFornecedor' in row.index:
+                        valor = str(row['UltimoFornecedor'])
+                        if valor and valor.strip() and valor.lower() not in ['nan', 'none', '']:
+                            ultimo_fornecedor = valor
+                    elif 'ultimo_fornecedor' in row.index:
+                        valor = str(row['ultimo_fornecedor'])
+                        if valor and valor.strip() and valor.lower() not in ['nan', 'none', '']:
+                            ultimo_fornecedor = valor
+                    elif 'UltimoFor' in row.index:
+                        valor = str(row['UltimoFor'])
+                        if valor and valor.strip() and valor.lower() not in ['nan', 'none', '']:
+                            ultimo_fornecedor = valor
                     
                     # NEW: Handle priority analysis columns from merged Excel
                     preco_unitario = safe_float(row.get('preco_unitario', row.get('Preco_Unitario', 0.0)))
@@ -325,14 +338,59 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
                     price_normalized = safe_float(row.get('price_normalized', 0.0))
                     raw_multiplication = safe_float(row.get('raw_multiplication', 0.0))
                     
-                    # Handle additional purchase planning columns
-                    qtde_embarque = safe_float(row.get('Qtde Embarque', row.get('Qtde_Embarque', 0.0)))
-                    compras_ate_30_dias = safe_float(row.get('Compras Até 30 Dias', row.get('Compras_Ate_30_Dias', 0.0)))
-                    compras_31_60_dias = safe_float(row.get('Compras 31 a 60 Dias', row.get('Compras_31_60_Dias', 0.0)))
-                    compras_61_90_dias = safe_float(row.get('Compras 61 a 90 Dias', row.get('Compras_61_90_Dias', 0.0)))
-                    compras_mais_90_dias = safe_float(row.get('Compras > 90 Dias', row.get('Compras_Mais_90_Dias', 0.0)))
+                    # Handle additional purchase planning columns - use direct indexing
+                    qtde_embarque = 0.0
+                    if 'Qtde_Embarque' in row.index:
+                        qtde_embarque = safe_float(row['Qtde_Embarque'])
+                    elif 'Qtde Embarque' in row.index:
+                        qtde_embarque = safe_float(row['Qtde Embarque'])
+                    
+                    compras_ate_30_dias = 0.0
+                    if 'Compras_Ate_30_Dias' in row.index:
+                        compras_ate_30_dias = safe_float(row['Compras_Ate_30_Dias'])
+                    elif 'Compras Até 30 Dias' in row.index:
+                        compras_ate_30_dias = safe_float(row['Compras Até 30 Dias'])
+                    
+                    compras_31_60_dias = 0.0
+                    if 'Compras_31_60_Dias' in row.index:
+                        compras_31_60_dias = safe_float(row['Compras_31_60_Dias'])
+                    elif 'Compras 31 a 60 Dias' in row.index:
+                        compras_31_60_dias = safe_float(row['Compras 31 a 60 Dias'])
+                    
+                    compras_61_90_dias = 0.0
+                    if 'Compras_61_90_Dias' in row.index:
+                        compras_61_90_dias = safe_float(row['Compras_61_90_Dias'])
+                    elif 'Compras 61 a 90 Dias' in row.index:
+                        compras_61_90_dias = safe_float(row['Compras 61 a 90 Dias'])
+                    
+                    compras_mais_90_dias = 0.0
+                    if 'Compras_Mais_90_Dias' in row.index:
+                        compras_mais_90_dias = safe_float(row['Compras_Mais_90_Dias'])
+                    elif 'Compras > 90 Dias' in row.index:
+                        compras_mais_90_dias = safe_float(row['Compras > 90 Dias'])
+                    
                     previsao = safe_float(row.get('Previsão', row.get('Previsao', 0.0)))
                     qtde_tot_compras = safe_float(row.get('Qtde Tot Compras', row.get('Qtde_Tot_Compras', 0.0)))
+                    
+                    # Debug: Show purchase planning columns
+                    if idx < 3:
+                        st.write(f"  Qtde Embarque: {qtde_embarque}, Compras 30 dias: {compras_ate_30_dias}")
+                        # Show which column was found
+                        if 'Qtde_Embarque' in row.index:
+                            st.write("    → Encontrado como 'Qtde_Embarque'")
+                        elif 'Qtde Embarque' in row.index:
+                            st.write("    → Encontrado como 'Qtde Embarque'")
+                        
+                        # Debug UltimoFornecedor
+                        st.write(f"  UltimoFornecedor: {ultimo_fornecedor}")
+                        if 'UltimoFornecedor' in row.index:
+                            st.write("    → Encontrado como 'UltimoFornecedor'")
+                        elif 'ultimo_fornecedor' in row.index:
+                            st.write("    → Encontrado como 'ultimo_fornecedor'")
+                        elif 'UltimoFor' in row.index:
+                            st.write("    → Encontrado como 'UltimoFor'")
+                        else:
+                            st.write("    → Não encontrado - usando default 'Brazil'")
                     
                     # Skip completely empty rows
                     if not produto and all(v == 0 for v in [estoque, consumo_6_meses, media_6_meses]):
