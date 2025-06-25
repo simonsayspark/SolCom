@@ -1332,17 +1332,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
             ['Todos'] + timeline_df['Fornecedor'].unique().tolist()
         )
     
-    with col3:
-        # Show top N products selector
-        n_produtos = st.number_input(
-            "📊 Mostrar Top N produtos:",
-            min_value=10,
-            max_value=len(timeline_df),
-            value=min(50, len(timeline_df)),
-            step=10
-        )
-    
-    # Apply filters
+    # Apply filters FIRST to determine the correct max value
     filtered_df = timeline_df.copy()
     
     if urgencia_filter != 'Todos':
@@ -1350,6 +1340,28 @@ def show_priority_timeline(df, empresa="MINIPA"):
     
     if fornecedor_filter != 'Todos':
         filtered_df = filtered_df[filtered_df['Fornecedor'] == fornecedor_filter]
+    
+    with col3:
+        # Show top N products selector - now based on filtered results
+        if len(filtered_df) > 0:
+            # Add a checkbox to show all
+            show_all = st.checkbox("Mostrar todos os produtos filtrados", value=False)
+            
+            if show_all:
+                n_produtos = len(filtered_df)
+                st.info(f"Mostrando todos os {n_produtos} produtos filtrados")
+            else:
+                n_produtos = st.number_input(
+                    "📊 Mostrar Top N produtos:",
+                    min_value=10,
+                    max_value=len(filtered_df),  # Now based on filtered count
+                    value=min(50, len(filtered_df)),
+                    step=10,
+                    help=f"Total de produtos após filtros: {len(filtered_df)}"
+                )
+        else:
+            n_produtos = 0
+            st.warning("Nenhum produto encontrado com os filtros selecionados")
     
     # Determine which scenario columns to use
     if "MOQ" in scenario:
@@ -1398,6 +1410,10 @@ def show_priority_timeline(df, empresa="MINIPA"):
     if len(filtered_df) > 0:
         # Limit display based on user selection
         display_df = filtered_df.head(n_produtos)
+        
+        # Show info about displayed products
+        if len(display_df) < len(filtered_df):
+            st.warning(f"📊 Mostrando {len(display_df)} de {len(filtered_df)} produtos filtrados. Use o seletor acima ou marque 'Mostrar todos' para ver mais produtos.")
         
         # Convert days to months and handle negative values for display
         display_df['Meses_Ate_Pedido'] = display_df['Dias_Ate_Pedido'] / 30
