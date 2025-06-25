@@ -1098,7 +1098,11 @@ def show_priority_timeline(df, empresa="MINIPA"):
         # Get additional timeline data from merged Excel
         estoque_cobertura = float(row.get('Estoque Cobertura', row.get('Estoque_Cobertura', 0)) or 0)
         qtde_embarque = float(row.get('Qtde Embarque', row.get('Qtde_Embarque', 0)) or 0)
+        compras_ate_30_dias = float(row.get('Compras Até 30 Dias', row.get('Compras_Ate_30_Dias', 0)) or 0)
         previsao = float(row.get('Previsão', row.get('Previsao', 0)) or 0)
+        
+        # Calculate expected stock including incoming shipments
+        estoque_esperado = estoque + qtde_embarque + compras_ate_30_dias
         
         # Calculate timeline metrics
         # Handle case where there's no consumption data
@@ -1118,8 +1122,12 @@ def show_priority_timeline(df, empresa="MINIPA"):
                     'Produto': produto,
                     'Fornecedor': fornecedor,
                     'Estoque_Atual': estoque,
+                    'Estoque_Esperado': estoque_esperado,
+                    'Qtde_Embarque': qtde_embarque,
+                    'Compras_Ate_30_Dias': compras_ate_30_dias,
                     'Media_Mensal': media_mensal,
                     'Meses_Cobertura': meses_cobertura,
+                    'Meses_Cobertura_Esperada': estoque_esperado / media_mensal if media_mensal > 0 else 999,
                     'Dias_Ate_Pedido': dias_ate_pedido,
                     'Data_Pedido': 'Sem consumo',
                     'Data_Esgotamento': 'Sem consumo',
@@ -1147,7 +1155,11 @@ def show_priority_timeline(df, empresa="MINIPA"):
             else:
                 meses_cobertura = estoque / media_mensal
                 
+            # Calculate expected coverage with incoming inventory
+            meses_cobertura_esperada = estoque_esperado / media_mensal
+            
             dias_restantes = int(meses_cobertura * 30)
+            dias_restantes_esperado = int(meses_cobertura_esperada * 30)
             
             # Determine lead time based on criticality
             if criticality in ['🔴 Critical', '🟡 High', '🟠 Medium']:
@@ -1218,9 +1230,14 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 'Produto': produto,
                 'Fornecedor': fornecedor,
                 'Estoque_Atual': estoque,
+                'Estoque_Esperado': estoque_esperado,
+                'Qtde_Embarque': qtde_embarque,
+                'Compras_Ate_30_Dias': compras_ate_30_dias,
                 'Media_Mensal': media_mensal,
                 'Meses_Cobertura': meses_cobertura,
+                'Meses_Cobertura_Esperada': meses_cobertura_esperada,
                 'Dias_Ate_Pedido': dias_ate_pedido,
+                'Dias_Restantes_Esperado': dias_restantes_esperado,
                 'Data_Pedido': data_pedido.strftime('%d/%m/%Y') if isinstance(data_pedido, datetime) else data_pedido,
                 'Data_Esgotamento': data_esgotamento.strftime('%d/%m/%Y') if isinstance(data_esgotamento, datetime) else data_esgotamento,
                 'MOQ': moq,
@@ -1381,6 +1398,10 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
                 with col1:
                     st.write(f"**{prod['Produto']}** - {prod['Fornecedor']}")
+                    # Show expected inventory info if available
+                    if prod['Qtde_Embarque'] > 0 or prod['Compras_Ate_30_Dias'] > 0:
+                        incoming_total = prod['Qtde_Embarque'] + prod['Compras_Ate_30_Dias']
+                        st.caption(f"📦 Em trânsito: {incoming_total:.0f} unids (+{prod['Meses_Cobertura_Esperada'] - prod['Meses_Cobertura']:.1f} meses)")
                 with col2:
                     if prod['Dias_Ate_Pedido'] == 0:
                         st.write(f"📅 **PEDIR AGORA**")
@@ -1398,6 +1419,9 @@ def show_priority_timeline(df, empresa="MINIPA"):
         
         # Convert days to months and handle negative values for display
         display_df['Meses_Ate_Pedido'] = display_df['Dias_Ate_Pedido'] / 30
+        display_df['Meses_Adicional_Embarque'] = display_df.apply(lambda row: 
+            (row['Qtde_Embarque'] + row['Compras_Ate_30_Dias']) / row['Media_Mensal'] 
+            if row['Media_Mensal'] > 0 else 0, axis=1)
         
         # Create figure with vertical subplot layout for better visibility
         fig = make_subplots(
@@ -1411,60 +1435,85 @@ def show_priority_timeline(df, empresa="MINIPA"):
             vertical_spacing=0.15  # More space between graphs
         )
         
-        # 1. Timeline bar chart (main chart) - show in months
-        # Create custom text and hover info based on whether product is overdue
-        text_labels = []
-        for idx, row in display_df.iterrows():
-            meses = row['Meses_Ate_Pedido']
-            urg = row['Urgencia']
-            if meses < 0:
-                text_labels.append(f"ATRASADO {abs(meses):.1f} meses<br>{urg}")
-            elif meses == 0:
-                text_labels.append(f"PEDIR HOJE!<br>{urg}")
-            else:
-                text_labels.append(f"{meses:.1f} meses<br>{urg}")
-        
+        # 1. Timeline bar chart (main chart) - show in months with stacked bar for expected inventory
+        # Current inventory coverage (darker colors)
         fig.add_trace(
             go.Bar(
                 y=display_df['Produto'],
                 x=display_df['Meses_Ate_Pedido'],
                 orientation='h',
                 marker_color=display_df['Cor'],
-                text=text_labels,
-                textposition='auto',
+                text=[f"{row['Meses_Ate_Pedido']:.1f}m" for _, row in display_df.iterrows()],
+                textposition='inside',
                 hovertemplate=(
                     '<b>%{y}</b><br>' +
-                    '<b>Status: %{customdata[7]}</b><br>' +
-                    'Meses até pedido: %{x:.1f}<br>' +
-                    'Data do pedido recomendada: %{customdata[0]}<br>' +
-                    'Data prevista de esgotamento: %{customdata[1]}<br>' +
-                    'Estoque atual: %{customdata[2]:.0f} unidades<br>' +
-                    'Consumo mensal: %{customdata[3]:.1f} unidades<br>' +
-                    'Cobertura atual: %{customdata[4]:.1f} meses<br>' +
-                    'Lead time necessário: %{customdata[5]} dias<br>' +
-                    'Fornecedor: %{customdata[6]}<br>' +
-                    '%{customdata[8]}<br>' +
+                    '<b>ESTOQUE ATUAL</b><br>' +
+                    'Cobertura atual: %{x:.1f} meses<br>' +
+                    'Estoque atual: %{customdata[0]:.0f} unidades<br>' +
+                    'Consumo mensal: %{customdata[1]:.1f} unidades<br>' +
                     '<extra></extra>'
                 ),
                 customdata=np.column_stack((
-                    display_df['Data_Pedido'],
-                    display_df['Data_Esgotamento'],
                     display_df['Estoque_Atual'],
-                    display_df['Media_Mensal'],
-                    display_df['Meses_Cobertura'],
-                    display_df['Lead_Time'],
-                    display_df['Fornecedor'],
-                    display_df['Urgencia'],
-                    display_df.apply(lambda row: 
-                        '⚠️ ATENÇÃO: Pedido atrasado!' if row['Meses_Ate_Pedido'] < 0 
-                        else '🚨 CRÍTICO: Pedir imediatamente!' if row['Meses_Ate_Pedido'] == 0
-                        else '✅ Dentro do prazo' if row['Meses_Ate_Pedido'] > 4
-                        else '⏰ Prazo se aproximando', axis=1)
+                    display_df['Media_Mensal']
                 )),
-                name='Timeline'
+                name='Estoque Atual',
+                legendgroup='timeline'
             ),
             row=1, col=1
         )
+        
+        # Expected incoming inventory coverage (lighter colors) - stacked
+        # Create lighter versions of the original colors
+        lighter_colors = []
+        for color in display_df['Cor']:
+            if color == '#8B0000':  # Dark red -> Light red
+                lighter_colors.append('#FF6B6B')
+            elif color == '#FF0000':  # Red -> Light red
+                lighter_colors.append('#FF9999')
+            elif color == '#FF4500':  # Orange red -> Light orange
+                lighter_colors.append('#FFA500')
+            elif color == '#FFD700':  # Gold -> Light yellow
+                lighter_colors.append('#FFEB3B')
+            elif color == '#32CD32':  # Green -> Light green
+                lighter_colors.append('#90EE90')
+            else:
+                lighter_colors.append(color)
+        
+        # Add expected inventory only if there's incoming stock
+        has_incoming = display_df['Meses_Adicional_Embarque'].sum() > 0
+        if has_incoming:
+            fig.add_trace(
+                go.Bar(
+                    y=display_df['Produto'],
+                    x=display_df['Meses_Adicional_Embarque'],
+                    orientation='h',
+                    marker_color=lighter_colors,
+                    marker_pattern_shape="/",  # Add pattern to distinguish
+                    text=[f"+{row['Meses_Adicional_Embarque']:.1f}m" if row['Meses_Adicional_Embarque'] > 0 else "" 
+                          for _, row in display_df.iterrows()],
+                    textposition='inside',
+                    hovertemplate=(
+                        '<b>%{y}</b><br>' +
+                        '<b>ESTOQUE ESPERADO</b><br>' +
+                        'Cobertura adicional: +%{x:.1f} meses<br>' +
+                        'Qtde em trânsito: %{customdata[0]:.0f} unidades<br>' +
+                        'Compras até 30 dias: %{customdata[1]:.0f} unidades<br>' +
+                        'Total esperado: %{customdata[2]:.0f} unidades<br>' +
+                        'Nova cobertura total: %{customdata[3]:.1f} meses<br>' +
+                        '<extra></extra>'
+                    ),
+                    customdata=np.column_stack((
+                        display_df['Qtde_Embarque'],
+                        display_df['Compras_Ate_30_Dias'],
+                        display_df['Qtde_Embarque'] + display_df['Compras_Ate_30_Dias'],
+                        display_df['Meses_Cobertura_Esperada']
+                    )),
+                    name='Estoque Esperado',
+                    legendgroup='timeline'
+                ),
+                row=1, col=1
+            )
         
         # 2. Quantity comparison chart - now on row 2
         fig.add_trace(
@@ -1563,7 +1612,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
             title=f'📊 Timeline de Compras - {empresa}',
             height=max(1800, len(display_df) * 60),  # Significantly increased height
             showlegend=True,
-            barmode='group',
+            barmode='stack',  # Changed to stack for timeline chart
             font=dict(size=14),  # Larger font
             margin=dict(l=250, r=100, t=100, b=100)  # More space for product names
         )
@@ -1572,6 +1621,12 @@ def show_priority_timeline(df, empresa="MINIPA"):
         fig.update_xaxes(title_text="Meses até Pedido", row=1, col=1, title_font_size=14)
         fig.update_xaxes(title_text="Quantidade", row=2, col=1, title_font_size=14)
         fig.update_xaxes(title_text="Investimento (R$)", row=3, col=1, title_font_size=14, tickformat=",.0f")
+        
+        # Set barmode for each subplot individually
+        # Row 1 (timeline) should be stacked, rows 2 and 3 should be grouped
+        fig.update_traces(row=1, col=1, offsetgroup=1)
+        fig.update_traces(row=2, col=1, offsetgroup=2)
+        fig.update_traces(row=3, col=1, offsetgroup=3)
         
         # Update y-axes to show all products with larger font
         fig.update_yaxes(tickfont_size=13, row=1, col=1)
@@ -1620,6 +1675,15 @@ def show_priority_timeline(df, empresa="MINIPA"):
         fig.update_xaxes(range=[x_min, max_months], row=1, col=1)
         
         st.plotly_chart(fig, use_container_width=True)
+        
+        # Add legend explaining the expected inventory
+        if has_incoming:
+            st.info("""
+            📊 **Legenda do Timeline:**
+            - **Barra sólida**: Cobertura do estoque atual
+            - **Barra com padrão diagonal**: Cobertura adicional com produtos em trânsito e compras confirmadas para os próximos 30 dias
+            - A soma das duas barras mostra o tempo total de cobertura esperado
+            """)
     
     # Detailed table with priority information
     st.subheader("📋 Detalhamento de Compras")
