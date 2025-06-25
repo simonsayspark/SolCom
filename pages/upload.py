@@ -571,6 +571,22 @@ def show_data_upload():
                                     else:
                                         df_clean[col] = df_clean[col].fillna(0)
                                 
+                                # Debug: Show consumption columns being uploaded
+                                if table_prefix == "ANALYTICS":
+                                    st.info("🔍 **Debug: Verificando colunas de consumo antes do upload:**")
+                                    consumo_cols = []
+                                    for col in ['Consumo 6 Meses', 'Consumo_6_Meses', 'Média 6 Meses', 'Media_6_Meses']:
+                                        if col in df_clean.columns:
+                                            non_zero = len(df_clean[df_clean[col] > 0])
+                                            consumo_cols.append(f"• {col}: {non_zero} valores > 0")
+                                    
+                                    if consumo_cols:
+                                        st.success("✅ Colunas de consumo encontradas:")
+                                        for info in consumo_cols:
+                                            st.write(info)
+                                    else:
+                                        st.warning("⚠️ Nenhuma coluna de consumo encontrada! Verifique os dados.")
+                                
                                 # Upload to Snowflake
                                 success = upload_excel_to_snowflake(
                                     df=df_clean, 

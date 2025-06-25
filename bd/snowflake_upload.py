@@ -272,9 +272,10 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
                         produto = str(row.get('Item', '') or row.get('Modelo', ''))
                     
                     estoque = safe_numeric(row.get('Estoque', 0))
-                    consumo_6_meses = safe_float(row.get('Consumo 6 Meses', 0.0))
-                    media_6_meses = safe_float(row.get('Média 6 Meses', 0.0))
-                    estoque_cobertura = safe_float(row.get('Estoque Cobertura', 0.0))
+                    # Fix: Look for both underscore and space versions of columns
+                    consumo_6_meses = safe_float(row.get('Consumo_6_Meses', row.get('Consumo 6 Meses', 0.0)))
+                    media_6_meses = safe_float(row.get('Media_6_Meses', row.get('Média 6 Meses', 0.0)))
+                    estoque_cobertura = safe_float(row.get('Estoque_Cobertura', row.get('Estoque Cobertura', 0.0)))
                     
                     # NEW: Handle MOQ and UltimoFornecedor columns
                     moq = safe_numeric(row.get('MOQ', 0))
