@@ -332,19 +332,19 @@ def load_page():
         
         # Show analytics tabs with company context - REDUCED TO 3 TABS
         tab1, tab2, tab3 = st.tabs([
+            f"🎯 Timeline Prioritário - {empresa_selecionada}",
             f"📊 Dashboards - {empresa_selecionada}", 
-            f"📋 Tabela Geral - {empresa_selecionada}",
-            f"🎯 Timeline Prioritário - {empresa_selecionada}"
+            f"📋 Tabela Geral - {empresa_selecionada}"
         ])
         
         with tab1:
-            show_analytics_dashboard(produtos_existentes, produtos_novos, empresa_selecionada)
+            show_priority_timeline(df, empresa_selecionada)
         
         with tab2:
-            show_tabela_geral(df, empresa_selecionada)
+            show_analytics_dashboard(produtos_existentes, produtos_novos, empresa_selecionada)
             
         with tab3:
-            show_priority_timeline(df, empresa_selecionada)
+            show_tabela_geral(df, empresa_selecionada)
 
 def show_executive_summary(df, produtos_novos, produtos_existentes, empresa="MINIPA"):
     """Resumo executivo dos dados por empresa"""
@@ -1117,6 +1117,9 @@ def show_priority_timeline(df, empresa="MINIPA"):
                     'Meses_Cobertura': meses_cobertura,
                     'Meses_Cobertura_Esperada': estoque_esperado / media_mensal if media_mensal > 0 else 999,
                     'Dias_Ate_Pedido': dias_ate_pedido,
+                    'Dias_Restantes_Esperado': 3650,  # No consumption, so large value
+                    'Dias_Ate_Pedido_Esperado': 3650,  # No consumption, so large value
+                    'Ainda_Urgente_Com_Estoque_Futuro': False,  # No consumption products are not urgent
                     'Data_Pedido': 'Sem consumo',
                     'Data_Esgotamento': 'Sem consumo',
                     'MOQ': moq,
@@ -1211,6 +1214,10 @@ def show_priority_timeline(df, empresa="MINIPA"):
             investimento_negotiated = qtd_negotiated * preco if preco > 0 else 0
             investimento_ideal = qtd_ideal * preco if preco > 0 else 0
             
+            # Calculate if still urgent with expected stock
+            dias_ate_pedido_esperado = dias_restantes_esperado - lead_time_days
+            ainda_urgente_com_estoque_futuro = dias_ate_pedido_esperado <= 120  # Still within 4-month lead time
+            
             timeline_data.append({
                 'Produto': produto,
                 'Fornecedor': fornecedor,
@@ -1223,6 +1230,8 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 'Meses_Cobertura_Esperada': meses_cobertura_esperada,
                 'Dias_Ate_Pedido': dias_ate_pedido,
                 'Dias_Restantes_Esperado': dias_restantes_esperado,
+                'Dias_Ate_Pedido_Esperado': dias_ate_pedido_esperado,
+                'Ainda_Urgente_Com_Estoque_Futuro': ainda_urgente_com_estoque_futuro,
                 'Data_Pedido': data_pedido.strftime('%d/%m/%Y') if isinstance(data_pedido, datetime) else data_pedido,
                 'Data_Esgotamento': data_esgotamento.strftime('%d/%m/%Y') if isinstance(data_esgotamento, datetime) else data_esgotamento,
                 'MOQ': moq,
@@ -1349,13 +1358,24 @@ def show_priority_timeline(df, empresa="MINIPA"):
         filter_critical_with_incoming = st.checkbox(
             "🚨 Mostrar apenas produtos que continuam críticos mesmo com estoque futuro",
             value=False,
-            help="Filtra produtos onde estoque atual + pedidos em trânsito ainda não atingem 4 meses de cobertura"
+            help="Filtra produtos que permanecerão dentro do lead time de 4 meses mesmo após receber pedidos em trânsito"
         )
         
         if filter_critical_with_incoming:
-            # Filter products where expected coverage is still under 4 months
-            filtered_df = filtered_df[filtered_df['Meses_Cobertura_Esperada'] < 4]
-            st.info(f"🎯 {len(filtered_df)} produtos precisam de pedido mesmo com entregas futuras")
+            # Filter products that are still urgent even with incoming stock
+            filtered_df = filtered_df[filtered_df['Ainda_Urgente_Com_Estoque_Futuro'] == True]
+            st.info(f"🎯 {len(filtered_df)} produtos continuam urgentes mesmo com entregas futuras confirmadas")
+            
+            # Debug: Show some examples
+            with st.expander("🔍 Debug: Ver cálculos detalhados"):
+                debug_sample = filtered_df.head(5)
+                for _, row in debug_sample.iterrows():
+                    st.write(f"**{row['Produto']}**")
+                    st.write(f"- Dias até pedido (atual): {row['Dias_Ate_Pedido']:.0f} dias")
+                    st.write(f"- Dias até pedido (com estoque futuro): {row['Dias_Ate_Pedido_Esperado']:.0f} dias")
+                    st.write(f"- Qtde em trânsito: {row['Qtde_Embarque']:.0f} + Compras 30 dias: {row['Compras_Ate_30_Dias']:.0f}")
+                    st.write(f"- Cobertura esperada: {row['Meses_Cobertura_Esperada']:.1f} meses")
+                    st.write("---")
     
     with col3:
         # Show top N products selector - now based on filtered results
