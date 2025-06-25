@@ -876,7 +876,7 @@ def show_tabela_geral(df, empresa="MINIPA"):
     col1, col2 = st.columns(2)
     
     with col1:
-        csv = filtered_df[display_columns].to_csv(index=False).encode('utf-8')
+        csv = filtered_df[display_columns].to_csv(index=False, sep=';', encoding='utf-8-sig', decimal=',')
         st.download_button(
             label="📄 Baixar como CSV",
             data=csv,
@@ -1802,4 +1802,80 @@ def show_priority_timeline(df, empresa="MINIPA"):
         use_container_width=True,
         height=400,
         hide_index=True
-    ) 
+    )
+    
+    # Add CSV download options for Priority Timeline
+    st.subheader("📥 Exportar Timeline de Prioridades")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        csv = display_timeline_df.to_csv(index=False, sep=';', encoding='utf-8-sig', decimal=',')
+        st.download_button(
+            label="📄 Baixar como CSV",
+            data=csv,
+            file_name=f'timeline_prioritario_{empresa}_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.csv',
+            mime='text/csv',
+            use_container_width=True
+        )
+    
+    with col2:
+        # Excel export
+        try:
+            import io
+            buffer = io.BytesIO()
+            
+            # Create a Pandas Excel writer using XlsxWriter
+            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                display_timeline_df.to_excel(writer, sheet_name='Timeline Prioritario', index=False)
+                
+                # Get the xlsxwriter workbook and worksheet objects
+                workbook = writer.book
+                worksheet = writer.sheets['Timeline Prioritario']
+                
+                # Add some cell formatting
+                header_format = workbook.add_format({
+                    'bold': True,
+                    'text_wrap': True,
+                    'valign': 'top',
+                    'fg_color': '#D7E4BD',
+                    'border': 1
+                })
+                
+                # Write the column headers with the defined format
+                for col_num, value in enumerate(display_timeline_df.columns.values):
+                    worksheet.write(0, col_num, value, header_format)
+                
+                # Auto-adjust columns width
+                for column in display_timeline_df:
+                    column_width = max(display_timeline_df[column].astype(str).map(len).max(), len(column))
+                    col_idx = display_timeline_df.columns.get_loc(column)
+                    worksheet.set_column(col_idx, col_idx, min(column_width + 2, 50))
+            
+            # Reset buffer position
+            buffer.seek(0)
+            
+            st.download_button(
+                label="📊 Baixar como Excel",
+                data=buffer,
+                file_name=f'timeline_prioritario_{empresa}_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.xlsx',
+                mime='application/vnd.ms-excel',
+                use_container_width=True,
+                help="Excel format - universal compatibility"
+            )
+        except ImportError:
+            st.warning("⚠️ xlsxwriter não instalado. Usando método alternativo para Excel.")
+            # Fallback method without xlsxwriter
+            import io
+            excel_buffer = io.BytesIO()
+            display_timeline_df.to_excel(excel_buffer, index=False)
+            excel_buffer.seek(0)
+            
+            st.download_button(
+                label="📊 Baixar como Excel",
+                data=excel_buffer,
+                file_name=f'timeline_prioritario_{empresa}_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.xlsx',
+                mime='application/vnd.ms-excel',
+                use_container_width=True,
+                help="Excel format - universal compatibility"
+            ) 
