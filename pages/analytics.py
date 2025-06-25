@@ -1166,7 +1166,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 dias_ate_pedido = 0
                 data_pedido = hoje
                 data_esgotamento = hoje + timedelta(days=dias_restantes)
-                urgencia = 'COMPRAR AGORA'
+                urgencia = 'URGENTE'  # Merged with URGENTE
                 cor = '#FF0000'
             else:
                 try:
@@ -1175,14 +1175,13 @@ def show_priority_timeline(df, empresa="MINIPA"):
                     dias_ate_pedido = (data_pedido - hoje).days
                     
                     # Determine urgency based on days until order
-                    if dias_ate_pedido <= 0:
-                        urgencia = 'COMPRAR AGORA'
-                        cor = '#FF0000'
-                        data_pedido = hoje  # Reset to today
-                        dias_ate_pedido = 0
-                    elif dias_ate_pedido <= 30:
+                    # Merge COMPRAR AGORA and URGENTE into one URGENTE category
+                    if dias_ate_pedido <= 30:
                         urgencia = 'URGENTE'
-                        cor = '#FF8C00'
+                        cor = '#FF0000'
+                        if dias_ate_pedido <= 0:
+                            data_pedido = hoje  # Reset to today
+                            dias_ate_pedido = 0
                     elif dias_ate_pedido <= 60:
                         urgencia = 'PRÓXIMO MÊS'
                         cor = '#FFD700'
@@ -1316,11 +1315,8 @@ def show_priority_timeline(df, empresa="MINIPA"):
     # Convert to DataFrame for easier manipulation
     timeline_df = pd.DataFrame(timeline_data)
     
-    # Sort by priority if available, otherwise by urgency
-    if has_priority_data:
-        timeline_df = timeline_df.sort_values(['Priority_Score'], ascending=False)
-    else:
-        timeline_df = timeline_df.sort_values(['Dias_Ate_Pedido'])
+    # Sort by days to order to show most urgent first
+    timeline_df = timeline_df.sort_values(['Dias_Ate_Pedido'])
     
     # Show scenario selector
     st.subheader("📊 Cenários de Compra")
@@ -1336,22 +1332,23 @@ def show_priority_timeline(df, empresa="MINIPA"):
     with col1:
         urgencia_filter = st.selectbox(
             "🚨 Filtrar por Urgência:",
-            ['Todos', 'COMPRAR AGORA', 'URGENTE', 'PRÓXIMO MÊS', 'MONITORAR']
+            ['Todos', 'URGENTE', 'PRÓXIMO MÊS', 'MONITORAR']
         )
     
     with col2:
-        if has_priority_data:
-            criticality_filter = st.selectbox(
-                "🎯 Filtrar por Criticidade:",
-                ['Todos'] + timeline_df['Criticality'].unique().tolist()
-            )
-        else:
-            criticality_filter = 'Todos'
-    
-    with col3:
         fornecedor_filter = st.selectbox(
             "🏭 Filtrar por Fornecedor:",
             ['Todos'] + timeline_df['Fornecedor'].unique().tolist()
+        )
+    
+    with col3:
+        # Show top N products selector
+        n_produtos = st.number_input(
+            "📊 Mostrar Top N produtos:",
+            min_value=10,
+            max_value=len(timeline_df),
+            value=min(50, len(timeline_df)),
+            step=10
         )
     
     # Apply filters
@@ -1359,9 +1356,6 @@ def show_priority_timeline(df, empresa="MINIPA"):
     
     if urgencia_filter != 'Todos':
         filtered_df = filtered_df[filtered_df['Urgencia'] == urgencia_filter]
-    
-    if criticality_filter != 'Todos' and has_priority_data:
-        filtered_df = filtered_df[filtered_df['Criticality'] == criticality_filter]
     
     if fornecedor_filter != 'Todos':
         filtered_df = filtered_df[filtered_df['Fornecedor'] == fornecedor_filter]
@@ -1380,20 +1374,20 @@ def show_priority_timeline(df, empresa="MINIPA"):
     # Metrics
     col1, col2, col3, col4 = st.columns(4)
     
-    comprar_agora = len(filtered_df[filtered_df['Urgencia'] == 'COMPRAR AGORA'])
     urgentes = len(filtered_df[filtered_df['Urgencia'] == 'URGENTE'])
     proximo_mes = len(filtered_df[filtered_df['Urgencia'] == 'PRÓXIMO MÊS'])
+    monitorar = len(filtered_df[filtered_df['Urgencia'] == 'MONITORAR'])
     investimento_total = filtered_df[inv_col].sum()
     
-    col1.metric("🔴 Comprar Agora", comprar_agora)
-    col2.metric("🟠 Urgentes", urgentes)
-    col3.metric("🟡 Próximo Mês", proximo_mes)
+    col1.metric("🔴 Urgentes", urgentes)
+    col2.metric("🟡 Próximo Mês", proximo_mes)
+    col3.metric("🟢 Monitorar", monitorar)
     col4.metric("💰 Investimento Total", f"R$ {investimento_total:,.0f}")
     
     # Show critical products summary
-    if comprar_agora > 0 or urgentes > 0:
-        with st.expander("⚡ Produtos Críticos - Ação Imediata", expanded=True):
-            critical_products = filtered_df[filtered_df['Urgencia'].isin(['COMPRAR AGORA', 'URGENTE'])]
+    if urgentes > 0:
+        with st.expander("⚡ Produtos Urgentes - Ação Imediata", expanded=True):
+            critical_products = filtered_df[filtered_df['Urgencia'] == 'URGENTE']
             for _, prod in critical_products.iterrows():
                 col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
                 with col1:
@@ -1410,41 +1404,43 @@ def show_priority_timeline(df, empresa="MINIPA"):
     
     # Interactive Timeline Chart
     if len(filtered_df) > 0:
-        # Limit display to top 30 for readability
-        display_df = filtered_df.head(30)
+        # Limit display based on user selection
+        display_df = filtered_df.head(n_produtos)
         
-        # Create figure with subplots
+        # Convert days to months and handle negative values for display
+        display_df['Meses_Ate_Pedido'] = display_df['Dias_Ate_Pedido'] / 30
+        
+        # Create figure with vertical subplot layout for better visibility
         fig = make_subplots(
-            rows=2, cols=2,
+            rows=3, cols=1,
             subplot_titles=(
-                '📅 Timeline de Pedidos', 
+                '📅 Timeline de Pedidos (em meses)', 
                 '📦 Quantidades por Cenário',
-                '💰 Investimento por Cenário',
-                '📊 Análise de Lead Time'
+                '💰 Investimento por Cenário'
             ),
-            row_heights=[0.5, 0.5],
-            specs=[[{"colspan": 2}, None],
-                   [{}, {}]]
+            row_heights=[0.5, 0.25, 0.25],
+            vertical_spacing=0.1
         )
         
-        # 1. Timeline bar chart (main chart spanning 2 columns)
+        # 1. Timeline bar chart (main chart) - show in months
         fig.add_trace(
             go.Bar(
                 y=display_df['Produto'],
-                x=display_df['Dias_Ate_Pedido'],
+                x=display_df['Meses_Ate_Pedido'],
                 orientation='h',
                 marker_color=display_df['Cor'],
-                text=[f"{dias} dias<br>{urg}" for dias, urg in zip(display_df['Dias_Ate_Pedido'], display_df['Urgencia'])],
+                text=[f"{meses:.1f} meses<br>{urg}" for meses, urg in zip(display_df['Meses_Ate_Pedido'], display_df['Urgencia'])],
                 textposition='auto',
                 hovertemplate=(
                     '<b>%{y}</b><br>' +
-                    'Dias até pedido: %{x}<br>' +
+                    'Meses até pedido: %{x:.1f}<br>' +
                     'Data do pedido: %{customdata[0]}<br>' +
                     'Data esgotamento: %{customdata[1]}<br>' +
                     'Estoque atual: %{customdata[2]:.0f}<br>' +
                     'Consumo mensal: %{customdata[3]:.1f}<br>' +
                     'Cobertura: %{customdata[4]:.1f} meses<br>' +
                     'Lead time: %{customdata[5]} dias<br>' +
+                    'Fornecedor: %{customdata[6]}<br>' +
                     '<extra></extra>'
                 ),
                 customdata=np.column_stack((
@@ -1453,22 +1449,25 @@ def show_priority_timeline(df, empresa="MINIPA"):
                     display_df['Estoque_Atual'],
                     display_df['Media_Mensal'],
                     display_df['Meses_Cobertura'],
-                    display_df['Lead_Time']
+                    display_df['Lead_Time'],
+                    display_df['Fornecedor']
                 )),
                 name='Timeline'
             ),
             row=1, col=1
         )
         
-        # 2. Quantity comparison chart
+        # 2. Quantity comparison chart - now on row 2
         fig.add_trace(
             go.Bar(
                 y=display_df['Produto'],
                 x=display_df['Qtd_MOQ'],
                 orientation='h',
-                marker_color='lightcoral',
+                marker_color='#FF6B6B',
                 name='MOQ',
                 showlegend=True,
+                text=[f'{x:.0f}' for x in display_df['Qtd_MOQ']],
+                textposition='auto',
                 hovertemplate='<b>%{y}</b><br>MOQ: %{x:.0f}<extra></extra>'
             ),
             row=2, col=1
@@ -1479,9 +1478,11 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 y=display_df['Produto'],
                 x=display_df['Qtd_Negotiated'],
                 orientation='h',
-                marker_color='lightblue',
+                marker_color='#4ECDC4',
                 name='Negociado',
                 showlegend=True,
+                text=[f'{x:.0f}' for x in display_df['Qtd_Negotiated']],
+                textposition='auto',
                 hovertemplate='<b>%{y}</b><br>Negociado: %{x:.0f}<extra></extra>'
             ),
             row=2, col=1
@@ -1492,28 +1493,30 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 y=display_df['Produto'],
                 x=display_df['Qtd_Ideal'],
                 orientation='h',
-                marker_color='lightgreen',
+                marker_color='#45B7D1',
                 name='Ideal',
                 showlegend=True,
+                text=[f'{x:.0f}' for x in display_df['Qtd_Ideal']],
+                textposition='auto',
                 hovertemplate='<b>%{y}</b><br>Ideal: %{x:.0f}<extra></extra>'
             ),
             row=2, col=1
         )
         
-        # 3. Investment comparison chart
+        # 3. Investment comparison chart - now on row 3
         fig.add_trace(
             go.Bar(
                 y=display_df['Produto'],
                 x=display_df['Investimento_MOQ'],
                 orientation='h',
-                marker_color='salmon',
+                marker_color='#FF6B6B',
                 name='Inv. MOQ',
                 showlegend=True,
                 text=[f'R$ {x:,.0f}' for x in display_df['Investimento_MOQ']],
-                textposition='auto',
+                textposition='outside',
                 hovertemplate='<b>%{y}</b><br>Investimento MOQ: R$ %{x:,.2f}<extra></extra>'
             ),
-            row=2, col=2
+            row=3, col=1
         )
         
         fig.add_trace(
@@ -1521,14 +1524,14 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 y=display_df['Produto'],
                 x=display_df['Investimento_Negotiated'],
                 orientation='h',
-                marker_color='skyblue',
+                marker_color='#4ECDC4',
                 name='Inv. Negociado',
                 showlegend=True,
                 text=[f'R$ {x:,.0f}' for x in display_df['Investimento_Negotiated']],
-                textposition='auto',
+                textposition='outside',
                 hovertemplate='<b>%{y}</b><br>Investimento Negociado: R$ %{x:,.2f}<extra></extra>'
             ),
-            row=2, col=2
+            row=3, col=1
         )
         
         fig.add_trace(
@@ -1536,38 +1539,53 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 y=display_df['Produto'],
                 x=display_df['Investimento_Ideal'],
                 orientation='h',
-                marker_color='mediumseagreen',
+                marker_color='#45B7D1',
                 name='Inv. Ideal',
                 showlegend=True,
                 text=[f'R$ {x:,.0f}' for x in display_df['Investimento_Ideal']],
-                textposition='auto',
+                textposition='outside',
                 hovertemplate='<b>%{y}</b><br>Investimento Ideal: R$ %{x:,.2f}<extra></extra>'
             ),
-            row=2, col=2
+            row=3, col=1
         )
         
-        # Update layout
+        # Update layout - make graphs taller and more visible
         fig.update_layout(
-            title=f'📊 Timeline de Compras Prioritário - {empresa}',
-            height=max(800, len(display_df) * 25),
+            title=f'📊 Timeline de Compras - {empresa}',
+            height=max(1200, len(display_df) * 40),  # Increased height
             showlegend=True,
-            barmode='group'
+            barmode='group',
+            font=dict(size=12),
+            margin=dict(l=200, r=50, t=100, b=50)  # More space for product names
         )
         
         # Update axes
-        fig.update_xaxes(title_text="Dias até Pedido", row=1, col=1)
-        fig.update_xaxes(title_text="Quantidade", row=2, col=1)
-        fig.update_xaxes(title_text="Investimento (R$)", row=2, col=2)
+        fig.update_xaxes(title_text="Meses até Pedido", row=1, col=1, title_font_size=14)
+        fig.update_xaxes(title_text="Quantidade", row=2, col=1, title_font_size=14)
+        fig.update_xaxes(title_text="Investimento (R$)", row=3, col=1, title_font_size=14, tickformat=",.0f")
         
-        # Add zero line to timeline
-        fig.add_vline(x=0, line_dash="dash", line_color="red", row=1, col=1)
+        # Update y-axes to show all products
+        fig.update_yaxes(tickfont_size=11, row=1, col=1)
+        fig.update_yaxes(visible=False, row=2, col=1)  # Hide y-axis for cleaner look
+        fig.update_yaxes(visible=False, row=3, col=1)  # Hide y-axis for cleaner look
+        
+        # Add zero line to timeline at 4 months (lead time threshold)
+        fig.add_vline(x=4, line_dash="dash", line_color="orange", row=1, col=1)
         fig.add_annotation(
-            x=0, y=len(display_df)/2,
-            text="Prazo Limite",
+            x=4, y=len(display_df)-1,
+            text="Lead Time (4 meses)",
             showarrow=True,
             arrowhead=2,
-            row=1, col=1
+            row=1, col=1,
+            font=dict(color="orange", size=12)
         )
+        
+        # Add zero line
+        fig.add_vline(x=0, line_dash="solid", line_color="red", line_width=2, row=1, col=1)
+        
+        # Extend x-axis range to show negative values for products with less than 4 months
+        max_months = max(display_df['Meses_Ate_Pedido'].max(), 12)
+        fig.update_xaxes(range=[-2, max_months], row=1, col=1)
         
         st.plotly_chart(fig, use_container_width=True)
     
