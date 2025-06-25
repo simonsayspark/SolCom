@@ -272,10 +272,41 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
                         produto = str(row.get('Item', '') or row.get('Modelo', ''))
                     
                     estoque = safe_numeric(row.get('Estoque', 0))
+                    
+                    # Debug: Show what columns we're trying to access
+                    if idx < 3:  # Only debug first 3 rows
+                        st.info(f"🔍 Debug linha {idx + 1} - Produto: {produto}")
+                        st.write("Colunas disponíveis nesta linha:", list(row.index))
+                        
+                        # Show raw values for consumption columns
+                        for col in ['Consumo_6_Meses', 'Consumo 6 Meses', 'Media_6_Meses', 'Média 6 Meses', 'Estoque_Cobertura', 'Estoque Cobertura']:
+                            if col in row.index:
+                                raw_val = row[col]  # Use direct indexing instead of .get()
+                                st.write(f"  • {col}: {raw_val} (tipo: {type(raw_val)})")
+                    
                     # Fix: Look for both underscore and space versions of columns
-                    consumo_6_meses = safe_float(row.get('Consumo_6_Meses', row.get('Consumo 6 Meses', 0.0)))
-                    media_6_meses = safe_float(row.get('Media_6_Meses', row.get('Média 6 Meses', 0.0)))
-                    estoque_cobertura = safe_float(row.get('Estoque_Cobertura', row.get('Estoque Cobertura', 0.0)))
+                    # When iterating with iterrows(), row is a pandas Series, use direct indexing
+                    consumo_6_meses = 0.0
+                    if 'Consumo_6_Meses' in row.index:
+                        consumo_6_meses = safe_float(row['Consumo_6_Meses'])
+                    elif 'Consumo 6 Meses' in row.index:
+                        consumo_6_meses = safe_float(row['Consumo 6 Meses'])
+                    
+                    media_6_meses = 0.0
+                    if 'Media_6_Meses' in row.index:
+                        media_6_meses = safe_float(row['Media_6_Meses'])
+                    elif 'Média 6 Meses' in row.index:
+                        media_6_meses = safe_float(row['Média 6 Meses'])
+                    
+                    estoque_cobertura = 0.0
+                    if 'Estoque_Cobertura' in row.index:
+                        estoque_cobertura = safe_float(row['Estoque_Cobertura'])
+                    elif 'Estoque Cobertura' in row.index:
+                        estoque_cobertura = safe_float(row['Estoque Cobertura'])
+                    
+                    # Debug: Show converted values
+                    if idx < 3:
+                        st.write(f"  Valores convertidos: consumo={consumo_6_meses}, media={media_6_meses}, cobertura={estoque_cobertura}")
                     
                     # NEW: Handle MOQ and UltimoFornecedor columns
                     moq = safe_numeric(row.get('MOQ', 0))
