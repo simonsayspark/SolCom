@@ -246,6 +246,10 @@ def show_analytics_dashboard(produtos_existentes, produtos_novos, empresa="MINIP
         st.info("Nenhum produto para análise visual")
         return
     
+    # Check if current user is admin to show investment-related charts
+    current_user = auth.get_current_user()
+    show_admin_charts = current_user and current_user.get('username') == 'admin'
+    
     # Calculate data for charts
     suggestions_df = calculate_purchase_suggestions(produtos_existentes)
     
@@ -286,28 +290,11 @@ def show_analytics_dashboard(produtos_existentes, produtos_novos, empresa="MINIP
             )
             st.plotly_chart(fig_pie, use_container_width=True)
     
-    # Chart 3: Top products to buy
-    precisa_acao = suggestions_df[
-        (suggestions_df['Meses_Restantes'] <= 3) & 
-        (suggestions_df['Consumo_Mensal'] > 0)
-    ].sort_values('Qtd_Comprar', ascending=False).head(10)
+    # REMOVED: Chart 3: Top products to buy - as requested
     
-    if len(precisa_acao) > 0:
-        fig_top = px.bar(
-            precisa_acao,
-            x='Qtd_Comprar',
-            y='Produto',
-            orientation='h',
-            title='🛒 Top 10 Produtos para Comprar',
-            color='Meses_Restantes',
-            color_continuous_scale='Reds_r'
-        )
-        fig_top.update_layout(height=500)
-        st.plotly_chart(fig_top, use_container_width=True)
-    
-    # Chart 4: Supplier analysis
-    if 'Fornecedor' in suggestions_df.columns:
-        st.subheader("🏭 Análise por Fornecedor")
+    # Chart 4: Supplier analysis - ADMIN ONLY
+    if 'Fornecedor' in suggestions_df.columns and show_admin_charts:
+        st.subheader("🏭 Análise por Fornecedor - Admin")
         
         # Group by supplier
         supplier_analysis = suggestions_df.groupby('Fornecedor').agg({
@@ -322,7 +309,7 @@ def show_analytics_dashboard(produtos_existentes, produtos_novos, empresa="MINIP
         col1, col2 = st.columns(2)
         
         with col1:
-            # Top suppliers by investment
+            # Top suppliers by investment - ADMIN ONLY
             fig_suppliers = px.bar(
                 supplier_analysis.head(10).reset_index(),
                 x='Investimento',
@@ -335,7 +322,7 @@ def show_analytics_dashboard(produtos_existentes, produtos_novos, empresa="MINIP
             st.plotly_chart(fig_suppliers, use_container_width=True)
         
         with col2:
-            # Supplier distribution
+            # Supplier distribution (always visible)
             fig_supplier_pie = px.pie(
                 supplier_analysis.reset_index(),
                 values='Produtos',
@@ -344,51 +331,111 @@ def show_analytics_dashboard(produtos_existentes, produtos_novos, empresa="MINIP
             )
             st.plotly_chart(fig_supplier_pie, use_container_width=True)
         
-        # Show supplier summary table
+        # Show supplier summary table - ADMIN ONLY
         st.dataframe(supplier_analysis, use_container_width=True)
     
-    # Chart 5: Investment timeline
+    elif 'Fornecedor' in suggestions_df.columns and not show_admin_charts:
+        # Show only supplier distribution for non-admin users
+        st.subheader("🏭 Distribuição por Fornecedor")
+        
+        supplier_analysis = suggestions_df.groupby('Fornecedor').agg({
+            'Produto': 'count'
+        }).round(1)
+        supplier_analysis.columns = ['Produtos']
+        supplier_analysis = supplier_analysis.sort_values('Produtos', ascending=False)
+        
+        # Supplier distribution (always visible)
+        fig_supplier_pie = px.pie(
+            supplier_analysis.reset_index(),
+            values='Produtos',
+            names='Fornecedor',
+            title='📊 Distribuição de Produtos por Fornecedor'
+        )
+        st.plotly_chart(fig_supplier_pie, use_container_width=True)
+    
+    # Chart 5: Investment timeline and Product overview
     col1, col2 = st.columns(2)
     
-    with col1:
-        emergencia = suggestions_df[suggestions_df['Meses_Restantes'] <= 1]
-        criticos_chart = suggestions_df[(suggestions_df['Meses_Restantes'] > 1) & (suggestions_df['Meses_Restantes'] <= 3)]
-        atencao = suggestions_df[suggestions_df['Meses_Restantes'] > 3]
-        
-        invest_emergencia = emergencia['Investimento_Estimado'].sum() if len(emergencia) > 0 else 0
-        invest_criticos = criticos_chart['Investimento_Estimado'].sum() if len(criticos_chart) > 0 else 0
-        invest_atencao = atencao['Investimento_Estimado'].sum() if len(atencao) > 0 else 0
-        
-        investment_data = {
-            'Período': ['Este Mês', 'Próximos 3 Meses', 'Longo Prazo'],
-            'Investimento': [invest_emergencia, invest_criticos, invest_atencao]
-        }
-        
-        fig_invest = px.bar(
-            investment_data,
-            x='Período',
-            y='Investimento',
-            title='💰 Investimento por Período',
-            color='Investimento',
-            color_continuous_scale='Reds'
-        )
-        st.plotly_chart(fig_invest, use_container_width=True)
-    
-    with col2:
-        # Product status overview
-        if len(produtos_novos) > 0:
-            overview_data = {
-                'Categoria': ['Produtos Existentes', 'Produtos Novos'],
-                'Quantidade': [len(produtos_existentes), len(produtos_novos)]
+    # Investment timeline - ADMIN ONLY
+    if show_admin_charts:
+        with col1:
+            emergencia = suggestions_df[suggestions_df['Meses_Restantes'] <= 1]
+            criticos_chart = suggestions_df[(suggestions_df['Meses_Restantes'] > 1) & (suggestions_df['Meses_Restantes'] <= 3)]
+            atencao = suggestions_df[suggestions_df['Meses_Restantes'] > 3]
+            
+            invest_emergencia = emergencia['Investimento_Estimado'].sum() if len(emergencia) > 0 else 0
+            invest_criticos = criticos_chart['Investimento_Estimado'].sum() if len(criticos_chart) > 0 else 0
+            invest_atencao = atencao['Investimento_Estimado'].sum() if len(atencao) > 0 else 0
+            
+            investment_data = {
+                'Período': ['Este Mês', 'Próximos 3 Meses', 'Longo Prazo'],
+                'Investimento': [invest_emergencia, invest_criticos, invest_atencao]
             }
             
-            fig_overview = px.pie(
-                overview_data,
-                values='Quantidade',
-                names='Categoria',
-                title='📊 Visão Geral dos Produtos'
+            fig_invest = px.bar(
+                investment_data,
+                x='Período',
+                y='Investimento',
+                title='💰 Investimento por Período - Admin',
+                color='Investimento',
+                color_continuous_scale='Reds'
             )
-            st.plotly_chart(fig_overview, use_container_width=True)
+            st.plotly_chart(fig_invest, use_container_width=True)
+        
+        # Column 2 for admin users
+        with col2:
+            # Product status overview
+            if len(produtos_novos) > 0:
+                overview_data = {
+                    'Categoria': ['Produtos Existentes', 'Produtos Novos'],
+                    'Quantidade': [len(produtos_existentes), len(produtos_novos)]
+                }
+                
+                fig_overview = px.pie(
+                    overview_data,
+                    values='Quantidade',
+                    names='Categoria',
+                    title='📊 Visão Geral dos Produtos'
+                )
+                st.plotly_chart(fig_overview, use_container_width=True)
+            else:
+                # Show total products summary
+                st.metric("📦 Total de Produtos", len(produtos_existentes))
+                st.metric("🚨 Produtos Críticos", muito_critico + critico)
+                st.metric("✅ Produtos OK", ok)
+    
+    else:
+        # For non-admin users, show only product overview in full width
+        if len(produtos_novos) > 0:
+            col1, col2 = st.columns(2)
+            with col1:
+                overview_data = {
+                    'Categoria': ['Produtos Existentes', 'Produtos Novos'],
+                    'Quantidade': [len(produtos_existentes), len(produtos_novos)]
+                }
+                
+                fig_overview = px.pie(
+                    overview_data,
+                    values='Quantidade',
+                    names='Categoria',
+                    title='📊 Visão Geral dos Produtos'
+                )
+                st.plotly_chart(fig_overview, use_container_width=True)
+            
+            with col2:
+                # Show summary metrics for non-admin users
+                st.metric("📦 Total de Produtos", len(produtos_existentes))
+                st.metric("🚨 Produtos Críticos", muito_critico + critico)
+                st.metric("✅ Produtos OK", ok)
+        else:
+            # Show metrics only
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("📦 Total de Produtos", len(produtos_existentes))
+            with col2:
+                st.metric("🚨 Produtos Críticos", muito_critico + critico)
+            with col3:
+                st.metric("✅ Produtos OK", ok)
 
 def show_urgent_contacts(produtos_existentes, empresa="MINIPA"):
     """Show urgent contacts list by company"""
@@ -613,11 +660,10 @@ def show_priority_timeline(df, empresa="MINIPA"):
 
     # Determine if the current user is admin to show investment subplot
     current_user = auth.get_current_user()
-    # Only show investment data for the specific "admin" username, not "minipa"
-    show_investment = current_user and current_user.get('username') == 'admin'
+    show_investment = auth.is_admin(current_user)
     
     # Debug: Show admin status
-    st.info(f"🔍 **Debug Admin Check:** Username: {current_user.get('username') if current_user else 'None'} | Name: {current_user.get('name') if current_user else 'None'} | Role: {current_user.get('role') if current_user else 'None'} | Show Investment: {show_investment}")
+    st.info(f"🔍 **Debug Admin Check:** User: {current_user.get('name') if current_user else 'None'} | Role: {current_user.get('role') if current_user else 'None'} | Show Investment: {show_investment}")
     
     # Debug: Show available columns
     st.info(f"🔍 Colunas disponíveis: {', '.join(df.columns[:15])}...")
