@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import auth
 
 def show_executive_summary(df, produtos_novos, produtos_existentes, empresa="MINIPA"):
     """Resumo executivo dos dados por empresa"""
@@ -614,6 +615,9 @@ def show_priority_timeline(df, empresa="MINIPA"):
     from datetime import datetime, timedelta
     
     st.subheader(f"🎯 Timeline de Compras Prioritário - {empresa}")
+
+    # Determine if the current user is admin to show investment subplot
+    show_investment = auth.is_admin(auth.get_current_user())
     
     # Debug: Show available columns
     st.info(f"🔍 Colunas disponíveis: {', '.join(df.columns[:15])}...")
@@ -1135,15 +1139,21 @@ def show_priority_timeline(df, empresa="MINIPA"):
         st.write(f"🎯 **Produtos no gráfico:** {len(display_df)} | **Altura do gráfico:** {max(1800, len(display_df) * 80)} pixels | **Pixels por produto:** 80")
         
         # Create figure with vertical subplot layout for better visibility
+        rows = 3 if show_investment else 2
+        subplot_titles = [
+            '📅 Timeline de Pedidos (em meses)',
+            '📦 Quantidades por Cenário'
+        ]
+        row_heights = [0.6, 0.4]
+        if show_investment:
+            subplot_titles.append('💰 Investimento por Cenário')
+            row_heights = [0.4, 0.3, 0.3]
+
         fig = make_subplots(
-            rows=3, cols=1,
-            subplot_titles=(
-                '📅 Timeline de Pedidos (em meses)', 
-                '📦 Quantidades por Cenário',
-                '💰 Investimento por Cenário'
-            ),
-            row_heights=[0.4, 0.3, 0.3],  # More balanced heights
-            vertical_spacing=0.08  # Reduced spacing between graphs for tighter layout
+            rows=rows, cols=1,
+            subplot_titles=tuple(subplot_titles),
+            row_heights=row_heights,
+            vertical_spacing=0.08
         )
         
         # 1. Timeline bar chart (main chart) - show in months with stacked bar for expected inventory
@@ -1272,80 +1282,87 @@ def show_priority_timeline(df, empresa="MINIPA"):
             row=2, col=1
         )
         
-        # 3. Investment comparison chart - now on row 3
-        fig.add_trace(
-            go.Bar(
-                y=display_df['Produto'],
-                x=display_df['Investimento_MOQ'],
-                orientation='h',
-                marker_color='#FF6B6B',
-                name='Inv. MOQ',
-                showlegend=True,
-                text=[f'R$ {x:,.0f}' for x in display_df['Investimento_MOQ']],
-                textposition='outside',
-                hovertemplate='<b>%{y}</b><br>Investimento MOQ: R$ %{x:,.2f}<extra></extra>'
-            ),
-            row=3, col=1
-        )
-        
-        fig.add_trace(
-            go.Bar(
-                y=display_df['Produto'],
-                x=display_df['Investimento_Negotiated'],
-                orientation='h',
-                marker_color='#4ECDC4',
-                name='Inv. Negociado',
-                showlegend=True,
-                text=[f'R$ {x:,.0f}' for x in display_df['Investimento_Negotiated']],
-                textposition='outside',
-                hovertemplate='<b>%{y}</b><br>Investimento Negociado: R$ %{x:,.2f}<extra></extra>'
-            ),
-            row=3, col=1
-        )
-        
-        fig.add_trace(
-            go.Bar(
-                y=display_df['Produto'],
-                x=display_df['Investimento_Ideal'],
-                orientation='h',
-                marker_color='#45B7D1',
-                name='Inv. Ideal',
-                showlegend=True,
-                text=[f'R$ {x:,.0f}' for x in display_df['Investimento_Ideal']],
-                textposition='outside',
-                hovertemplate='<b>%{y}</b><br>Investimento Ideal: R$ %{x:,.2f}<extra></extra>'
-            ),
-            row=3, col=1
-        )
+        # 3. Investment comparison chart - only for admins
+        if show_investment:
+            fig.add_trace(
+                go.Bar(
+                    y=display_df['Produto'],
+                    x=display_df['Investimento_MOQ'],
+                    orientation='h',
+                    marker_color='#FF6B6B',
+                    name='Inv. MOQ',
+                    showlegend=True,
+                    text=[f'R$ {x:,.0f}' for x in display_df['Investimento_MOQ']],
+                    textposition='outside',
+                    hovertemplate='<b>%{y}</b><br>Investimento MOQ: R$ %{x:,.2f}<extra></extra>'
+                ),
+                row=3, col=1
+            )
+
+            fig.add_trace(
+                go.Bar(
+                    y=display_df['Produto'],
+                    x=display_df['Investimento_Negotiated'],
+                    orientation='h',
+                    marker_color='#4ECDC4',
+                    name='Inv. Negociado',
+                    showlegend=True,
+                    text=[f'R$ {x:,.0f}' for x in display_df['Investimento_Negotiated']],
+                    textposition='outside',
+                    hovertemplate='<b>%{y}</b><br>Investimento Negociado: R$ %{x:,.2f}<extra></extra>'
+                ),
+                row=3, col=1
+            )
+
+            fig.add_trace(
+                go.Bar(
+                    y=display_df['Produto'],
+                    x=display_df['Investimento_Ideal'],
+                    orientation='h',
+                    marker_color='#45B7D1',
+                    name='Inv. Ideal',
+                    showlegend=True,
+                    text=[f'R$ {x:,.0f}' for x in display_df['Investimento_Ideal']],
+                    textposition='outside',
+                    hovertemplate='<b>%{y}</b><br>Investimento Ideal: R$ %{x:,.2f}<extra></extra>'
+                ),
+                row=3, col=1
+            )
         
         # Update layout - make graphs much taller for better visibility
         # Increased height per product to ensure proper alignment
-        fig.update_layout(
+        layout_kwargs = dict(
             title=f'📊 Timeline de Compras - {empresa}',
-            height=max(1800, len(display_df) * 80),  # Increased from 60 to 80 pixels per product
+            height=max(1800, len(display_df) * 80),
             showlegend=True,
-            barmode='stack',  # Changed to stack for timeline chart
-            font=dict(size=14),  # Larger font
-            margin=dict(l=300, r=100, t=100, b=100),  # Increased left margin for product names
+            barmode='stack',
+            font=dict(size=14),
+            margin=dict(l=300, r=100, t=100, b=100),
             yaxis=dict(tickmode='array', tickvals=display_df['Produto'].tolist(), ticktext=display_df['Produto'].tolist()),
-            yaxis2=dict(tickmode='array', tickvals=display_df['Produto'].tolist(), ticktext=display_df['Produto'].tolist()),
-            yaxis3=dict(tickmode='array', tickvals=display_df['Produto'].tolist(), ticktext=display_df['Produto'].tolist())
+            yaxis2=dict(tickmode='array', tickvals=display_df['Produto'].tolist(), ticktext=display_df['Produto'].tolist())
         )
+        if show_investment:
+            layout_kwargs['yaxis3'] = dict(tickmode='array', tickvals=display_df['Produto'].tolist(), ticktext=display_df['Produto'].tolist())
+
+        fig.update_layout(**layout_kwargs)
         
         # Update axes
         fig.update_xaxes(title_text="Meses até Pedido", row=1, col=1, title_font_size=14)
         fig.update_xaxes(title_text="Quantidade", row=2, col=1, title_font_size=14)
-        fig.update_xaxes(title_text="Investimento (R$)", row=3, col=1, title_font_size=14, tickformat=",.0f")
+        if show_investment:
+            fig.update_xaxes(title_text="Investimento (R$)", row=3, col=1, title_font_size=14, tickformat=",.0f")
         
         # Set barmode for each subplot individually
         # Row 1 (timeline) should be stacked, rows 2 and 3 should be grouped
         fig.update_traces(row=1, col=1, offsetgroup=1)
         fig.update_traces(row=2, col=1, offsetgroup=2)
-        fig.update_traces(row=3, col=1, offsetgroup=3)
+        if show_investment:
+            fig.update_traces(row=3, col=1, offsetgroup=3)
         
         # Update y-axes to show all products with proper alignment
         # Fix alignment issue by ensuring consistent y-axis configuration
-        for row_num in [1, 2, 3]:
+        rows_iter = [1, 2] + ([3] if show_investment else [])
+        for row_num in rows_iter:
             fig.update_yaxes(
                 tickfont_size=13, 
                 row=row_num, 
