@@ -4,6 +4,58 @@ from datetime import datetime, timedelta
 from bd.column_mapping import apply_column_remap
 
 from .analytics_utils import show_executive_summary, calculate_purchase_suggestions, show_purchase_list, show_analytics_dashboard, show_urgent_contacts, show_tabela_geral, show_priority_timeline
+
+
+@st.cache_data(ttl=604800)
+def preprocess_analytics_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize column names and fill missing fields.
+
+    The processed dataframe is cached for one week so the graphs and
+    tables reuse the same data without repeated computation.
+    """
+    df_processed = df.copy()
+    df_processed, _ = apply_column_remap(df_processed)
+    df_processed = df_processed.rename(columns={
+        'Consumo_6_Meses': 'Consumo 6 Meses',
+        'Media_6_Meses': 'Média 6 Meses',
+        'Estoque_Cobertura': 'Estoque Cobertura',
+        'ultimo_fornecedor': 'UltimoFornecedor',
+        'Preco_Unitario': 'preco_unitario',
+        'Qtde_Embarque': 'Qtde Embarque',
+        'Compras_Ate_30_Dias': 'Compras Até 30 Dias',
+        'Compras_31_60_Dias': 'Compras 31 a 60 Dias',
+        'Compras_61_90_Dias': 'Compras 61 a 90 Dias',
+        'Compras_Mais_90_Dias': 'Compras > 90 Dias',
+        'Qtde_Tot_Compras': 'Qtde Tot Compras'
+    })
+
+    if 'Média 6 Meses' in df_processed.columns and 'monthly_volume' in df_processed.columns:
+        media_sum = df_processed['Média 6 Meses'].sum()
+        valid_media_count = len(df_processed[df_processed['Média 6 Meses'] > 0])
+        if media_sum == 0 and valid_media_count == 0 and df_processed['monthly_volume'].sum() > 0:
+            df_processed['Média 6 Meses'] = df_processed['monthly_volume']
+
+    if 'Media_6_Meses' in df_processed.columns and 'Média 6 Meses' not in df_processed.columns:
+        df_processed['Média 6 Meses'] = df_processed['Media_6_Meses']
+
+    if 'Consumo 6 Meses' in df_processed.columns and 'monthly_volume' in df_processed.columns:
+        if df_processed['Consumo 6 Meses'].sum() == 0 and df_processed['monthly_volume'].sum() > 0:
+            df_processed['Consumo 6 Meses'] = df_processed['monthly_volume']
+
+    if 'UltimoFornecedor' in df_processed.columns:
+        df_processed['UltimoFornecedor'] = df_processed['UltimoFornecedor'].fillna('Brazil')
+        df_processed.loc[df_processed['UltimoFornecedor'].str.strip() == '', 'UltimoFornecedor'] = 'Brazil'
+        df_processed.loc[df_processed['UltimoFornecedor'].str.lower() == 'nan', 'UltimoFornecedor'] = 'Brazil'
+
+    if 'Estoque Cobertura' not in df_processed.columns:
+        if 'Estoque' in df_processed.columns and 'Média 6 Meses' in df_processed.columns:
+            df_processed['Estoque Cobertura'] = df_processed.apply(
+                lambda row: row['Estoque'] / row['Média 6 Meses'] if row['Média 6 Meses'] > 0 else 999,
+                axis=1
+            )
+
+    return df_processed
+
 def load_page():
     """Análise avançada de dados Excel - Sistema Multi-Empresa de Gestão de Estoque"""
     
@@ -236,87 +288,10 @@ def load_page():
 
     # Only show analysis if data is loaded (either from Snowflake or local upload)
     if df is not None:
-        # Handle different column name formats using shared mapping
-        df_processed = df.copy()
-        df_processed, _ = apply_column_remap(df_processed)
-        df_processed = df_processed.rename(columns={
-            'Consumo_6_Meses': 'Consumo 6 Meses',
-            'Media_6_Meses': 'Média 6 Meses',
-            'Estoque_Cobertura': 'Estoque Cobertura',
-            'ultimo_fornecedor': 'UltimoFornecedor',
-            'Preco_Unitario': 'preco_unitario',
-            'Qtde_Embarque': 'Qtde Embarque',
-            'Compras_Ate_30_Dias': 'Compras Até 30 Dias',
-            'Compras_31_60_Dias': 'Compras 31 a 60 Dias',
-            'Compras_61_90_Dias': 'Compras 61 a 90 Dias',
-            'Compras_Mais_90_Dias': 'Compras > 90 Dias',
-            'Qtde_Tot_Compras': 'Qtde Tot Compras'
-        })
+        # Preprocess dataframe with caching to avoid recomputation
+        df_processed = preprocess_analytics_dataframe(df)
         
-        # Handle merged Excel format - if Média 6 Meses is 0, try monthly_volume
-        if 'Média 6 Meses' in df_processed.columns and 'monthly_volume' in df_processed.columns:
-            # Check if Média 6 Meses column has all zeros or is empty
-            media_sum = df_processed['Média 6 Meses'].sum()
-            valid_media_count = len(df_processed[df_processed['Média 6 Meses'] > 0])
-            
-            # Only use monthly_volume if Média 6 Meses is truly empty/zero
-            if media_sum == 0 and valid_media_count == 0 and df_processed['monthly_volume'].sum() > 0:
-                # st.info("📊 Detectado formato Merged Excel - usando monthly_volume como consumo mensal")  # DEBUG: Commented out
-                df_processed['Média 6 Meses'] = df_processed['monthly_volume']
-            # elif valid_media_count > 0:
-                # st.success(f"✅ Usando dados originais de Média 6 Meses ({valid_media_count} produtos com consumo)")  # DEBUG: Commented out
-        
-        # Also handle Media_6_Meses (with underscore) mapping to Média 6 Meses (with space)
-        if 'Media_6_Meses' in df_processed.columns and 'Média 6 Meses' not in df_processed.columns:
-            df_processed['Média 6 Meses'] = df_processed['Media_6_Meses']
-            # st.info("📊 Mapeando Media_6_Meses → Média 6 Meses")  # DEBUG: Commented out
-        
-        # Also copy monthly_volume to Consumo 6 Meses if that's empty
-        if 'Consumo 6 Meses' in df_processed.columns and 'monthly_volume' in df_processed.columns:
-            if df_processed['Consumo 6 Meses'].sum() == 0 and df_processed['monthly_volume'].sum() > 0:
-                df_processed['Consumo 6 Meses'] = df_processed['monthly_volume']
-        
-        # Ensure UltimoFornecedor has proper values (not empty/nan)
-        if 'UltimoFornecedor' in df_processed.columns:
-            df_processed['UltimoFornecedor'] = df_processed['UltimoFornecedor'].fillna('Brazil')
-            df_processed.loc[df_processed['UltimoFornecedor'].str.strip() == '', 'UltimoFornecedor'] = 'Brazil'
-            df_processed.loc[df_processed['UltimoFornecedor'].str.lower() == 'nan', 'UltimoFornecedor'] = 'Brazil'
-        
-        # Calculate Estoque Cobertura if missing
-        if 'Estoque Cobertura' not in df_processed.columns:
-            if 'Estoque' in df_processed.columns and 'Média 6 Meses' in df_processed.columns:
-                df_processed['Estoque Cobertura'] = df_processed.apply(
-                    lambda row: row['Estoque'] / row['Média 6 Meses'] if row['Média 6 Meses'] > 0 else 999, 
-                    axis=1
-                )
-        
-        # # DEBUG: Show column mapping info for merged Excel
-        # if 'monthly_volume' in df_processed.columns or 'priority_score' in df_processed.columns:
-        #     with st.expander("🔍 Mapeamento de Colunas do Merged Excel", expanded=False):
-        #         col1, col2 = st.columns(2)
-        #         with col1:
-        #             st.write("**Colunas Detectadas:**")
-        #             if 'Media_6_Meses' in df_processed.columns:
-        #                 st.write(f"✅ Media_6_Meses presente ({len(df_processed[df_processed['Media_6_Meses'] > 0])} valores > 0)")
-        #             if 'Média 6 Meses' in df_processed.columns:
-        #                 st.write(f"✅ Média 6 Meses presente ({len(df_processed[df_processed['Média 6 Meses'] > 0])} valores > 0)")
-        #             if 'monthly_volume' in df_processed.columns:
-        #                 if 'Média 6 Meses' in df_processed.columns and df_processed['Média 6 Meses'].sum() == 0:
-        #                     st.write(f"✅ monthly_volume → Média 6 Meses (fallback)")
-        #                 else:
-        #                     st.write(f"✅ monthly_volume presente (não usado)")
-        #             if 'UltimoFornecedor' in df_processed.columns:
-        #                 st.write(f"✅ UltimoFornecedor presente")
-        #             if 'preco_unitario' in df_processed.columns:
-        #                 st.write(f"✅ preco_unitario presente")
-        #             if 'priority_score' in df_processed.columns:
-        #                 st.write(f"✅ priority_score presente")
-        #         with col2:
-        #             st.write("**Valores de Exemplo:**")
-        #             if 'monthly_volume' in df_processed.columns:
-        #                 st.write(f"monthly_volume: {df_processed['monthly_volume'].head(3).tolist()}")
-        #             if 'UltimoFornecedor' in df_processed.columns:
-        #                 st.write(f"UltimoFornecedor: {df_processed['UltimoFornecedor'].head(3).tolist()}")
+        # Preprocessing already handles column normalization and coverage calculations
         
         # Use processed dataframe
         df = df_processed
