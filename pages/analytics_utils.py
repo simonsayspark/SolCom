@@ -1138,7 +1138,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 '💰 Investimento por Cenário'
             ),
             row_heights=[0.4, 0.3, 0.3],  # More balanced heights
-            vertical_spacing=0.15  # More space between graphs
+            vertical_spacing=0.08  # Reduced spacing between graphs for tighter layout
         )
         
         # 1. Timeline bar chart (main chart) - show in months with stacked bar for expected inventory
