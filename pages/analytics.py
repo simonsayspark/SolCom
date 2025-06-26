@@ -127,47 +127,47 @@ def load_page():
             #             if 'UltimoFornecedor' in df.columns:
             #                 st.write(f"UltimoFornecedor: {df['UltimoFornecedor'].head(3).tolist()}")
             
-            # Handle merged Excel format - if Média 6 Meses is 0, try monthly_volume
-            if 'Média 6 Meses' in df.columns and 'monthly_volume' in df.columns:
-                # Check if Média 6 Meses column has all zeros or is empty
-                media_sum = df['Média 6 Meses'].sum()
-                valid_media_count = len(df[df['Média 6 Meses'] > 0])
+        #     # Handle merged Excel format - if Média 6 Meses is 0, try monthly_volume
+        #     if 'Média 6 Meses' in df.columns and 'monthly_volume' in df.columns:
+        #         # Check if Média 6 Meses column has all zeros or is empty
+        #         media_sum = df['Média 6 Meses'].sum()
+        #         valid_media_count = len(df[df['Média 6 Meses'] > 0])
                 
-                # Only use monthly_volume if Média 6 Meses is truly empty/zero
-                if media_sum == 0 and valid_media_count == 0 and df['monthly_volume'].sum() > 0:
-                    st.info("📊 Detectado formato Merged Excel - usando monthly_volume como consumo mensal")
-                    df['Média 6 Meses'] = df['monthly_volume']
-                elif valid_media_count > 0:
-                    st.success(f"✅ Usando dados originais de Média 6 Meses ({valid_media_count} produtos com consumo)")
+        #         # Only use monthly_volume if Média 6 Meses is truly empty/zero
+        #         if media_sum == 0 and valid_media_count == 0 and df['monthly_volume'].sum() > 0:
+        #             st.info("📊 Detectado formato Merged Excel - usando monthly_volume como consumo mensal")
+        #             df['Média 6 Meses'] = df['monthly_volume']
+        #         elif valid_media_count > 0:
+        #             st.success(f"✅ Usando dados originais de Média 6 Meses ({valid_media_count} produtos com consumo)")
             
-            # Also handle Media_6_Meses (with underscore) mapping to Média 6 Meses (with space)
-            if 'Media_6_Meses' in df.columns and 'Média 6 Meses' not in df.columns:
-                df['Média 6 Meses'] = df['Media_6_Meses']
-                st.info("📊 Mapeando Media_6_Meses → Média 6 Meses")
+        #     # Also handle Media_6_Meses (with underscore) mapping to Média 6 Meses (with space)
+        #     if 'Media_6_Meses' in df.columns and 'Média 6 Meses' not in df.columns:
+        #         df['Média 6 Meses'] = df['Media_6_Meses']
+        #         st.info("📊 Mapeando Media_6_Meses → Média 6 Meses")
             
-            # Also copy monthly_volume to Consumo 6 Meses if that's empty
-            if 'Consumo 6 Meses' in df.columns and 'monthly_volume' in df.columns:
-                if df['Consumo 6 Meses'].sum() == 0 and df['monthly_volume'].sum() > 0:
-                    df['Consumo 6 Meses'] = df['monthly_volume']
+        #     # Also copy monthly_volume to Consumo 6 Meses if that's empty
+        #     if 'Consumo 6 Meses' in df.columns and 'monthly_volume' in df.columns:
+        #         if df['Consumo 6 Meses'].sum() == 0 and df['monthly_volume'].sum() > 0:
+        #             df['Consumo 6 Meses'] = df['monthly_volume']
             
-            # Ensure UltimoFornecedor has proper values (not empty/nan)
-            if 'UltimoFornecedor' in df.columns:
-                df['UltimoFornecedor'] = df['UltimoFornecedor'].fillna('Brazil')
-                df.loc[df['UltimoFornecedor'].str.strip() == '', 'UltimoFornecedor'] = 'Brazil'
-                df.loc[df['UltimoFornecedor'].str.lower() == 'nan', 'UltimoFornecedor'] = 'Brazil'
+        #     # Ensure UltimoFornecedor has proper values (not empty/nan)
+        #     if 'UltimoFornecedor' in df.columns:
+        #         df['UltimoFornecedor'] = df['UltimoFornecedor'].fillna('Brazil')
+        #         df.loc[df['UltimoFornecedor'].str.strip() == '', 'UltimoFornecedor'] = 'Brazil'
+        #         df.loc[df['UltimoFornecedor'].str.lower() == 'nan', 'UltimoFornecedor'] = 'Brazil'
             
-            # Calculate Estoque Cobertura if missing
-            if 'Estoque Cobertura' not in df.columns:
-                if 'Estoque' in df.columns and 'Média 6 Meses' in df.columns:
-                    df['Estoque Cobertura'] = df.apply(
-                        lambda row: row['Estoque'] / row['Média 6 Meses'] if row['Média 6 Meses'] > 0 else 999, 
-                        axis=1
-                    )
+        #     # Calculate Estoque Cobertura if missing
+        #     if 'Estoque Cobertura' not in df.columns:
+        #         if 'Estoque' in df.columns and 'Média 6 Meses' in df.columns:
+        #             df['Estoque Cobertura'] = df.apply(
+        #                 lambda row: row['Estoque'] / row['Média 6 Meses'] if row['Média 6 Meses'] > 0 else 999, 
+        #                 axis=1
+        #             )
         
-        else:
-            st.info(f"💡 Nenhum dado de análise encontrado para {empresa_selecionada}.")
-            st.markdown("👉 **Vá para 'Upload de Dados' e selecione '📊 Análise de Estoque (Export)' para enviar dados para esta empresa primeiro.**")
-            df = None
+        # else:
+        #     st.info(f"💡 Nenhum dado de análise encontrado para {empresa_selecionada}.")
+        #     st.markdown("👉 **Vá para 'Upload de Dados' e selecione '📊 Análise de Estoque (Export)' para enviar dados para esta empresa primeiro.**")
+        #     df = None
             
     except ImportError:
         st.warning("⚠️ Snowflake não configurado. Usando upload local temporário.")
