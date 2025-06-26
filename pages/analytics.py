@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 from datetime import datetime, timedelta
+from bd.column_mapping import apply_column_remap
 
 def load_page():
     """Análise avançada de dados Excel - Sistema Multi-Empresa de Gestão de Estoque"""
@@ -236,24 +237,22 @@ def load_page():
 
     # Only show analysis if data is loaded (either from Snowflake or local upload)
     if df is not None:
-        # Handle different column name formats (timeline vs analytics)
+        # Handle different column name formats using shared mapping
         df_processed = df.copy()
-        
-        # Map timeline columns to analytics columns if needed
-        column_mapping = {
-            'Item': 'Produto',
-            'Modelo': 'Produto', 
-            'Estoque_Total': 'Estoque',
-            'Vendas_Medias': 'Média 6 Meses',
-            'UltimoFor': 'UltimoFornecedor',  # NEW MAPPING
-            'ultimo_fornecedor': 'UltimoFornecedor',  # Merged Excel variation
-            'Preco_Unitario': 'preco_unitario',  # Ensure price mapping
-            'Preco_FOB_Unitario': 'preco_unitario'
-        }
-        
-        for old_col, new_col in column_mapping.items():
-            if old_col in df.columns and new_col not in df.columns:
-                df_processed[new_col] = df[old_col]
+        df_processed, _ = apply_column_remap(df_processed)
+        df_processed = df_processed.rename(columns={
+            'Consumo_6_Meses': 'Consumo 6 Meses',
+            'Media_6_Meses': 'Média 6 Meses',
+            'Estoque_Cobertura': 'Estoque Cobertura',
+            'ultimo_fornecedor': 'UltimoFornecedor',
+            'Preco_Unitario': 'preco_unitario',
+            'Qtde_Embarque': 'Qtde Embarque',
+            'Compras_Ate_30_Dias': 'Compras Até 30 Dias',
+            'Compras_31_60_Dias': 'Compras 31 a 60 Dias',
+            'Compras_61_90_Dias': 'Compras 61 a 90 Dias',
+            'Compras_Mais_90_Dias': 'Compras > 90 Dias',
+            'Qtde_Tot_Compras': 'Qtde Tot Compras'
+        })
         
         # Handle merged Excel format - if Média 6 Meses is 0, try monthly_volume
         if 'Média 6 Meses' in df_processed.columns and 'monthly_volume' in df_processed.columns:

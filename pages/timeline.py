@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 import plotly.colors as pc
+from bd.column_mapping import apply_column_remap
 
 def detect_excel_headers(uploaded_file):
     """Smart detection of Excel headers for different file formats"""
@@ -89,20 +90,8 @@ def carregar_dados(uploaded_file=None):
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
-        # Rename columns - support multiple variations
-        df = df.rename(columns={
-            'Preço FOB\nUnitário': 'Preco_Unitario',
-            'Preço FOB Unitário': 'Preco_Unitario',
-            'Preco FOB Unitario': 'Preco_Unitario',
-            'Estoque\nTotal ': 'Estoque_Total',
-            'Estoque Total': 'Estoque_Total',
-            'In Transit\nShipt': 'In_Transit',
-            'In Transit Shipt': 'In_Transit',
-            'Avg Sales\n': 'Vendas_Medias',
-            'Avg Sales': 'Vendas_Medias',
-            'Previsão Total com New PO': 'Previsao_Total_New_Pos',
-            'Previsão Total com New POs': 'Previsao_Total_New_Pos'
-        })
+        # Normalize column names using shared mapping
+        df, _ = apply_column_remap(df)
         
         return df
     except Exception as e:
