@@ -11,7 +11,7 @@ def load_page():
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         st.title("📊 Análise de Estoque Multi-Empresa")
-        st.markdown("**Ferramenta prática para gestão de estoque focada em AÇÃO e DECISÃO**")
+      
     
     with col2:
         # Company selector
@@ -93,39 +93,39 @@ def load_page():
             version_text = f"v{selected_version_id}" if selected_version_id else "ativa"
             st.success(f"✅ {empresa_selecionada} - Análise {version_text}: {len(df)} produtos carregados")
             
-            # Check if data_upload column exists before accessing it
-            if 'data_upload' in df.columns:
-                st.info(f"📅 Data do upload: {df['data_upload'].max()}")
-            else:
-                st.info("📅 Dados de análise carregados da nuvem")
+            # # Check if data_upload column exists before accessing it
+            # if 'data_upload' in df.columns:
+            #     st.info(f"📅 Data do upload: {df['data_upload'].max()}")
+            # else:
+            #     st.info("📅 Dados de análise carregados da nuvem")
                 
-            # Show column mapping info for merged Excel
-            if 'monthly_volume' in df.columns or 'priority_score' in df.columns:
-                with st.expander("🔍 Mapeamento de Colunas do Merged Excel", expanded=False):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.write("**Colunas Detectadas:**")
-                        if 'Media_6_Meses' in df.columns:
-                            st.write(f"✅ Media_6_Meses presente ({len(df[df['Media_6_Meses'] > 0])} valores > 0)")
-                        if 'Média 6 Meses' in df.columns:
-                            st.write(f"✅ Média 6 Meses presente ({len(df[df['Média 6 Meses'] > 0])} valores > 0)")
-                        if 'monthly_volume' in df.columns:
-                            if 'Média 6 Meses' in df.columns and df['Média 6 Meses'].sum() == 0:
-                                st.write(f"✅ monthly_volume → Média 6 Meses (fallback)")
-                            else:
-                                st.write(f"✅ monthly_volume presente (não usado)")
-                        if 'UltimoFornecedor' in df.columns:
-                            st.write(f"✅ UltimoFornecedor presente")
-                        if 'preco_unitario' in df.columns:
-                            st.write(f"✅ preco_unitario presente")
-                        if 'priority_score' in df.columns:
-                            st.write(f"✅ priority_score presente")
-                    with col2:
-                        st.write("**Valores de Exemplo:**")
-                        if 'monthly_volume' in df.columns:
-                            st.write(f"monthly_volume: {df['monthly_volume'].head(3).tolist()}")
-                        if 'UltimoFornecedor' in df.columns:
-                            st.write(f"UltimoFornecedor: {df['UltimoFornecedor'].head(3).tolist()}")
+            # # Show column mapping info for merged Excel
+            # if 'monthly_volume' in df.columns or 'priority_score' in df.columns:
+            #     with st.expander("🔍 Mapeamento de Colunas do Merged Excel", expanded=False):
+            #         col1, col2 = st.columns(2)
+            #         with col1:
+            #             st.write("**Colunas Detectadas:**")
+            #             if 'Media_6_Meses' in df.columns:
+            #                 st.write(f"✅ Media_6_Meses presente ({len(df[df['Media_6_Meses'] > 0])} valores > 0)")
+            #             if 'Média 6 Meses' in df.columns:
+            #                 st.write(f"✅ Média 6 Meses presente ({len(df[df['Média 6 Meses'] > 0])} valores > 0)")
+            #             if 'monthly_volume' in df.columns:
+            #                 if 'Média 6 Meses' in df.columns and df['Média 6 Meses'].sum() == 0:
+            #                     st.write(f"✅ monthly_volume → Média 6 Meses (fallback)")
+            #                 else:
+            #                     st.write(f"✅ monthly_volume presente (não usado)")
+            #             if 'UltimoFornecedor' in df.columns:
+            #                 st.write(f"✅ UltimoFornecedor presente")
+            #             if 'preco_unitario' in df.columns:
+            #                 st.write(f"✅ preco_unitario presente")
+            #             if 'priority_score' in df.columns:
+            #                 st.write(f"✅ priority_score presente")
+            #         with col2:
+            #             st.write("**Valores de Exemplo:**")
+            #             if 'monthly_volume' in df.columns:
+            #                 st.write(f"monthly_volume: {df['monthly_volume'].head(3).tolist()}")
+            #             if 'UltimoFornecedor' in df.columns:
+            #                 st.write(f"UltimoFornecedor: {df['UltimoFornecedor'].head(3).tolist()}")
             
             # Handle merged Excel format - if Média 6 Meses is 0, try monthly_volume
             if 'Média 6 Meses' in df.columns and 'monthly_volume' in df.columns:
