@@ -660,13 +660,11 @@ def show_priority_timeline(df, empresa="MINIPA"):
 
     # Determine if the current user is admin to show investment subplot
     current_user = auth.get_current_user()
-    show_investment = auth.is_admin(current_user)
-    
-    # Debug: Show admin status
-    st.info(f"🔍 **Debug Admin Check:** User: {current_user.get('name') if current_user else 'None'} | Role: {current_user.get('role') if current_user else 'None'} | Show Investment: {show_investment}")
+    # Only show investment data for the specific "admin" username, not "minipa"
+    show_investment = current_user and current_user.get('username') == 'admin'
     
     # Debug: Show available columns
-    st.info(f"🔍 Colunas disponíveis: {', '.join(df.columns[:15])}...")
+    # st.info(f"🔍 Colunas disponíveis: {', '.join(df.columns[:15])}...")
     
     # Enhanced priority data detection with debugging
     has_priority_score = 'priority_score' in df.columns
@@ -676,11 +674,11 @@ def show_priority_timeline(df, empresa="MINIPA"):
     if has_priority_score:
         priority_values = df['priority_score'].dropna()
         has_priority_values = len(priority_values) > 0
-        st.info(f"🔍 Priority Score: Coluna existe: {has_priority_score}, Valores não-nulos: {len(priority_values)}")
+        # st.info(f"🔍 Priority Score: Coluna existe: {has_priority_score}, Valores não-nulos: {len(priority_values)}")
     
     if has_criticality:
         criticality_values = df['criticality'].dropna()
-        st.info(f"🔍 Criticality: Coluna existe: {has_criticality}, Valores não-nulos: {len(criticality_values)}")
+        # st.info(f"🔍 Criticality: Coluna existe: {has_criticality}, Valores não-nulos: {len(criticality_values)}")
     
     # Check if we have priority data - more flexible detection
     has_priority_data = (has_priority_score and has_priority_values) or (has_criticality and len(df['criticality'].dropna()) > 0)
@@ -689,34 +687,34 @@ def show_priority_timeline(df, empresa="MINIPA"):
         st.success("✅ Dados de prioridade detectados! Usando análise prioritária 85/15.")
     else:
         st.info("📊 Dados de prioridade não encontrados. Usando análise básica de timeline.")
-        if has_priority_score:
-            st.info("💡 Coluna priority_score existe mas não contém valores válidos.")
-        if has_criticality:
-            st.info("💡 Coluna criticality existe mas não contém valores válidos.")
+        # if has_priority_score:
+        #     st.info("💡 Coluna priority_score existe mas não contém valores válidos.")
+        # if has_criticality:
+        #     st.info("💡 Coluna criticality existe mas não contém valores válidos.")
     
     # Debug: Show which consumption columns are found
-    with st.expander("🔍 Debug: Análise de Colunas", expanded=False):
-        st.write("**Colunas de consumo detectadas:**")
-        for col in ['Média 6 Meses', 'Media_6_Meses', 'media_6_meses', 'Media 6 Meses', 'Consumo 6 Meses', 'consumo_6_meses']:
-            if col in df.columns:
-                non_zero = len(df[df[col] > 0]) if pd.api.types.is_numeric_dtype(df[col]) else 0
-                total = len(df[df[col].notna()]) if col in df.columns else 0
-                st.write(f"- {col}: {non_zero} valores > 0 de {total} total")
-        
-        if 'monthly_volume' in df.columns:
-            non_zero = len(df[df['monthly_volume'] > 0]) if pd.api.types.is_numeric_dtype(df['monthly_volume']) else 0
-            total = len(df[df['monthly_volume'].notna()])
-            st.write(f"- monthly_volume: {non_zero} valores > 0 de {total} total")
-        
-        # Show sample of first product's data
-        if len(df) > 0:
-            st.write("\n**Exemplo do primeiro produto:**")
-            first_row = df.iloc[0]
-            st.write(f"- Produto: {first_row.get('Produto', 'N/A')}")
-            st.write(f"- Estoque: {first_row.get('Estoque', 'N/A')}")
-            for col in ['Média 6 Meses', 'Media_6_Meses', 'media_6_meses']:
-                if col in first_row.index:
-                    st.write(f"- {col}: {first_row.get(col, 'N/A')}")
+    # with st.expander("🔍 Debug: Análise de Colunas", expanded=False):
+    #     st.write("**Colunas de consumo detectadas:**")
+    #     for col in ['Média 6 Meses', 'Media_6_Meses', 'media_6_meses', 'Media 6 Meses', 'Consumo 6 Meses', 'consumo_6_meses']:
+    #         if col in df.columns:
+    #             non_zero = len(df[df[col] > 0]) if pd.api.types.is_numeric_dtype(df[col]) else 0
+    #             total = len(df[df[col].notna()]) if col in df.columns else 0
+    #             st.write(f"- {col}: {non_zero} valores > 0 de {total} total")
+    #     
+    #     if 'monthly_volume' in df.columns:
+    #         non_zero = len(df[df['monthly_volume'] > 0]) if pd.api.types.is_numeric_dtype(df['monthly_volume']) else 0
+    #         total = len(df[df['monthly_volume'].notna()])
+    #         st.write(f"- monthly_volume: {non_zero} valores > 0 de {total} total")
+    #     
+    #     # Show sample of first product's data
+    #     if len(df) > 0:
+    #         st.write("\n**Exemplo do primeiro produto:**")
+    #         first_row = df.iloc[0]
+    #         st.write(f"- Produto: {first_row.get('Produto', 'N/A')}")
+    #         st.write(f"- Estoque: {first_row.get('Estoque', 'N/A')}")
+    #         for col in ['Média 6 Meses', 'Media_6_Meses', 'media_6_meses']:
+    #             if col in first_row.index:
+    #                 st.write(f"- {col}: {first_row.get(col, 'N/A')}")
     
     # Prepare data for timeline analysis
     timeline_data = []
