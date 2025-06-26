@@ -95,13 +95,8 @@ def show_executive_summary(df, produtos_novos, produtos_existentes, empresa="MIN
         if criticos == 0 and alerta == 0:
             st.success("✅ Situação de estoque sob controle!")
 
-@st.cache_data(ttl=604800)
 def calculate_purchase_suggestions(produtos_existentes):
-    """Calculate purchase suggestions for products.
-
-    Results are cached for one week to avoid recomputation when the
-    analytics page is opened frequently.
-    """
+    """Calculate purchase suggestions for products"""
     
     def calcular_quando_vai_acabar(estoque, consumo_mensal):
         if consumo_mensal <= 0:
