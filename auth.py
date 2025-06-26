@@ -44,6 +44,14 @@ def create_default_users():
             "department": "Administração",
             "created": datetime.now().isoformat(),
             "last_login": None
+        },
+        "admin": {
+            "password": hash_password("3347"),
+            "role": "admin",
+            "name": "MINIPA Admin",
+            "department": "Administração",
+            "created": datetime.now().isoformat(),
+            "last_login": None
         }
     }
     save_users(default_users)
