@@ -9,6 +9,7 @@ from datetime import datetime
 from .snowflake_connection import get_snowflake_connection
 from .snowflake_versions import create_new_version
 from .snowflake_tables import create_tables
+from .column_mapping import apply_column_remap
 
 def analyze_excel_structure(uploaded_file):
     """
@@ -194,6 +195,7 @@ def upload_excel_to_snowflake(df, arquivo_nome, empresa="MINIPA", usuario="minip
         # Clean the dataframe - remove NaN and empty rows
         df_clean = df.copy()
         df_clean = df_clean.dropna(how='all')
+        df_clean, _ = apply_column_remap(df_clean)
         
         # Get actual column names from the dataframe
         available_columns = list(df_clean.columns)

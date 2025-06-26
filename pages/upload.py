@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+from bd.column_mapping import apply_column_remap
 
 def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
     """Advanced Excel analysis and processing based on actual user table structure"""
@@ -57,99 +58,11 @@ def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
             # 🔧 CRITICAL FIX: Apply column renaming BEFORE upload to fix zero prices issue
             st.info("🔄 Padronizando nomes das colunas...")
             
-            # Column renaming dictionary (from timeline.py)
-            colunas_rename = {
-                # Price columns - CRITICAL for fixing zero prices
-                'Preço FOB\nUnitário': 'Preco_Unitario',
-                'Preço FOB Unitário': 'Preco_Unitario', 
-                'Preco FOB Unitario': 'Preco_Unitario',
-                'Preço Unitário': 'Preco_Unitario',
-                'Preço FOB': 'Preco_Unitario',
-                'Preço Unit.': 'Preco_Unitario',
-                'Price': 'Preco_Unitario',
-                'preco_unitario': 'Preco_Unitario',  # Standard merged column
-                
-                # Other standard columns
-                'Fornecedor\n': 'Fornecedor',
-                'QTD\n': 'QTD',
-                'Modelo\n': 'Modelo',
-                'Estoque Total': 'Estoque_Total',
-                'Estoque Total\n': 'Estoque_Total',
-                'Estoque\nTotal': 'Estoque_Total',
-                'Estoque\nTotal ': 'Estoque_Total',
-                'Estoque\r\nTotal': 'Estoque_Total',
-                'In Transit\n': 'In_Transit',
-                'In\nTransit': 'In_Transit',
-                'Avg Sales\n': 'Vendas_Medias',
-                'Avg Sales': 'Vendas_Medias',
-                'Vendas Médias': 'Vendas_Medias',
-                'CBM\n': 'CBM',
-                'MOQ\n': 'MOQ',
-                
-                # Analytics specific columns
-                'Estoque Cobertura': 'Estoque_Cobertura',
-                'Consumo 6 Meses': 'Consumo_6_Meses', 
-                'Média 6 Meses': 'Media_6_Meses',
-                'UltimoFor': 'ultimo_fornecedor',
-                'UltimoFornecedor': 'ultimo_fornecedor',
-                
-                # 🔧 FIX: Add missing Previsão Total column mapping
-                'Previsão Total com New PO': 'Previsao_Total_New_Pos',
-                'Previsão Total com New POs': 'Previsao_Total_New_Pos',
-                'Previsão Total': 'Previsao_Total_New_Pos',
-                'Previsao Total': 'Previsao_Total_New_Pos',
-                'Previsão': 'Previsao',
-                
-                # NEW: Merged Excel columns from priority analysis (only map variations, not exact matches)
-                'produto': 'Produto',  # Only lowercase to uppercase
-                'Qtde Embarque': 'Qtde_Embarque',
-                'Compras Até 30 Dias': 'Compras_Ate_30_Dias',
-                'Compras 31 a 60 Dias': 'Compras_31_60_Dias',
-                'Compras 61 a 90 Dias': 'Compras_61_90_Dias',
-                'Compras > 90 Dias': 'Compras_Mais_90_Dias',
-                'Qtde Tot Compras': 'Qtde_Tot_Compras'
-                
-                # NOTE: Removed redundant mappings like 'Produto': 'Produto' that cause duplicates
-                # Priority analysis columns are already correctly named in merged Excel files
-            }
-            
-            # Apply renaming - IMPROVED LOGIC to avoid duplicates
             original_columns = list(df_full.columns)
-            
-            # Create a safe renaming dictionary that avoids duplicates
-            safe_rename = {}
-            existing_columns = set(original_columns)
-            target_columns = set()
-            
-            for old_col, new_col in colunas_rename.items():
-                if old_col in existing_columns:
-                    # Only add the mapping if it won't create a duplicate
-                    if new_col not in existing_columns or old_col == new_col:
-                        if new_col not in target_columns:
-                            safe_rename[old_col] = new_col
-                            target_columns.add(new_col)
-                        else:
-                            # Skip this mapping to avoid duplicate
-                            st.warning(f"⚠️ Skipping duplicate mapping: '{old_col}' → '{new_col}'")
-            
-            # Apply the safe renaming
-            df_full = df_full.rename(columns=safe_rename)
+            df_full, change_pairs = apply_column_remap(df_full)
             renamed_columns = list(df_full.columns)
-            
-            # 🔧 CHECK for duplicate columns after renaming
-            if len(renamed_columns) != len(set(renamed_columns)):
-                duplicate_cols = [col for col in renamed_columns if renamed_columns.count(col) > 1]
-                st.error(f"❌ **ERRO**: Colunas duplicadas detectadas após renomeação: {duplicate_cols}")
-                
-                # Try to fix by removing duplicates
-                df_full = df_full.loc[:, ~df_full.columns.duplicated()]
-                st.info("🔧 **CORREÇÃO**: Colunas duplicadas removidas automaticamente")
-                renamed_columns = list(df_full.columns)
-            
-            # Show what was renamed
-            changes_made = []
-            for old_col, new_col in safe_rename.items():
-                changes_made.append(f"'{old_col}' → '{new_col}'")
+
+            changes_made = [f"'{old}' → '{new}'" for old, new in change_pairs]
             
             if changes_made:
                 st.success(f"✅ Colunas padronizadas: {len(changes_made)} alterações")
