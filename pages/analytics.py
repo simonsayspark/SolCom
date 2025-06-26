@@ -6,13 +6,8 @@ from bd.column_mapping import apply_column_remap
 from .analytics_utils import show_executive_summary, calculate_purchase_suggestions, show_purchase_list, show_analytics_dashboard, show_urgent_contacts, show_tabela_geral, show_priority_timeline
 
 
-@st.cache_data(ttl=604800)
 def preprocess_analytics_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize column names and fill missing fields.
-
-    The processed dataframe is cached for one week so the graphs and
-    tables reuse the same data without repeated computation.
-    """
+    """Normalize column names and fill missing fields."""
     df_processed = df.copy()
     df_processed, _ = apply_column_remap(df_processed)
     df_processed = df_processed.rename(columns={
@@ -311,7 +306,13 @@ def load_page():
         ])
         
         with tab1:
-            show_priority_timeline(df, empresa_selecionada)
+            try:
+                show_priority_timeline(df, empresa_selecionada)
+            except Exception as e:
+                st.error(f"❌ Erro no Timeline Prioritário: {str(e)}")
+                st.write("Debug: Erro completo:", e)
+                import traceback
+                st.text(traceback.format_exc())
         
         with tab2:
             show_analytics_dashboard(produtos_existentes, produtos_novos, empresa_selecionada)
