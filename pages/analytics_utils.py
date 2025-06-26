@@ -1394,14 +1394,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
         
         st.plotly_chart(fig, use_container_width=True)
         
-        # Add legend explaining the expected inventory
-        if has_incoming:
-            st.info("""
-            📊 **Legenda do Timeline:**
-            - **Barra sólida**: Cobertura do estoque atual
-            - **Barra com padrão diagonal**: Cobertura adicional com produtos em trânsito e compras confirmadas para os próximos 30 dias
-            - A soma das duas barras mostra o tempo total de cobertura esperado
-            """)
+      
     
     # Detailed table with priority information
     st.subheader("📋 Detalhamento de Compras")
