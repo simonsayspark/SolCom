@@ -1039,8 +1039,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
         # Show top N products selector - now based on filtered results
         if len(filtered_df) > 0:
             # Make "show all" more prominent when there are many filtered products
-            if len(filtered_df) > 50:
-                st.warning(f"⚠️ {len(filtered_df)} produtos encontrados após filtros. Recomendamos usar 'Mostrar todos' para ver todos.")
+          
             
             # Add a checkbox to show all
             show_all = st.checkbox(
@@ -1522,7 +1521,6 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 help="Excel format - universal compatibility"
             )
         except ImportError:
-            st.warning("⚠️ xlsxwriter não instalado. Usando método alternativo para Excel.")
             # Fallback method without xlsxwriter
             import io
             excel_buffer = io.BytesIO()
