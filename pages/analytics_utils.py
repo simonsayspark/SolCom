@@ -613,10 +613,11 @@ def show_priority_timeline(df, empresa="MINIPA"):
 
     # Determine if the current user is admin to show investment subplot
     current_user = auth.get_current_user()
-    show_investment = auth.is_admin(current_user)
+    # Only show investment data for the specific "admin" username, not "minipa"
+    show_investment = current_user and current_user.get('username') == 'admin'
     
     # Debug: Show admin status
-    st.info(f"🔍 **Debug Admin Check:** User: {current_user.get('name') if current_user else 'None'} | Role: {current_user.get('role') if current_user else 'None'} | Show Investment: {show_investment}")
+    st.info(f"🔍 **Debug Admin Check:** Username: {current_user.get('username') if current_user else 'None'} | Name: {current_user.get('name') if current_user else 'None'} | Role: {current_user.get('role') if current_user else 'None'} | Show Investment: {show_investment}")
     
     # Debug: Show available columns
     st.info(f"🔍 Colunas disponíveis: {', '.join(df.columns[:15])}...")

@@ -66,6 +66,8 @@ def authenticate_user(username, password):
         if verify_password(password, user_data["password"]):
             # Update last login
             user_data["last_login"] = datetime.now().isoformat()
+            # Store the username in user_data for later reference
+            user_data["username"] = username
             users[username] = user_data
             save_users(users)
             return user_data
