@@ -40,6 +40,10 @@ def main():
             st.session_state.current_page = "announcements"
             st.rerun()
 
+        if st.button("🔧 Ferramentas", use_container_width=True):
+            st.session_state.current_page = "ferramentas"
+            st.rerun()
+
         # if st.button("❄️ Gerenciar Snowflake", use_container_width=True):
         #     st.session_state.current_page = "snowflake"
         #     st.rerun()
@@ -69,6 +73,9 @@ def main():
         elif page == "announcements":
             from pages.announcements import show_announcements
             show_announcements()
+        elif page == "ferramentas":
+            from pages.ferramentas import show_ferramentas
+            show_ferramentas()
         # elif page == "snowflake":
         #     from pages.snowflake_management import show_snowflake
         #     show_snowflake()
