@@ -3,5 +3,6 @@ pandas>=1.3.0
 plotly>=5.0.0
 numpy>=1.21.0
 openpyxl>=3.0.0
+xlsxwriter>=3.0.0
 snowflake-snowpark-python>=1.0.0
 snowflake-connector-python>=3.0.0 

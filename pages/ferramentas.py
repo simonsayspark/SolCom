@@ -153,9 +153,9 @@ def merge_inventory_with_prices(inventory_df, pricing_df):
     
     return merged_df
 
-def run_priority_analysis(merged_df, volume_column='Média 6 Meses', volume_weight=0.85, price_weight=0.15):
+def run_priority_analysis(merged_df, volume_column='Média 6 Meses', volume_weight=0.85, price_weight=0.15, volume_threshold=5.0, impact_threshold=2000.0):
     """
-    Run priority analysis on merged data
+    Run priority analysis on merged data (matching Test folder logic exactly)
     """
     
     # Handle produto column name variations
@@ -174,49 +174,123 @@ def run_priority_analysis(merged_df, volume_column='Média 6 Meses', volume_weig
     st.write(f"📊 Produtos com dados de uso ({volume_column}): {merged_df[volume_column].notna().sum()}")
     st.write(f"💰 Produtos com dados de preço: {merged_df['preco_unitario'].notna().sum()}")
     
-    # Calculate priority scores
-    df_analysis = merged_df.copy()
+    # Separate complete vs incomplete data (matching Test folder logic)
+    df = merged_df.copy()
     
-    # Normalize volume and price data
-    volume_data = pd.to_numeric(df_analysis[volume_column], errors='coerce')
-    price_data = pd.to_numeric(df_analysis['preco_unitario'], errors='coerce')
+    # Complete data: has both usage and price
+    complete_data = df[(df['preco_unitario'].notna()) & (df[volume_column].notna()) & 
+                      (df[volume_column] > 0) & (df['preco_unitario'] > 0)].copy()
     
-    # Calculate annual impact (volume * price * 12 months)
-    df_analysis['annual_impact'] = volume_data * price_data * 12
+    # Incomplete data: missing price OR usage data
+    incomplete_data = df[~((df['preco_unitario'].notna()) & (df[volume_column].notna()) & 
+                          (df[volume_column] > 0) & (df['preco_unitario'] > 0))].copy()
     
-    # Normalize scores for priority calculation
-    max_volume = volume_data.max() if volume_data.max() > 0 else 1
-    max_impact = df_analysis['annual_impact'].max() if df_analysis['annual_impact'].max() > 0 else 1
+    st.write(f"✅ Produtos com dados completos: {len(complete_data)}")
+    st.write(f"❌ Produtos com dados incompletos: {len(incomplete_data)} (serão marcados como Missing)")
     
-    # Calculate normalized scores
-    df_analysis['volume_score'] = (volume_data / max_volume).fillna(0)
-    df_analysis['impact_score'] = (df_analysis['annual_impact'] / max_impact).fillna(0)
+    if len(complete_data) == 0:
+        st.error("❌ Nenhum produto com dados completos encontrado!")
+        return None
+    
+    # Apply relevance classification (using configurable thresholds)
+    
+    # Calculate monthly volume and annual impact for relevance filtering
+    volume_monthly = complete_data[volume_column] / 6 if 'Consumo' in volume_column else complete_data[volume_column]
+    annual_impact = volume_monthly * complete_data['preco_unitario'] * 12
+    
+    # Determine relevance (High-Relevance vs Edge-Case)
+    relevant_mask = ((volume_monthly >= volume_threshold) | (annual_impact >= impact_threshold))
+    
+    # Add relevance classification
+    complete_data['relevance_class'] = ['High-Relevance' if relevant_mask.iloc[i] else 'Edge-Case' for i in range(len(complete_data))]
+    complete_data['annual_impact'] = annual_impact
+    
+    # Show relevance statistics
+    high_relevance_count = relevant_mask.sum()
+    edge_case_count = len(complete_data) - high_relevance_count
+    
+    st.write(f"🔍 **Classificação de Relevância:**")
+    st.write(f"   ✅ Alta relevância: {high_relevance_count}/{len(complete_data)} produtos ({high_relevance_count/len(complete_data)*100:.1f}%)")
+    st.write(f"   ⚠️ Casos extremos (Uncertainty): {edge_case_count} produtos")
+    st.write(f"   🎯 Critérios: volume ≥ {volume_threshold:.1f} unidades/mês OU impacto ≥ ${impact_threshold:,.0f} anual")
+    
+    # Calculate normalized scores using chosen weights (only for complete data)
+    volume_data = pd.to_numeric(complete_data[volume_column], errors='coerce')
+    price_data = pd.to_numeric(complete_data['preco_unitario'], errors='coerce')
+    
+    # Normalize to 0-1 scale (matching Test folder logic)
+    vol_norm = (volume_data - volume_data.min()) / (volume_data.max() - volume_data.min()) if volume_data.max() > volume_data.min() else pd.Series([0] * len(volume_data))
+    price_norm = (price_data - price_data.min()) / (price_data.max() - price_data.min()) if price_data.max() > price_data.min() else pd.Series([0] * len(price_data))
+    
+    # Add normalized columns and raw multiplication for analysis
+    complete_data['volume_normalized'] = vol_norm
+    complete_data['price_normalized'] = price_norm
+    complete_data['raw_multiplication'] = volume_data * price_data
     
     # Calculate weighted priority score
-    df_analysis['priority_score'] = (
-        df_analysis['volume_score'] * volume_weight + 
-        df_analysis['impact_score'] * price_weight
-    )
+    complete_data['priority_score'] = (vol_norm * volume_weight) + (price_norm * price_weight)
     
-    # Assign priority categories
-    def assign_priority(row):
-        if pd.isna(row['preco_unitario']):
-            return 'Sem Preço'
-        elif row['priority_score'] >= 0.7:
-            return 'Crítico'
-        elif row['priority_score'] >= 0.4:
-            return 'Alto'
-        elif row['priority_score'] >= 0.2:
-            return 'Médio'
+    # Sort by priority score
+    complete_data_sorted = complete_data.sort_values('priority_score', ascending=False).reset_index(drop=True)
+    
+    # Calculate priority categories based on percentiles (only for High-Relevance products)
+    high_relevance_products = complete_data_sorted[complete_data_sorted['relevance_class'] == 'High-Relevance']
+    total_high_relevance = len(high_relevance_products)
+    
+    if total_high_relevance > 0:
+        critical_threshold = int(total_high_relevance * 0.10)  # Top 10%
+        high_threshold = int(total_high_relevance * 0.25)      # Top 25%
+        medium_threshold = int(total_high_relevance * 0.50)    # Top 50%
+    else:
+        critical_threshold = high_threshold = medium_threshold = 0
+    
+    # Assign criticality with edge case consideration (matching Test folder logic)
+    def assign_criticality(index, is_edge_case):
+        if is_edge_case:
+            return "Uncertainty"
+        elif index < critical_threshold:
+            return "Critical"
+        elif index < high_threshold:
+            return "High"
+        elif index < medium_threshold:
+            return "Medium"
         else:
-            return 'Baixo'
+            return "Low"
     
-    df_analysis['priority_category'] = df_analysis.apply(assign_priority, axis=1)
+    # Apply criticality with proper indexing
+    criticality_list = []
+    main_product_index = 0  # Counter for main products only
     
-    # Sort by priority score (descending)
-    df_analysis = df_analysis.sort_values('priority_score', ascending=False)
+    for i in range(len(complete_data_sorted)):
+        is_edge_case = complete_data_sorted.iloc[i]['relevance_class'] == 'Edge-Case'
+        if is_edge_case:
+            criticality_list.append(assign_criticality(0, True))  # Edge cases get Uncertainty
+        else:
+            criticality_list.append(assign_criticality(main_product_index, False))
+            main_product_index += 1
     
-    return df_analysis
+    complete_data_sorted['criticality'] = criticality_list
+    
+    # Handle incomplete data
+    if len(incomplete_data) > 0:
+        # Add required columns for incomplete data
+        incomplete_data['volume_normalized'] = 0.0
+        incomplete_data['price_normalized'] = 0.0
+        incomplete_data['raw_multiplication'] = 0.0
+        incomplete_data['priority_score'] = 0.0
+        incomplete_data['annual_impact'] = 0.0
+        incomplete_data['relevance_class'] = 'Missing-Data'
+        incomplete_data['criticality'] = 'Missing'
+        
+        # Combine complete and incomplete data
+        all_data = pd.concat([complete_data_sorted, incomplete_data], ignore_index=True)
+    else:
+        all_data = complete_data_sorted.copy()
+    
+    # Sort final data by priority score (descending)
+    all_data = all_data.sort_values('priority_score', ascending=False)
+    
+    return all_data
 
 def show_ferramentas():
     """Main function to display the Ferramentas page"""
@@ -279,6 +353,34 @@ def show_ferramentas():
         price_weight = 1 - volume_weight
         st.metric("Peso do Preço (%)", f"{price_weight*100:.0f}")
     
+    # Advanced settings
+    with st.expander("🔧 Configurações Avançadas de Relevância"):
+        st.write("**Critérios para Uncertainty (Casos Extremos):**")
+        st.write("Produtos que NÃO atendem aos critérios abaixo são classificados como 'Uncertainty'")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            volume_threshold = st.number_input(
+                "Volume Mínimo (unidades/mês)",
+                min_value=0.1,
+                max_value=50.0,
+                value=5.0,
+                step=0.5,
+                help="Produtos com volume mensal abaixo deste valor podem ser classificados como Uncertainty"
+            )
+        
+        with col2:
+            impact_threshold = st.number_input(
+                "Impacto Anual Mínimo ($)",
+                min_value=100,
+                max_value=10000,
+                value=2000,
+                step=100,
+                help="Produtos com impacto anual abaixo deste valor podem ser classificados como Uncertainty"
+            )
+        
+        st.info("💡 **Lógica**: Um produto é classificado como 'Uncertainty' se tiver volume < {:.1f} unidades/mês **E** impacto < ${:,.0f} anual".format(volume_threshold, impact_threshold))
+    
     # Process files when both are uploaded
     if inventory_file and pricing_file:
         st.markdown("---")
@@ -311,7 +413,9 @@ def show_ferramentas():
                                 merged_df, 
                                 volume_column=volume_column_choice,
                                 volume_weight=volume_weight,
-                                price_weight=1-volume_weight
+                                price_weight=1-volume_weight,
+                                volume_threshold=volume_threshold,
+                                impact_threshold=impact_threshold
                             )
                             
                             if analysis_df is not None:
@@ -325,24 +429,26 @@ def show_ferramentas():
                                 st.header("📈 Resumo dos Resultados")
                                 
                                 # Priority distribution
-                                priority_counts = analysis_df['priority_category'].value_counts()
+                                priority_counts = analysis_df['criticality'].value_counts()
                                 
-                                col1, col2, col3, col4, col5 = st.columns(5)
+                                col1, col2, col3, col4, col5, col6 = st.columns(6)
                                 
                                 with col1:
-                                    st.metric("🔴 Crítico", priority_counts.get('Crítico', 0))
+                                    st.metric("🔴 Critical", priority_counts.get('Critical', 0))
                                 with col2:
-                                    st.metric("🟠 Alto", priority_counts.get('Alto', 0))
+                                    st.metric("🟠 High", priority_counts.get('High', 0))
                                 with col3:
-                                    st.metric("🟡 Médio", priority_counts.get('Médio', 0))
+                                    st.metric("🟡 Medium", priority_counts.get('Medium', 0))
                                 with col4:
-                                    st.metric("🟢 Baixo", priority_counts.get('Baixo', 0))
+                                    st.metric("🟢 Low", priority_counts.get('Low', 0))
                                 with col5:
-                                    st.metric("⚪ Sem Preço", priority_counts.get('Sem Preço', 0))
+                                    st.metric("🔵 Uncertainty", priority_counts.get('Uncertainty', 0))
+                                with col6:
+                                    st.metric("⚪ Missing", priority_counts.get('Missing', 0))
                                 
                                 # Show top 10 critical products
                                 st.subheader("🔝 Top 10 Produtos Críticos")
-                                critical_products = analysis_df[analysis_df['priority_category'] == 'Crítico'].head(10)
+                                critical_products = analysis_df[analysis_df['criticality'] == 'Critical'].head(10)
                                 
                                 if not critical_products.empty:
                                     # Select relevant columns to display
@@ -354,7 +460,7 @@ def show_ferramentas():
                                     
                                     display_columns.extend([
                                         volume_column_choice, 'preco_unitario', 'annual_impact', 
-                                        'priority_score', 'priority_category'
+                                        'priority_score', 'criticality'
                                     ])
                                     
                                     # Filter columns that actually exist
@@ -377,7 +483,7 @@ def show_ferramentas():
                                 with col1:
                                     # Create Excel file for merged data
                                     merged_buffer = io.BytesIO()
-                                    with pd.ExcelWriter(merged_buffer, engine='xlsxwriter') as writer:
+                                    with pd.ExcelWriter(merged_buffer, engine='openpyxl') as writer:
                                         merged_df.to_excel(writer, sheet_name='Dados Fundidos', index=False)
                                     
                                     st.download_button(
@@ -388,15 +494,36 @@ def show_ferramentas():
                                     )
                                 
                                 with col2:
-                                    # Create Excel file for analysis results
+                                    # Create Excel file for priority optimal results (matching Test folder structure)
                                     analysis_buffer = io.BytesIO()
-                                    with pd.ExcelWriter(analysis_buffer, engine='xlsxwriter') as writer:
-                                        analysis_df.to_excel(writer, sheet_name='Análise de Prioridade', index=False)
+                                    with pd.ExcelWriter(analysis_buffer, engine='openpyxl') as writer:
+                                        # Add normalized columns to match Test folder output
+                                        output_df = analysis_df.copy()
+                                        
+                                        # Add normalized columns
+                                        volume_data = pd.to_numeric(output_df[volume_column_choice], errors='coerce')
+                                        price_data = pd.to_numeric(output_df['preco_unitario'], errors='coerce')
+                                        
+                                        # Normalize to 0-1 scale (matching Test folder logic)
+                                        if volume_data.max() > volume_data.min():
+                                            output_df['volume_normalized'] = (volume_data - volume_data.min()) / (volume_data.max() - volume_data.min())
+                                        else:
+                                            output_df['volume_normalized'] = 0
+                                            
+                                        if price_data.max() > price_data.min():
+                                            output_df['price_normalized'] = (price_data - price_data.min()) / (price_data.max() - price_data.min())
+                                        else:
+                                            output_df['price_normalized'] = 0
+                                        
+                                        # Add raw multiplication column
+                                        output_df['raw_multiplication'] = volume_data * price_data
+                                        
+                                        output_df.to_excel(writer, sheet_name='Priority Analysis', index=False)
                                     
                                     st.download_button(
-                                        label="🎯 Download Análise de Prioridade",
+                                        label="🎯 Download Priority Optimal",
                                         data=analysis_buffer.getvalue(),
-                                        file_name=f"analise_prioridade_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                                        file_name=f"priority_optimal_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
                                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                                     )
                             
@@ -418,8 +545,8 @@ def show_ferramentas():
         with col1:
             selected_categories = st.multiselect(
                 "Categorias de Prioridade",
-                options=analysis_df['priority_category'].unique(),
-                default=analysis_df['priority_category'].unique()
+                options=['Critical', 'High', 'Medium', 'Low', 'Uncertainty', 'Missing'],
+                default=['Critical', 'High', 'Medium', 'Low', 'Uncertainty', 'Missing']
             )
         
         with col2:
@@ -432,7 +559,7 @@ def show_ferramentas():
         
         # Apply filters
         filtered_df = analysis_df[
-            (analysis_df['priority_category'].isin(selected_categories)) &
+            (analysis_df['criticality'].isin(selected_categories)) &
             (analysis_df['annual_impact'].fillna(0) >= min_annual_impact)
         ]
         
@@ -448,7 +575,7 @@ def show_ferramentas():
                 display_columns.append('Produto')
             
             # Add other relevant columns
-            for col in ['Média 6 Meses', 'Consumo 6 Meses', 'preco_unitario', 'annual_impact', 'priority_score', 'priority_category']:
+            for col in ['Média 6 Meses', 'Consumo 6 Meses', 'preco_unitario', 'annual_impact', 'priority_score', 'criticality']:
                 if col in filtered_df.columns:
                     display_columns.append(col)
             
