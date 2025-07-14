@@ -1599,6 +1599,21 @@ def show_priority_timeline(df, empresa="MINIPA"):
     # Add Solicitação de Pedidos table right after Detalhamento de Compras
     st.subheader("📋 Solicitação de Pedidos")
     
+    # Load CBM data from TIMELINE table since it's not in ANALYTICS_DATA
+    cbm_data = {}
+    try:
+        from bd.snowflake_data import load_data_with_history
+        timeline_df = load_data_with_history(empresa=empresa)
+        if timeline_df is not None and len(timeline_df) > 0:
+            # Create a mapping of produto -> CBM
+            for _, row in timeline_df.iterrows():
+                produto = str(row.get('Item', '')).strip()
+                if produto and produto != 'nan':
+                    cbm = float(row.get('CBM', 0) or 0)
+                    cbm_data[produto] = cbm
+    except Exception as e:
+        st.warning(f"⚠️ Não foi possível carregar dados CBM: {str(e)}")
+    
     # Create the purchase request dataframe with the requested columns using the same filtered data
     solicitacao_data = []
     
@@ -1625,8 +1640,13 @@ def show_priority_timeline(df, empresa="MINIPA"):
         # 6. Estoque Total - use the processed Estoque_Atual column
         estoque_total = float(row.get('Estoque_Atual', 0) or 0)
         
-        # 7. In Transit Ship - use the processed Qtde_Embarque column
-        in_transit_ship = float(row.get('Qtde_Embarque', 0) or 0)
+        # 7. In Transit Ship - get from original data using standardized column name
+        in_transit_ship = 0
+        original_row = df[df['Produto'] == produto]
+        if len(original_row) > 0:
+            # Use the standardized column name after column mapping
+            if 'Qtde_Embarque' in original_row.columns:
+                in_transit_ship = float(original_row['Qtde_Embarque'].iloc[0] or 0)
         
         # 8. Avg Sales - use the processed Media_Mensal column
         avg_sales = float(row.get('Media_Mensal', 0) or 0)
@@ -1644,10 +1664,13 @@ def show_priority_timeline(df, empresa="MINIPA"):
                     new_previsao_com_pos = float(original_row[col].iloc[0] or 0)
                     break
         
-        # 11. CBM - try to get from original data
+        # 11. CBM - try from original data first, then from timeline data
         cbm = 0
         if len(original_row) > 0 and 'CBM' in original_row.columns:
             cbm = float(original_row['CBM'].iloc[0] or 0)
+        else:
+            # Fallback to timeline data if not in analytics data
+            cbm = cbm_data.get(produto, 0)
         
         # 12. MOQ - use the processed MOQ column
         moq = float(row.get('MOQ', 0) or 0)
