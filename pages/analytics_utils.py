@@ -1608,66 +1608,50 @@ def show_priority_timeline(df, empresa="MINIPA"):
         if not produto or produto == 'nan':
             continue
         
-        # Map columns from available data
+        # Map columns from the processed timeline data (filtered_df)
         # 1. Produto - already extracted above
-        # 2. Fornecedor - handle multiple column variations
-        fornecedor = 'Brazil'
-        for col in ['ultimo_fornecedor', 'UltimoFornecedor', 'UltimoFor']:
-            if col in row.index:
-                value = str(row[col])
-                if value and value.strip() and value.lower() not in ['nan', 'none', '']:
-                    fornecedor = value
-                    break
+        # 2. Fornecedor - use the processed Fornecedor column
+        fornecedor = str(row.get('Fornecedor', 'Brazil'))
         
-        # 3. Qtd (MOQ) - calculate based on MOQ or default
-        moq = float(row.get('MOQ', 0) or 0)
-        qtd_moq = moq if moq > 0 else 50  # Default to 50 if no MOQ
+        # 3. Qtd (MOQ) - use the processed Qtd_MOQ column
+        qtd_moq = float(row.get('Qtd_MOQ', 0) or 0)
         
-        # 4. Preco FOB Unit - handle price column variations
-        preco_fob_unit = 0
-        for col in ['preco_unitario', 'Preco_Unitario', 'preco_unitário']:
-            if col in row.index:
-                preco_fob_unit = float(row.get(col, 0) or 0)
-                if preco_fob_unit > 0:
-                    break
+        # 4. Preco FOB Unit - use the processed Preco_Unit column
+        preco_fob_unit = float(row.get('Preco_Unit', 0) or 0)
         
         # 5. Preco FOB Total - calculate total investment
         preco_fob_total = qtd_moq * preco_fob_unit
         
-        # 6. Estoque Total - get current stock
-        estoque_total = float(row.get('Estoque', 0) or 0)
+        # 6. Estoque Total - use the processed Estoque_Atual column
+        estoque_total = float(row.get('Estoque_Atual', 0) or 0)
         
-        # 7. In Transit Ship - get shipment quantities
-        in_transit_ship = 0
-        for col in ['Qtde Embarque', 'Qtde_Embarque']:
-            if col in row.index:
-                in_transit_ship = float(row.get(col, 0) or 0)
-                break
+        # 7. In Transit Ship - use the processed Qtde_Embarque column
+        in_transit_ship = float(row.get('Qtde_Embarque', 0) or 0)
         
-        # 8. Avg Sales - get monthly consumption
-        avg_sales = 0
-        for col in ['Média 6 Meses', 'Media_6_Meses', 'media_6_meses', 'monthly_volume']:
-            if col in row.index:
-                avg_sales = float(row.get(col, 0) or 0)
-                if avg_sales > 0:
-                    break
+        # 8. Avg Sales - use the processed Media_Mensal column
+        avg_sales = float(row.get('Media_Mensal', 0) or 0)
         
         # 9. Estoque + inTransit - calculate total expected stock
         estoque_mais_intransit = estoque_total + in_transit_ship
         
-        # 10. New Previsao com New POs (pedidos) - get forecast with new orders
+        # 10. New Previsao com New POs (pedidos) - try to get from original data
+        # We need to get this from the original df since it's not in the timeline data
         new_previsao_com_pos = 0
-        for col in ['Previsão', 'Previsao', 'Previsao_Total_New_Pos']:
-            if col in row.index:
-                new_previsao_com_pos = float(row.get(col, 0) or 0)
-                break
+        original_row = df[df['Produto'] == produto]
+        if len(original_row) > 0:
+            for col in ['Previsão', 'Previsao', 'Previsao_Total_New_Pos']:
+                if col in original_row.columns:
+                    new_previsao_com_pos = float(original_row[col].iloc[0] or 0)
+                    break
         
-        # 11. CBM - get CBM if available
+        # 11. CBM - try to get from original data
         cbm = 0
-        if 'CBM' in row.index:
-            cbm = float(row.get('CBM', 0) or 0)
+        if len(original_row) > 0 and 'CBM' in original_row.columns:
+            cbm = float(original_row['CBM'].iloc[0] or 0)
         
-        # 12. MOQ - already extracted above
+        # 12. MOQ - use the processed MOQ column
+        moq = float(row.get('MOQ', 0) or 0)
+        
         # 13. OBS - empty column for manual notes
         obs = ""
         
