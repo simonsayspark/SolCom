@@ -298,7 +298,7 @@ def load_page():
         # Show company context
         st.info(f"📊 **Análise para {empresa_selecionada}** | Versão: {f'v{selected_version_id}' if 'selected_version_id' in locals() and selected_version_id else 'Ativa'}")
         
-        # Show analytics tabs with company context - REDUCED TO 3 TABS
+        # Show analytics tabs with company context - BACK TO 3 TABS
         tab1, tab2, tab3 = st.tabs([
             f"🎯 Timeline Prioritário - {empresa_selecionada}",
             f"📊 Dashboards - {empresa_selecionada}", 

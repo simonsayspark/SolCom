@@ -1596,3 +1596,209 @@ def show_priority_timeline(df, empresa="MINIPA"):
 
             )
 
+    # Add Solicitação de Pedidos table right after Detalhamento de Compras
+    st.subheader("📋 Solicitação de Pedidos")
+    
+    # Create the purchase request dataframe with the requested columns using the same filtered data
+    solicitacao_data = []
+    
+    for idx, row in filtered_df.iterrows():
+        # Skip empty rows
+        produto = str(row.get('Produto', '')).strip()
+        if not produto or produto == 'nan':
+            continue
+        
+        # Map columns from available data
+        # 1. Produto - already extracted above
+        # 2. Fornecedor - handle multiple column variations
+        fornecedor = 'Brazil'
+        for col in ['ultimo_fornecedor', 'UltimoFornecedor', 'UltimoFor']:
+            if col in row.index:
+                value = str(row[col])
+                if value and value.strip() and value.lower() not in ['nan', 'none', '']:
+                    fornecedor = value
+                    break
+        
+        # 3. Qtd (MOQ) - calculate based on MOQ or default
+        moq = float(row.get('MOQ', 0) or 0)
+        qtd_moq = moq if moq > 0 else 50  # Default to 50 if no MOQ
+        
+        # 4. Preco FOB Unit - handle price column variations
+        preco_fob_unit = 0
+        for col in ['preco_unitario', 'Preco_Unitario', 'preco_unitário']:
+            if col in row.index:
+                preco_fob_unit = float(row.get(col, 0) or 0)
+                if preco_fob_unit > 0:
+                    break
+        
+        # 5. Preco FOB Total - calculate total investment
+        preco_fob_total = qtd_moq * preco_fob_unit
+        
+        # 6. Estoque Total - get current stock
+        estoque_total = float(row.get('Estoque', 0) or 0)
+        
+        # 7. In Transit Ship - get shipment quantities
+        in_transit_ship = 0
+        for col in ['Qtde Embarque', 'Qtde_Embarque']:
+            if col in row.index:
+                in_transit_ship = float(row.get(col, 0) or 0)
+                break
+        
+        # 8. Avg Sales - get monthly consumption
+        avg_sales = 0
+        for col in ['Média 6 Meses', 'Media_6_Meses', 'media_6_meses', 'monthly_volume']:
+            if col in row.index:
+                avg_sales = float(row.get(col, 0) or 0)
+                if avg_sales > 0:
+                    break
+        
+        # 9. Estoque + inTransit - calculate total expected stock
+        estoque_mais_intransit = estoque_total + in_transit_ship
+        
+        # 10. New Previsao com New POs (pedidos) - get forecast with new orders
+        new_previsao_com_pos = 0
+        for col in ['Previsão', 'Previsao', 'Previsao_Total_New_Pos']:
+            if col in row.index:
+                new_previsao_com_pos = float(row.get(col, 0) or 0)
+                break
+        
+        # 11. CBM - get CBM if available
+        cbm = 0
+        if 'CBM' in row.index:
+            cbm = float(row.get('CBM', 0) or 0)
+        
+        # 12. MOQ - already extracted above
+        # 13. OBS - empty column for manual notes
+        obs = ""
+        
+        solicitacao_data.append({
+            'Produto': produto,
+            'Fornecedor': fornecedor,
+            'Qtd (MOQ)': qtd_moq,
+            'Preco FOB Unit': preco_fob_unit,
+            'Preco FOB Total': preco_fob_total,
+            'Estoque Total': estoque_total,
+            'In Transit Ship': in_transit_ship,
+            'Avg Sales': avg_sales,
+            'Estoque + inTransit': estoque_mais_intransit,
+            'New Previsao com New POs (pedidos)': new_previsao_com_pos,
+            'CBM': cbm,
+            'MOQ': moq,
+            'OBS': obs
+        })
+    
+    if not solicitacao_data:
+        st.warning("⚠️ Nenhum produto com dados suficientes para solicitação de pedidos.")
+    else:
+        # Convert to DataFrame
+        solicitacao_df = pd.DataFrame(solicitacao_data)
+        
+        # Format numeric columns for better display
+        formatted_solicitacao = solicitacao_df.copy()
+        
+        # Round numeric columns to 2 decimal places
+        numeric_columns = formatted_solicitacao.select_dtypes(include=[np.number]).columns
+        for col in numeric_columns:
+            if col != 'MOQ':  # Keep MOQ as integer
+                formatted_solicitacao[col] = formatted_solicitacao[col].round(2)
+            else:
+                formatted_solicitacao[col] = formatted_solicitacao[col].astype(int)
+        
+        # Format currency columns
+        currency_columns = ['Preco FOB Unit', 'Preco FOB Total']
+        for col in currency_columns:
+            if col in formatted_solicitacao.columns:
+                formatted_solicitacao[col] = formatted_solicitacao[col].apply(lambda x: f'$ {x:,.2f}' if x > 0 else '$ 0.00')
+        
+        # Display the dataframe
+        st.dataframe(
+            formatted_solicitacao,
+            use_container_width=True,
+            height=400,
+            hide_index=True
+        )
+        
+        # Export options for Solicitação de Pedidos
+        st.subheader("📥 Exportar Solicitação de Pedidos")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Export original data (not formatted) for CSV
+            csv = solicitacao_df.to_csv(index=False, sep=';', encoding='utf-8-sig', decimal=',')
+            st.download_button(
+                label="📄 Baixar como CSV",
+                data=csv,
+                file_name=f'solicitacao_pedidos_{empresa}_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.csv',
+                mime='text/csv',
+                use_container_width=True
+            )
+        
+        with col2:
+            # Excel export with xlsxwriter
+            try:
+                import io
+                buffer = io.BytesIO()
+                
+                # Create a Pandas Excel writer using XlsxWriter
+                with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                    solicitacao_df.to_excel(writer, sheet_name='Solicitação de Pedidos', index=False)
+                    
+                    # Get the xlsxwriter workbook and worksheet objects
+                    workbook = writer.book
+                    worksheet = writer.sheets['Solicitação de Pedidos']
+                    
+                    # Add some cell formatting
+                    header_format = workbook.add_format({
+                        'bold': True,
+                        'text_wrap': True,
+                        'valign': 'top',
+                        'fg_color': '#D7E4BD',
+                        'border': 1
+                    })
+                    
+                    # Currency format for price columns
+                    currency_format = workbook.add_format({
+                        'num_format': '$ #,##0.00',
+                        'border': 1
+                    })
+                    
+                    # Write the column headers with the defined format
+                    for col_num, value in enumerate(solicitacao_df.columns.values):
+                        worksheet.write(0, col_num, value, header_format)
+                    
+                    # Apply currency formatting to price columns
+                    for col_num, column in enumerate(solicitacao_df.columns):
+                        if 'Preco' in column:
+                            worksheet.set_column(col_num, col_num, 15, currency_format)
+                        else:
+                            # Auto-adjust columns width
+                            column_width = max(solicitacao_df[column].astype(str).map(len).max(), len(column))
+                            worksheet.set_column(col_num, col_num, min(column_width + 2, 50))
+                
+                # Reset buffer position
+                buffer.seek(0)
+                
+                st.download_button(
+                    label="📊 Baixar como Excel",
+                    data=buffer,
+                    file_name=f'solicitacao_pedidos_{empresa}_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.xlsx',
+                    mime='application/vnd.ms-excel',
+                    use_container_width=True
+                )
+            except ImportError:
+                st.warning("⚠️ xlsxwriter não instalado. Usando método alternativo para Excel.")
+                # Fallback method without xlsxwriter
+                import io
+                excel_buffer = io.BytesIO()
+                solicitacao_df.to_excel(excel_buffer, index=False)
+                excel_buffer.seek(0)
+                
+                st.download_button(
+                    label="📊 Baixar como Excel",
+                    data=excel_buffer,
+                    file_name=f'solicitacao_pedidos_{empresa}_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.xlsx',
+                    mime='application/vnd.ms-excel',
+                    use_container_width=True
+                )
+
