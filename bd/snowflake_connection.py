@@ -25,18 +25,32 @@ DATABASE_SCHEMA = {
 }
 
 def get_snowflake_connection():
+    """Return a cached Snowflake connection or create a new one.
+
+    The connection is stored in ``st.session_state['snowflake_conn']`` so that
+    it can be reused across reruns. A new connection is established only when
+    one is not cached or the cached connection has been closed.
     """
-    Get Snowflake connection using Streamlit secrets
-    Returns connection object or None if failed
-    """
+
     try:
-        # Check if secrets are configured
-        if not hasattr(st, 'secrets') or "connections" not in st.secrets or "snowflake" not in st.secrets.connections:
+        # Verify secrets configuration
+        if (
+            not hasattr(st, "secrets")
+            or "connections" not in st.secrets
+            or "snowflake" not in st.secrets.connections
+        ):
             st.error("❄️ Snowflake não configurado. Configure em .streamlit/secrets.toml")
-            st.info("💡 Verifique se o arquivo .streamlit/secrets.toml está configurado corretamente.")
+            st.info(
+                "💡 Verifique se o arquivo .streamlit/secrets.toml está configurado corretamente."
+            )
             return None
-            
-        # Create connection using the same format as st.connection
+
+        # Reuse existing connection if it's still open
+        cached_conn = st.session_state.get("snowflake_conn")
+        if cached_conn and not cached_conn.is_closed():
+            return cached_conn
+
+        # Otherwise create a new connection
         snowflake_config = st.secrets.connections.snowflake
         conn = snowflake.connector.connect(
             account=snowflake_config.account,
@@ -45,12 +59,16 @@ def get_snowflake_connection():
             role=snowflake_config.role,
             warehouse=snowflake_config.warehouse,
             database=snowflake_config.database,
-            schema=snowflake_config.schema
+            schema=snowflake_config.schema,
         )
+        st.session_state["snowflake_conn"] = conn
         return conn
+
     except Exception as e:
         st.error(f"❄️ Erro ao conectar com Snowflake: {str(e)}")
-        st.info("💡 Verifique se o arquivo .streamlit/secrets.toml está configurado corretamente.")
+        st.info(
+            "💡 Verifique se o arquivo .streamlit/secrets.toml está configurado corretamente."
+        )
         return None
 
 def get_snowpark_session():

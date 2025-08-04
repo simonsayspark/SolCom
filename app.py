@@ -2,12 +2,26 @@ import streamlit as st
 import auth
 import sys
 import os
+import atexit
 
 # Authentication check
 if not auth.require_auth():
     st.stop()
 
 st.set_page_config(page_title="Dashboard Corporativo", page_icon="🏢", layout="wide")
+
+
+def _close_snowflake_connection() -> None:
+    """Close cached Snowflake connection if it exists."""
+    conn = st.session_state.get("snowflake_conn")
+    if conn and not conn.is_closed():
+        conn.close()
+
+
+try:  # Streamlit <-> process cleanup
+    st.on_session_end(_close_snowflake_connection)
+except AttributeError:
+    atexit.register(_close_snowflake_connection)
 
 # Add pages directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
