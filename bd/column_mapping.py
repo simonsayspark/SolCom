@@ -50,6 +50,24 @@ COLUMN_REMAP = {
     'Compras 61 a 90 Dias': 'Compras_61_90_Dias',
     'Compras > 90 Dias': 'Compras_Mais_90_Dias',
     'Qtde Tot Compras': 'Qtde_Tot_Compras',
+
+
+        # Enhanced price column mappings
+    'Preço FOB\nUnitário': 'Preco_Unitario',
+    'Preço FOB Unitário': 'Preco_Unitario',
+    'Preco FOB Unitario': 'Preco_Unitario',
+    'Preço Unitário': 'Preco_Unitario',
+    'Preço FOB': 'Preco_Unitario',
+    'Preço Unit.': 'Preco_Unitario',
+    'Price': 'Preco_Unitario',
+    'preco_unitario': 'Preco_Unitario',
+    'Preço FOB Unit': 'Preco_Unitario',  # Add this
+    'FOB Unit': 'Preco_Unitario',        # Add this
+    
+    # Enhanced CBM mappings
+    'CBM\n': 'CBM',
+    'CBM ': 'CBM',
+    'cbm': 'CBM',  # Add this
 }
 
 

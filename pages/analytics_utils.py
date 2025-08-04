@@ -1631,8 +1631,21 @@ def show_priority_timeline(df, empresa="MINIPA"):
         # 3. Qtd (MOQ) - use the processed Qtd_MOQ column
         qtd_moq = float(row.get('Qtd_MOQ', 0) or 0)
         
-        # 4. Preco FOB Unit - use the processed Preco_Unit column
-        preco_fob_unit = float(row.get('Preco_Unit', 0) or 0)
+        # 🔧 FIX: Get price from multiple sources with proper fallback
+        preco_fob_unit = 0
+        # First try the timeline processed data
+        if 'Preco_Unit' in row.index:
+            preco_fob_unit = float(row.get('Preco_Unit', 0) or 0)
+        
+        # If still zero, try original data with mapped column names
+        if preco_fob_unit == 0:
+            original_row = df[df['Produto'] == produto]
+            if len(original_row) > 0:
+                for price_col in ['preco_unitario', 'Preco_Unitario', 'preco_unitário', 'Preço FOB Unitário', 'Preço Unitário']:
+                    if price_col in original_row.columns:
+                        preco_fob_unit = float(original_row[price_col].iloc[0] or 0)
+                        if preco_fob_unit > 0:
+                            break
         
         # 5. Preco FOB Total - calculate total investment
         preco_fob_total = qtd_moq * preco_fob_unit
@@ -1644,9 +1657,12 @@ def show_priority_timeline(df, empresa="MINIPA"):
         in_transit_ship = 0
         original_row = df[df['Produto'] == produto]
         if len(original_row) > 0:
-            # Use the standardized column name after column mapping
-            if 'Qtde_Embarque' in original_row.columns:
-                in_transit_ship = float(original_row['Qtde_Embarque'].iloc[0] or 0)
+            # Try multiple column variations
+            for transit_col in ['Qtde_Embarque', 'Qtde Embarque', 'In_Transit', 'In Transit']:
+                if transit_col in original_row.columns:
+                    in_transit_ship = float(original_row[transit_col].iloc[0] or 0)
+                    if in_transit_ship > 0:
+                        break
         
         # 8. Avg Sales - use the processed Media_Mensal column
         avg_sales = float(row.get('Media_Mensal', 0) or 0)
@@ -1655,21 +1671,29 @@ def show_priority_timeline(df, empresa="MINIPA"):
         estoque_mais_intransit = estoque_total + in_transit_ship
         
         # 10. New Previsao com New POs (pedidos) - try to get from original data
-        # We need to get this from the original df since it's not in the timeline data
         new_previsao_com_pos = 0
         original_row = df[df['Produto'] == produto]
         if len(original_row) > 0:
-            for col in ['Previsão', 'Previsao', 'Previsao_Total_New_Pos']:
+            for col in ['Previsão', 'Previsao', 'Previsao_Total_New_Pos', 'Previsão Total']:
                 if col in original_row.columns:
                     new_previsao_com_pos = float(original_row[col].iloc[0] or 0)
-                    break
+                    if new_previsao_com_pos > 0:
+                        break
         
-        # 11. CBM - try from original data first, then from timeline data
+        # 🔧 FIX: Enhanced CBM lookup with better fallback logic
         cbm = 0
-        if len(original_row) > 0 and 'CBM' in original_row.columns:
-            cbm = float(original_row['CBM'].iloc[0] or 0)
-        else:
-            # Fallback to timeline data if not in analytics data
+        # First try from timeline processed data
+        if 'CBM' in row.index:
+            cbm = float(row.get('CBM', 0) or 0)
+        
+        # If still zero, try original analytics data
+        if cbm == 0:
+            original_row = df[df['Produto'] == produto]
+            if len(original_row) > 0 and 'CBM' in original_row.columns:
+                cbm = float(original_row['CBM'].iloc[0] or 0)
+        
+        # If still zero, try timeline data mapping
+        if cbm == 0:
             cbm = cbm_data.get(produto, 0)
         
         # 12. MOQ - use the processed MOQ column
