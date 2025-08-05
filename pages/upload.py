@@ -75,19 +75,20 @@ def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
                     st.success("🔧 **CORREÇÃO CRÍTICA**: Coluna de preços padronizada - isso deve resolver o problema de preços zero!")
                 
                 # 🔧 DEBUG: Check if Previsão Total column was processed
-                previsao_changes = [change for change in changes_made if 'Previsao_Total_New_Pos' in change or 'Previsao' in change]
-                if previsao_changes:
-                    st.success("🔧 **PREVISÃO TOTAL ENCONTRADA**: " + previsao_changes[0])
-                else:
-                    st.warning("⚠️ **PREVISÃO TOTAL NÃO ENCONTRADA** - Verifique se a coluna existe no Excel")
-                    
-                    # Show available columns that might be Previsão Total
-                    previsao_candidates = [col for col in original_columns if 'previs' in col.lower() or 'total' in col.lower()]
-                    if previsao_candidates:
-                        st.info(f"🔍 Colunas candidatas encontradas: {', '.join(previsao_candidates)}")
-                    
-                    # Show exact column names for debugging
-                    st.info(f"📋 Todas as colunas originais: {', '.join(original_columns[:10])}{'...' if len(original_columns) > 10 else ''}")
+                # Commented out to reduce debug spam
+                # previsao_changes = [change for change in changes_made if 'Previsao_Total_New_Pos' in change or 'Previsao' in change]
+                # if previsao_changes:
+                #     st.success("🔧 **PREVISÃO TOTAL ENCONTRADA**: " + previsao_changes[0])
+                # else:
+                #     st.warning("⚠️ **PREVISÃO TOTAL NÃO ENCONTRADA** - Verifique se a coluna existe no Excel")
+                #     
+                #     # Show available columns that might be Previsão Total
+                #     previsao_candidates = [col for col in original_columns if 'previs' in col.lower() or 'total' in col.lower()]
+                #     if previsao_candidates:
+                #         st.info(f"🔍 Colunas candidatas encontradas: {', '.join(previsao_candidates)}")
+                #     
+                #     # Show exact column names for debugging
+                #     st.info(f"📋 Todas as colunas originais: {', '.join(original_columns[:10])}{'...' if len(original_columns) > 10 else ''}")
             
             # 🔧 NEW: Detect if this is a merged Excel file with priority analysis
             priority_columns = ['priority_score', 'criticality', 'relevance_class', 'preco_unitario']
@@ -121,6 +122,7 @@ def show_data_upload():
         from bd.snowflake_config import (upload_excel_to_snowflake, load_data_with_history, 
                                         load_analytics_data, test_connection, get_upload_versions, 
                                         delete_version, fix_active_versions)
+        from bd.snowflake_upload_dashboard import get_cached_upload_page_data
         snowflake_available = True
     except ImportError:
         snowflake_available = False
@@ -151,64 +153,42 @@ def show_data_upload():
     if snowflake_available:
         st.subheader(f"📊 Status dos Dados - {empresa_selecionada}")
         
+        # Get ALL data in ONE Snowflake connection call
+        dashboard_data = get_cached_upload_page_data(empresa_code)
+        
         col1, col2 = st.columns([3, 1])
         
         with col1:
-            # OPTIMIZATION: Use cached counts instead of loading full datasets
-            from bd.snowflake_config import get_cached_counts, load_combined_data_stats
+            # Show timeline data
+            timeline_stats = dashboard_data['stats']['timeline']
+            timeline_count = timeline_stats.get('count', 0)
             
-            # Use the optimized combined stats function
-            combined_stats = load_combined_data_stats(empresa_code, include_timeline=True, include_analytics=True)
-            
-            if combined_stats:
-                # Show timeline data
-                timeline_stats = combined_stats.get('timeline', {})
-                timeline_count = timeline_stats.get('count', 0)
-                
-                if timeline_count > 0:
-                    st.success(f"📅 Timeline: {timeline_count} produtos salvos")
-                    if timeline_stats.get('latest_upload'):
-                        st.info(f"🕒 Último upload Timeline: {timeline_stats['latest_upload']}")
-                    st.info(f"🏭 Fornecedores: {timeline_stats.get('suppliers', 0)}")
-                else:
-                    st.info("📅 Timeline: Nenhum dado encontrado")
-                
-                # Show analytics data
-                analytics_stats = combined_stats.get('analytics', {})
-                analytics_count = analytics_stats.get('count', 0)
-                
-                if analytics_count > 0:
-                    st.success(f"📊 Analytics: {analytics_count} produtos salvos")
-                    if analytics_stats.get('latest_upload'):
-                        st.info(f"🕒 Último upload Analytics: {analytics_stats['latest_upload']}")
-                    st.info(f"🏭 Fornecedores: {analytics_stats.get('suppliers', 0)}")
-                else:
-                    st.info("📊 Analytics: Nenhum dado encontrado")
+            if timeline_count > 0:
+                st.success(f"📅 Timeline: {timeline_count} produtos salvos")
+                if timeline_stats.get('latest_upload'):
+                    st.info(f"🕒 Último upload Timeline: {timeline_stats['latest_upload']}")
+                st.info(f"🏭 Fornecedores: {timeline_stats.get('suppliers', 0)}")
             else:
-                # Fallback to original method if combined stats fail
-                timeline_data = load_data_with_history(empresa=empresa_code)
-                analytics_data = load_analytics_data(empresa=empresa_code)
-                
-                # Show data summary
-                if timeline_data is not None and len(timeline_data) > 0:
-                    st.success(f"📅 Timeline: {len(timeline_data)} produtos salvos")
-                    if 'data_upload' in timeline_data.columns:
-                        st.info(f"🕒 Último upload Timeline: {timeline_data['data_upload'].max()}")
-                else:
-                    st.info("📅 Timeline: Nenhum dado encontrado")
-                
-                if analytics_data is not None and len(analytics_data) > 0:
-                    st.success(f"📊 Analytics: {len(analytics_data)} produtos salvos")
-                    if 'data_upload' in analytics_data.columns:
-                        st.info(f"🕒 Último upload Analytics: {analytics_data['data_upload'].max()}")
-                else:
-                    st.info("📊 Analytics: Nenhum dado encontrado")
+                st.info("📅 Timeline: Nenhum dado encontrado")
+            
+            # Show analytics data
+            analytics_stats = dashboard_data['stats']['analytics']
+            analytics_count = analytics_stats.get('count', 0)
+            
+            if analytics_count > 0:
+                st.success(f"📊 Analytics: {analytics_count} produtos salvos")
+                if analytics_stats.get('latest_upload'):
+                    st.info(f"🕒 Último upload Analytics: {analytics_stats['latest_upload']}")
+                st.info(f"🏭 Fornecedores: {analytics_stats.get('suppliers', 0)}")
+            else:
+                st.info("📊 Analytics: Nenhum dado encontrado")
             
             # Show version history with delete options
             with st.expander(f"📋 Histórico de Versões - {empresa_selecionada}", expanded=True):
                 try:
-                    versions_timeline = get_upload_versions(empresa_code, "TIMELINE", limit=10)
-                    versions_analytics = get_upload_versions(empresa_code, "ANALYTICS", limit=10)
+                    # Use the data we already fetched
+                    versions_timeline = dashboard_data['versions_timeline']
+                    versions_analytics = dashboard_data['versions_analytics']
                     
                     if versions_timeline:
                         st.write("**📅 Timeline de Compras:**")
@@ -442,23 +422,25 @@ def show_data_upload():
                         file_size = len(uploaded_file.getvalue()) / 1024
                         st.metric("📁 Tamanho", f"{file_size:.1f} KB")
                     
-                    # Check for duplicate files
+                    # Check for duplicate files - Get fresh data with duplicate check
                     file_hash = str(hash(str(df_full.values.tobytes())))
                     is_duplicate = False
                     
-                    try:
-                        existing_versions = get_upload_versions(empresa_code, table_prefix, limit=50)
-                        for version in existing_versions:
-                            if version.get('arquivo_origem') == uploaded_file.name:
-                                is_duplicate = True
-                                st.warning(f"⚠️ **Arquivo duplicado detectado!** \n\n📁 **{uploaded_file.name}** já foi enviado anteriormente como versão v{version['version_id']} em {version['upload_date']}")
-                                
-                                # Show option to proceed anyway
-                                if st.checkbox("🔄 Enviar mesmo assim (criar nova versão)", key="force_upload"):
-                                    is_duplicate = False
-                                break
-                    except:
-                        pass  # If version check fails, allow upload
+                    # Get fresh data that includes duplicate check for this specific file
+                    upload_check_data = get_cached_upload_page_data(
+                        empresa_code, 
+                        table_prefix=table_prefix, 
+                        uploaded_filename=uploaded_file.name
+                    )
+                    
+                    if upload_check_data['duplicate_check'] and upload_check_data['duplicate_check']['is_duplicate']:
+                        version = upload_check_data['duplicate_check']['version_info']
+                        is_duplicate = True
+                        st.warning(f"⚠️ **Arquivo duplicado detectado!** \n\n📁 **{uploaded_file.name}** já foi enviado anteriormente como versão v{version['version_id']} em {version['upload_date']}")
+                        
+                        # Show option to proceed anyway
+                        if st.checkbox("🔄 Enviar mesmo assim (criar nova versão)", key="force_upload"):
+                            is_duplicate = False
                     
                     # Upload button
                     col1, col2 = st.columns([2, 1])
@@ -485,20 +467,21 @@ def show_data_upload():
                                         df_clean[col] = df_clean[col].fillna(0)
                                 
                                 # Debug: Show consumption columns being uploaded
-                                if table_prefix == "ANALYTICS":
-                                    st.info("🔍 **Debug: Verificando colunas de consumo antes do upload:**")
-                                    consumo_cols = []
-                                    for col in ['Consumo 6 Meses', 'Consumo_6_Meses', 'Média 6 Meses', 'Media_6_Meses']:
-                                        if col in df_clean.columns:
-                                            non_zero = len(df_clean[df_clean[col] > 0])
-                                            consumo_cols.append(f"• {col}: {non_zero} valores > 0")
-                                    
-                                    if consumo_cols:
-                                        st.success("✅ Colunas de consumo encontradas:")
-                                        for info in consumo_cols:
-                                            st.write(info)
-                                    else:
-                                        st.warning("⚠️ Nenhuma coluna de consumo encontrada! Verifique os dados.")
+                                # Commented out to reduce debug spam
+                                # if table_prefix == "ANALYTICS":
+                                #     st.info("🔍 **Debug: Verificando colunas de consumo antes do upload:**")
+                                #     consumo_cols = []
+                                #     for col in ['Consumo 6 Meses', 'Consumo_6_Meses', 'Média 6 Meses', 'Media_6_Meses']:
+                                #         if col in df_clean.columns:
+                                #             non_zero = len(df_clean[df_clean[col] > 0])
+                                #             consumo_cols.append(f"• {col}: {non_zero} valores > 0")
+                                #     
+                                #     if consumo_cols:
+                                #         st.success("✅ Colunas de consumo encontradas:")
+                                #         for info in consumo_cols:
+                                #             st.write(info)
+                                #     else:
+                                #         st.warning("⚠️ Nenhuma coluna de consumo encontrada! Verifique os dados.")
                                 
                                 # Upload to Snowflake
                                 success = upload_excel_to_snowflake(
