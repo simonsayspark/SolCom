@@ -79,16 +79,20 @@ def load_page():
                     use_container_width=True,
                     key="analytics_refresh"):
             from bd.snowflake_config import load_analytics_data
-            load_analytics_data.clear()  # Clear specific function cache
+            from bd.snowflake_analytics_dashboard import get_cached_analytics_page_data
+            load_analytics_data.clear()  # Clear old function cache
+            get_cached_analytics_page_data.clear()  # Clear new function cache
             st.success("✅ Cache de análise limpo! Dados atualizados.")
             st.rerun()
     
     # Try to load data from Snowflake first
     try:
         from bd.snowflake_config import load_analytics_data, get_upload_versions
+        from bd.snowflake_analytics_dashboard import get_cached_analytics_page_data
         
-        # Get available versions for the selected company
-        versions = get_upload_versions(empresa_code, "ANALYTICS", limit=20)
+        # Get ALL data in ONE connection - versions and analytics data
+        initial_data = get_cached_analytics_page_data(empresa_code)
+        versions = initial_data['versions']
         
         # Version selector with custom names and filenames
         if versions:
@@ -134,7 +138,14 @@ def load_page():
             st.info(f"💡 Nenhuma versão de análise encontrada para {empresa_selecionada}")
         
         # Load data with company and version selection
-        df = load_analytics_data(empresa=empresa_code, version_id=selected_version_id)
+        # If we need a different version than the initial load, get it
+        if selected_version_id != None or not initial_data['analytics_data'] is not None:
+            # We need to reload with specific version
+            analytics_data = get_cached_analytics_page_data(empresa_code, selected_version_id)
+            df = analytics_data['analytics_data']
+        else:
+            # Use the data we already loaded
+            df = initial_data['analytics_data']
         
         if df is not None and len(df) > 0:
             version_text = f"v{selected_version_id}" if selected_version_id else "ativa"

@@ -88,17 +88,29 @@ def get_upload_page_data(empresa: str, table_prefix: str = None, uploaded_filena
         # 2. Get version history for timeline (limit 10)
         try:
             cursor.execute("""
-            SELECT version_id, upload_date, description, is_active, arquivo_origem
-            FROM CONFIG.UPLOAD_VERSIONS
+            SELECT upload_version, version_id, table_type, upload_date, 
+                   description, arquivo_origem, linhas_processadas, status, created_by, is_active
+            FROM CONFIG.VERSIONS 
             WHERE empresa = %s AND table_type = 'TIMELINE'
-            ORDER BY upload_date DESC
+            ORDER BY is_active DESC, upload_date DESC
             LIMIT 10
             """, (empresa,))
             
-            columns = [desc[0].lower() for desc in cursor.description]
-            result['versions_timeline'] = [
-                dict(zip(columns, row)) for row in cursor.fetchall()
-            ]
+            versions = []
+            for row in cursor.fetchall():
+                versions.append({
+                    'upload_version': row[0],
+                    'version_id': row[1],
+                    'table_type': row[2],
+                    'upload_date': row[3],
+                    'description': row[4] or "",
+                    'arquivo_origem': row[5] or "",
+                    'linhas_processadas': row[6] or 0,
+                    'status': row[7] or "UNKNOWN",
+                    'created_by': row[8] or "",
+                    'is_active': row[9] or False
+                })
+            result['versions_timeline'] = versions
         except Exception as timeline_version_error:
             # Don't fail the whole function if version fetch fails
             pass
@@ -106,17 +118,29 @@ def get_upload_page_data(empresa: str, table_prefix: str = None, uploaded_filena
         # 3. Get version history for analytics (limit 10)
         try:
             cursor.execute("""
-            SELECT version_id, upload_date, description, is_active, arquivo_origem
-            FROM CONFIG.UPLOAD_VERSIONS
+            SELECT upload_version, version_id, table_type, upload_date, 
+                   description, arquivo_origem, linhas_processadas, status, created_by, is_active
+            FROM CONFIG.VERSIONS 
             WHERE empresa = %s AND table_type = 'ANALYTICS'
-            ORDER BY upload_date DESC
+            ORDER BY is_active DESC, upload_date DESC
             LIMIT 10
             """, (empresa,))
             
-            columns = [desc[0].lower() for desc in cursor.description]
-            result['versions_analytics'] = [
-                dict(zip(columns, row)) for row in cursor.fetchall()
-            ]
+            versions = []
+            for row in cursor.fetchall():
+                versions.append({
+                    'upload_version': row[0],
+                    'version_id': row[1],
+                    'table_type': row[2],
+                    'upload_date': row[3],
+                    'description': row[4] or "",
+                    'arquivo_origem': row[5] or "",
+                    'linhas_processadas': row[6] or 0,
+                    'status': row[7] or "UNKNOWN",
+                    'created_by': row[8] or "",
+                    'is_active': row[9] or False
+                })
+            result['versions_analytics'] = versions
         except Exception as analytics_version_error:
             # Don't fail the whole function if version fetch fails
             pass
@@ -125,8 +149,9 @@ def get_upload_page_data(empresa: str, table_prefix: str = None, uploaded_filena
         if table_prefix and uploaded_filename:
             try:
                 cursor.execute("""
-                SELECT version_id, upload_date, description, is_active, arquivo_origem
-                FROM CONFIG.UPLOAD_VERSIONS
+                SELECT upload_version, version_id, table_type, upload_date, 
+                       description, arquivo_origem, linhas_processadas, status, created_by, is_active
+                FROM CONFIG.VERSIONS
                 WHERE empresa = %s AND table_type = %s AND arquivo_origem = %s
                 ORDER BY upload_date DESC
                 LIMIT 1
@@ -134,8 +159,18 @@ def get_upload_page_data(empresa: str, table_prefix: str = None, uploaded_filena
                 
                 duplicate_row = cursor.fetchone()
                 if duplicate_row:
-                    columns = [desc[0].lower() for desc in cursor.description]
-                    version_info = dict(zip(columns, duplicate_row))
+                    version_info = {
+                        'upload_version': duplicate_row[0],
+                        'version_id': duplicate_row[1],
+                        'table_type': duplicate_row[2],
+                        'upload_date': duplicate_row[3],
+                        'description': duplicate_row[4] or "",
+                        'arquivo_origem': duplicate_row[5] or "",
+                        'linhas_processadas': duplicate_row[6] or 0,
+                        'status': duplicate_row[7] or "UNKNOWN",
+                        'created_by': duplicate_row[8] or "",
+                        'is_active': duplicate_row[9] or False
+                    }
                     result['duplicate_check'] = {
                         'is_duplicate': True,
                         'version_info': version_info
