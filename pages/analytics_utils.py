@@ -1599,10 +1599,20 @@ def show_priority_timeline(df, empresa="MINIPA"):
     # Add Solicitação de Pedidos table right after Detalhamento de Compras
     st.subheader("📋 Solicitação de Pedidos")
     
-    # Load CBM data from session state (already loaded in analytics.py)
-    cbm_data = st.session_state.get('cbm_data', {})
-    if not cbm_data:
-        st.info("ℹ️ Dados CBM não disponíveis - valores serão mostrados como 0")
+    # Load CBM data from TIMELINE table since it's not in ANALYTICS_DATA
+    cbm_data = {}
+    try:
+        from bd.snowflake_data import load_data_with_history
+        timeline_df = load_data_with_history(empresa=empresa)
+        if timeline_df is not None and len(timeline_df) > 0:
+            # Create a mapping of produto -> CBM
+            for _, row in timeline_df.iterrows():
+                produto = str(row.get('Item', '')).strip()
+                if produto and produto != 'nan':
+                    cbm = float(row.get('CBM', 0) or 0)
+                    cbm_data[produto] = cbm
+    except Exception as e:
+        st.warning(f"⚠️ Não foi possível carregar dados CBM: {str(e)}")
     
     # Create the purchase request dataframe with the requested columns using the same filtered data
     solicitacao_data = []
