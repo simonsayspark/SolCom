@@ -99,9 +99,13 @@ def calculate_purchase_suggestions(produtos_existentes):
     """Calculate purchase suggestions for products"""
     
     def calcular_quando_vai_acabar(estoque, consumo_mensal):
-        if consumo_mensal <= 0:
+        # Handle None/NaN values properly without changing the logic
+        if pd.isna(consumo_mensal) or consumo_mensal is None or consumo_mensal <= 0:
             return "Sem consumo", 999
         
+        if pd.isna(estoque) or estoque is None:
+            estoque = 0
+            
         meses_restantes = estoque / consumo_mensal
         
         if meses_restantes <= 0:
@@ -113,8 +117,12 @@ def calculate_purchase_suggestions(produtos_existentes):
             return f"{meses_restantes:.1f} meses", meses_restantes
     
     def quanto_comprar(consumo_mensal, estoque_atual, moq=0, meses_desejados=6):
-        if consumo_mensal <= 0:
+        # Handle None/NaN values
+        if pd.isna(consumo_mensal) or consumo_mensal is None or consumo_mensal <= 0:
             return moq if moq > 0 else 0
+            
+        if pd.isna(estoque_atual) or estoque_atual is None:
+            estoque_atual = 0
         
         estoque_ideal = consumo_mensal * meses_desejados
         falta = max(0, estoque_ideal - estoque_atual)

@@ -510,7 +510,13 @@ def show_data_upload():
                                         load_data_with_history.clear()
                                     else:
                                         load_analytics_data.clear()
-                                        
+                                    
+                                    # Clear version cache to show new version
+                                    get_upload_versions.clear()
+                                    
+                                    # Also clear the new dashboard cache
+                                    get_cached_upload_page_data.clear()
+                                    
                                     st.rerun()
                                 else:
                                     st.error(f"❌ Erro ao salvar dados para {empresa_selecionada}")

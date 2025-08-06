@@ -78,10 +78,11 @@ def load_page():
                     help="Atualizar dados do Snowflake (normalmente cache por 7 dias)",
                     use_container_width=True,
                     key="analytics_refresh"):
-            from bd.snowflake_config import load_analytics_data
+            from bd.snowflake_config import load_analytics_data, get_upload_versions
             from bd.snowflake_analytics_dashboard import get_cached_analytics_page_data
             load_analytics_data.clear()  # Clear old function cache
             get_cached_analytics_page_data.clear()  # Clear new function cache
+            get_upload_versions.clear()  # Clear version cache
             st.success("✅ Cache de análise limpo! Dados atualizados.")
             st.rerun()
     
