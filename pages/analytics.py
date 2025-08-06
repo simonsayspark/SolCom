@@ -319,6 +319,14 @@ def load_page():
         
         with tab1:
             try:
+                # Pass CBM data from our initial load (if available)
+                cbm_data = initial_data.get('timeline_cbm_data', {}) if 'initial_data' in locals() else {}
+                if not cbm_data and 'analytics_data' in locals():
+                    cbm_data = analytics_data.get('timeline_cbm_data', {})
+                
+                # Store CBM data in session state to be used by analytics_utils
+                st.session_state['cbm_data'] = cbm_data
+                
                 show_priority_timeline(df, empresa_selecionada)
             except Exception as e:
                 st.error(f"❌ Erro no Timeline Prioritário: {str(e)}")
