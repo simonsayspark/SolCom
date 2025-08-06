@@ -231,16 +231,19 @@ def show_data_upload():
                                                     key=f"confirm_del_timeline_{v['version_id']}",
                                                     type="primary",
                                                     use_container_width=True):
-                                            try:
-                                                # Call the actual deletion function
-                                                if delete_version(empresa_code, v['version_id'], "TIMELINE"):
-                                                    st.success(f"✅ {display_name} deletada!")
-                                                    st.session_state[f"confirm_delete_timeline_{v['version_id']}"] = False
-                                                    st.rerun()
-                                                else:
-                                                    st.error("❌ Falha ao deletar versão")
-                                            except Exception as e:
-                                                st.error(f"❌ Erro ao deletar: {str(e)}")
+                                            # Use the consolidated function for deletion
+                                            delete_data = get_cached_upload_page_data(
+                                                empresa_code,
+                                                delete_version_id=v['version_id'],
+                                                delete_table_type="TIMELINE"
+                                            )
+                                            if delete_data['delete_result'] and delete_data['delete_result']['success']:
+                                                st.success(f"✅ {display_name} deletada!")
+                                                get_cached_upload_page_data.clear()  # Clear cache
+                                                st.session_state[f"confirm_delete_timeline_{v['version_id']}"] = False
+                                                st.rerun()
+                                            else:
+                                                st.error("❌ Falha ao deletar versão")
                                     with col2:
                                         if st.button("❌ Cancelar", 
                                                     key=f"cancel_del_timeline_{v['version_id']}",
@@ -291,16 +294,19 @@ def show_data_upload():
                                                     key=f"confirm_del_analytics_{v['version_id']}",
                                                     type="primary",
                                                     use_container_width=True):
-                                            try:
-                                                # Call the actual deletion function
-                                                if delete_version(empresa_code, v['version_id'], "ANALYTICS"):
-                                                    st.success(f"✅ {display_name} deletada!")
-                                                    st.session_state[f"confirm_delete_analytics_{v['version_id']}"] = False
-                                                    st.rerun()
-                                                else:
-                                                    st.error("❌ Falha ao deletar versão")
-                                            except Exception as e:
-                                                st.error(f"❌ Erro ao deletar: {str(e)}")
+                                            # Use the consolidated function for deletion
+                                            delete_data = get_cached_upload_page_data(
+                                                empresa_code,
+                                                delete_version_id=v['version_id'],
+                                                delete_table_type="ANALYTICS"
+                                            )
+                                            if delete_data['delete_result'] and delete_data['delete_result']['success']:
+                                                st.success(f"✅ {display_name} deletada!")
+                                                get_cached_upload_page_data.clear()  # Clear cache
+                                                st.session_state[f"confirm_delete_analytics_{v['version_id']}"] = False
+                                                st.rerun()
+                                            else:
+                                                st.error("❌ Falha ao deletar versão")
                                     with col2:
                                         if st.button("❌ Cancelar", 
                                                     key=f"cancel_del_analytics_{v['version_id']}",
@@ -340,9 +346,15 @@ def show_data_upload():
                         use_container_width=True,
                         help="Corrige o status 'ativa' das versões - use se todas as versões aparecem como ativas"):
                 with st.spinner("🔧 Reparando status das versões..."):
-                    if fix_active_versions():
-                        st.success("✅ Versões reparadas! Recarregue a página.")
+                    # Use the consolidated function for repair
+                    repair_data = get_cached_upload_page_data(
+                        empresa_code,
+                        repair_versions=True
+                    )
+                    if repair_data['repair_result'] and repair_data['repair_result']['success']:
+                        st.success(f"✅ Versões reparadas! {repair_data['repair_result']['fixed_count']} combinações corrigidas.")
                         # Clear the cache to show updated data
+                        get_cached_upload_page_data.clear()
                         get_upload_versions.clear()
                         st.rerun()
                     else:
