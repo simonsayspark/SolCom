@@ -123,6 +123,7 @@ def show_data_upload():
                                         load_analytics_data, test_connection, get_upload_versions, 
                                         delete_version, fix_active_versions)
         from bd.snowflake_upload_dashboard import get_cached_upload_page_data
+        from bd.snowflake_upload_optimized import upload_excel_to_snowflake_optimized
         snowflake_available = True
     except ImportError:
         snowflake_available = False
@@ -495,8 +496,8 @@ def show_data_upload():
                                 #     else:
                                 #         st.warning("⚠️ Nenhuma coluna de consumo encontrada! Verifique os dados.")
                                 
-                                # Upload to Snowflake
-                                success = upload_excel_to_snowflake(
+                                # Upload to Snowflake - Use optimized version
+                                success = upload_excel_to_snowflake_optimized(
                                     df=df_clean, 
                                     arquivo_nome=uploaded_file.name, 
                                     empresa=empresa_code,
