@@ -150,7 +150,7 @@ def load_page():
         
         if df is not None and len(df) > 0:
             version_text = f"v{selected_version_id}" if selected_version_id else "ativa"
-            st.success(f"✅ {empresa_selecionada} - Análise {version_text}: {len(df)} produtos carregados")
+            st.success(f"✅ {len(df)} produtos carregados")
             
             # # DEBUG: Check if data_upload column exists before accessing it
             # if 'data_upload' in df.columns:
@@ -330,7 +330,7 @@ def load_page():
                 show_priority_timeline(df, empresa_selecionada)
             except Exception as e:
                 st.error(f"❌ Erro no Timeline Prioritário: {str(e)}")
-                st.write("Debug: Erro completo:", e)
+                                            # Debug error removed
                 import traceback
                 st.text(traceback.format_exc())
         

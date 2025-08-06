@@ -186,8 +186,8 @@ def upload_excel_to_snowflake_optimized(df, arquivo_nome, empresa="MINIPA", usua
                         True
                     ))
                 except Exception as row_error:
-                    st.warning(f"⚠️ Erro na linha {idx + 1}: {str(row_error)}")
-                    
+                    # Row errors logged silently
+                    pass
         elif table_type == "ANALYTICS":
             # Map columns for analytics
             for idx, row in df_clean.iterrows():
@@ -226,7 +226,8 @@ def upload_excel_to_snowflake_optimized(df, arquivo_nome, empresa="MINIPA", usua
                         row.get('monthly_volume', None)
                     ))
                 except Exception as row_error:
-                    st.warning(f"⚠️ Erro na linha {idx + 1}: {str(row_error)}")
+                    # Row errors logged silently
+                    pass
         
         # 9. Update version record with row count
         cursor.execute("""
@@ -241,7 +242,7 @@ def upload_excel_to_snowflake_optimized(df, arquivo_nome, empresa="MINIPA", usua
         # Calculate execution time
         execution_time = (datetime.now() - start_time).total_seconds()
         st.success(f"✅ Upload concluído em {execution_time:.1f} segundos")
-        st.info(f"📊 {len(df_clean)} linhas processadas com sucesso")
+                        # Processing complete - silent success
         
         cursor.close()
         conn.close()

@@ -10,7 +10,7 @@ def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
         xl_file = pd.ExcelFile(uploaded_file)
         sheets = xl_file.sheet_names
         
-        st.info(f"📋 Planilhas encontradas: {sheets}")
+        # Sheet info removed for cleaner UI
         
         # Try different sheets and header positions
         best_sheet = None
@@ -56,7 +56,7 @@ def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
             df_full = df_full.dropna(how='all')  # Remove completely empty rows
             
             # 🔧 CRITICAL FIX: Apply column renaming BEFORE upload to fix zero prices issue
-            st.info("🔄 Padronizando nomes das colunas...")
+            # Column standardization happens silently
             
             original_columns = list(df_full.columns)
             df_full, change_pairs = apply_column_remap(df_full)
@@ -65,7 +65,7 @@ def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
             changes_made = [f"'{old}' → '{new}'" for old, new in change_pairs]
             
             if changes_made:
-                st.success(f"✅ Colunas padronizadas: {len(changes_made)} alterações")
+                st.success("✅ Colunas padronizadas")
                 with st.expander("📋 Ver alterações nas colunas"):
                     for change in changes_made:
                         st.write(f"• {change}")
@@ -97,7 +97,7 @@ def analyze_and_process_excel(uploaded_file, file_type="Auto-detectar"):
             if has_priority_data:
                 st.success("🎯 **MERGED EXCEL DETECTADO**: Este arquivo contém dados de análise prioritária!")
                 detected_priority_cols = [col for col in priority_columns if col in df_full.columns]
-                st.info(f"📊 Colunas de prioridade encontradas: {', '.join(detected_priority_cols)}")
+                # Priority columns detected
             else:
                 st.info("📊 **EXCEL PADRÃO**: Dados básicos de estoque detectados")
             
@@ -167,8 +167,7 @@ def show_data_upload():
             if timeline_count > 0:
                 st.success(f"📅 Timeline: {timeline_count} produtos salvos")
                 if timeline_stats.get('latest_upload'):
-                    st.info(f"🕒 Último upload Timeline: {timeline_stats['latest_upload']}")
-                st.info(f"🏭 Fornecedores: {timeline_stats.get('suppliers', 0)}")
+                    st.info(f"🕒 Último upload: {timeline_stats['latest_upload']}")
             else:
                 st.info("📅 Timeline: Nenhum dado encontrado")
             
@@ -179,13 +178,12 @@ def show_data_upload():
             if analytics_count > 0:
                 st.success(f"📊 Analytics: {analytics_count} produtos salvos")
                 if analytics_stats.get('latest_upload'):
-                    st.info(f"🕒 Último upload Analytics: {analytics_stats['latest_upload']}")
-                st.info(f"🏭 Fornecedores: {analytics_stats.get('suppliers', 0)}")
+                    st.info(f"🕒 Último upload: {analytics_stats['latest_upload']}")
             else:
                 st.info("📊 Analytics: Nenhum dado encontrado")
             
             # Show version history with delete options
-            with st.expander(f"📋 Histórico de Versões - {empresa_selecionada}", expanded=True):
+            with st.expander(f"📋 Histórico de Versões - {empresa_selecionada}", expanded=False):
                 try:
                     # Use the data we already fetched
                     versions_timeline = dashboard_data['versions_timeline']
@@ -323,7 +321,7 @@ def show_data_upload():
                     st.warning(f"Erro ao carregar versões: {str(e)}")
         
         with col2:
-            st.info("🔗 Snowflake (monitoring disabled)")
+                            # Snowflake status - removed unnecessary message
             
             # Add database migration button
             if st.button("🔄 Migração do BD", 
@@ -449,7 +447,7 @@ def show_data_upload():
                     if upload_check_data['duplicate_check'] and upload_check_data['duplicate_check']['is_duplicate']:
                         version = upload_check_data['duplicate_check']['version_info']
                         is_duplicate = True
-                        st.warning(f"⚠️ **Arquivo duplicado detectado!** \n\n📁 **{uploaded_file.name}** já foi enviado anteriormente como versão v{version['version_id']} em {version['upload_date']}")
+                        st.warning("⚠️ **Arquivo duplicado detectado!**")
                         
                         # Show option to proceed anyway
                         if st.checkbox("🔄 Enviar mesmo assim (criar nova versão)", key="force_upload"):
@@ -518,16 +516,10 @@ def show_data_upload():
                                         st.info("✅ **Dados salvos para Análise de Estoque**") 
                                         st.write("👉 Acesse a página '📊 Análise de Estoque' para ver os relatórios")
                                     
-                                    # Clear cache for this company to show new data immediately
-                                    if table_prefix == "TIMELINE":
-                                        load_data_with_history.clear()
-                                    else:
-                                        load_analytics_data.clear()
-                                    
-                                    # Clear version cache to show new version
+                                    # Clear all caches at once for efficiency
+                                    load_data_with_history.clear()
+                                    load_analytics_data.clear()
                                     get_upload_versions.clear()
-                                    
-                                    # Also clear the new dashboard cache
                                     get_cached_upload_page_data.clear()
                                     
                                     st.rerun()

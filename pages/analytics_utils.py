@@ -1004,37 +1004,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
             st.dataframe(df.head(3))
         return
     
-    # Debug: Show summary of consumption column usage
-    with st.expander("📊 Debug: Uso de Colunas de Consumo", expanded=False):
-        # Count which columns were used
-        column_usage = {}
-        for item in timeline_data:
-            col_used = "Não detectada"
-            # Check which column was actually used based on the media value
-            if item['Media_Mensal'] > 0:
-                # Try to identify which column it came from
-                produto_idx = df[df['Produto'] == item['Produto']].index
-                if len(produto_idx) > 0:
-                    row = df.loc[produto_idx[0]]
-                    for col in ['Média 6 Meses', 'Media_6_Meses', 'media_6_meses', 'Media 6 Meses', 'Consumo 6 Meses', 'consumo_6_meses', 'monthly_volume']:
-                        if col in row.index:
-                            try:
-                                if float(row.get(col, 0) or 0) == item['Media_Mensal']:
-                                    col_used = col
-                                    break
-                            except:
-                                continue
-            
-            column_usage[col_used] = column_usage.get(col_used, 0) + 1
-        
-        st.write("**Resumo de uso das colunas:**")
-        for col, count in sorted(column_usage.items(), key=lambda x: x[1], reverse=True):
-            st.write(f"- {col}: {count} produtos")
-        
-        total_with_consumption = sum(1 for item in timeline_data if item['Media_Mensal'] > 0)
-        total_without_consumption = sum(1 for item in timeline_data if item['Media_Mensal'] == 0)
-        st.write(f"\n**Total com consumo:** {total_with_consumption}")
-        st.write(f"**Total sem consumo:** {total_without_consumption}")
+    # Debug expander removed for cleaner UI
     
     # Convert to DataFrame for easier manipulation
     timeline_df = pd.DataFrame(timeline_data)
@@ -1085,16 +1055,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
             filtered_df = filtered_df[filtered_df['Ainda_Urgente_Com_Estoque_Futuro'] == True]
             st.info(f"🎯 {len(filtered_df)} produtos continuam urgentes mesmo com entregas futuras confirmadas")
             
-            # Debug: Show some examples
-            with st.expander("🔍 Debug: Ver cálculos detalhados"):
-                debug_sample = filtered_df.head(5)
-                for _, row in debug_sample.iterrows():
-                    st.write(f"**{row['Produto']}**")
-                    st.write(f"- Dias até pedido (atual): {row['Dias_Ate_Pedido']:.0f} dias")
-                    st.write(f"- Dias até pedido (com estoque futuro): {row['Dias_Ate_Pedido_Esperado']:.0f} dias")
-                    st.write(f"- Qtde em trânsito: {row['Qtde_Embarque']:.0f} + Compras 30 dias: {row['Compras_Ate_30_Dias']:.0f}")
-                    st.write(f"- Cobertura esperada: {row['Meses_Cobertura_Esperada']:.1f} meses")
-                    st.write("---")
+            # Debug calculations expander removed
     
     with col3:
         # Show top N products selector - now based on filtered results
@@ -1171,7 +1132,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
     # Interactive Timeline Chart
     if len(filtered_df) > 0:
         # Debug: Show filtering info
-        st.info(f"🔍 **Debug Info:** Total produtos após filtros: {len(filtered_df)} | N produtos selecionado: {n_produtos}")
+        # Debug info removed
         
         # Limit display based on user selection
         display_df = filtered_df.head(n_produtos)
