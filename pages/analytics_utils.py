@@ -1176,10 +1176,10 @@ def show_priority_timeline(df, empresa="MINIPA"):
         fig.add_trace(
             go.Bar(
                 y=display_df['Produto'],
-                x=display_df['Meses_Ate_Pedido'],
+                x=display_df['Meses_Cobertura'],
                 orientation='h',
                 marker_color=display_df['Cor'],
-                text=[f"{row['Meses_Ate_Pedido']:.1f}m" for _, row in display_df.iterrows()],
+                text=[f"{row['Meses_Cobertura']:.1f}m" for _, row in display_df.iterrows()],
                 textposition='inside',
                 hovertemplate=(
                     '<b>%{y}</b><br>' +
