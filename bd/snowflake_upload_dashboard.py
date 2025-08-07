@@ -25,10 +25,10 @@ def get_upload_page_data(empresa: str, table_prefix: str = None, uploaded_filena
         Dictionary with all the data:
         {
             'stats': {
-                'timeline': {'count': int, 'latest_upload': datetime, 'suppliers': int},
+    
                 'analytics': {'count': int, 'latest_upload': datetime, 'suppliers': int}
             },
-            'versions_timeline': [...],
+
             'versions_analytics': [...],
             'duplicate_check': {'is_duplicate': bool, 'version_info': {...}} or None,
             'delete_result': {'success': bool, 'message': str} or None,
@@ -38,10 +38,8 @@ def get_upload_page_data(empresa: str, table_prefix: str = None, uploaded_filena
     # Initialize return structure
     result = {
         'stats': {
-            'timeline': {'count': 0, 'latest_upload': None, 'suppliers': 0},
             'analytics': {'count': 0, 'latest_upload': None, 'suppliers': 0}
         },
-        'versions_timeline': [],
         'versions_analytics': [],
         'duplicate_check': None,
         'delete_result': None,
@@ -55,25 +53,8 @@ def get_upload_page_data(empresa: str, table_prefix: str = None, uploaded_filena
     try:
         cursor = conn.cursor()
         
-        # 1. Get combined statistics for both timeline and analytics
+        # 1. Get statistics for analytics only (timeline table dropped)
         try:
-            # Timeline stats
-            cursor.execute("""
-            SELECT COUNT(*) as total_records,
-                   MAX(data_upload) as latest_upload,
-                   COUNT(DISTINCT fornecedor) as supplier_count
-            FROM ESTOQUE.PRODUTOS 
-            WHERE empresa = %s AND table_type = 'TIMELINE' AND is_active = TRUE
-            """, (empresa,))
-            
-            timeline_result = cursor.fetchone()
-            if timeline_result:
-                result['stats']['timeline'] = {
-                    'count': timeline_result[0] or 0,
-                    'latest_upload': timeline_result[1],
-                    'suppliers': timeline_result[2] or 0
-                }
-            
             # Analytics stats
             cursor.execute("""
             SELECT COUNT(*) as total_records,
@@ -94,37 +75,9 @@ def get_upload_page_data(empresa: str, table_prefix: str = None, uploaded_filena
             # Don't fail the whole function if stats fail
             pass
         
-        # 2. Get version history for timeline (limit 10)
-        try:
-            cursor.execute("""
-            SELECT upload_version, version_id, table_type, upload_date, 
-                   description, arquivo_origem, linhas_processadas, status, created_by, is_active
-            FROM CONFIG.VERSIONS 
-            WHERE empresa = %s AND table_type = 'TIMELINE'
-            ORDER BY is_active DESC, upload_date DESC
-            LIMIT 10
-            """, (empresa,))
-            
-            versions = []
-            for row in cursor.fetchall():
-                versions.append({
-                    'upload_version': row[0],
-                    'version_id': row[1],
-                    'table_type': row[2],
-                    'upload_date': row[3],
-                    'description': row[4] or "",
-                    'arquivo_origem': row[5] or "",
-                    'linhas_processadas': row[6] or 0,
-                    'status': row[7] or "UNKNOWN",
-                    'created_by': row[8] or "",
-                    'is_active': row[9] or False
-                })
-            result['versions_timeline'] = versions
-        except Exception as timeline_version_error:
-            # Don't fail the whole function if version fetch fails
-            pass
+        # Timeline removed - table dropped
         
-        # 3. Get version history for analytics (limit 10)
+        # 2. Get version history for analytics (limit 10)
         try:
             cursor.execute("""
             SELECT upload_version, version_id, table_type, upload_date, 
@@ -202,12 +155,7 @@ def get_upload_page_data(empresa: str, table_prefix: str = None, uploaded_filena
                 """, (empresa, delete_version_id, delete_table_type))
                 
                 # Also delete data from appropriate table
-                if delete_table_type == "TIMELINE":
-                    cursor.execute("""
-                    DELETE FROM ESTOQUE.PRODUTOS 
-                    WHERE empresa = %s AND version_id = %s
-                    """, (empresa, delete_version_id))
-                elif delete_table_type == "ANALYTICS":
+                if delete_table_type == "ANALYTICS":
                     cursor.execute("""
                     DELETE FROM ESTOQUE.ANALYTICS_DATA 
                     WHERE empresa = %s AND version_id = %s
@@ -258,23 +206,7 @@ def get_upload_page_data(empresa: str, table_prefix: str = None, uploaded_filena
                     """, (emp, tbl, emp, tbl))
                     
                     # Also update data tables
-                    if tbl == 'TIMELINE':
-                        cursor.execute("""
-                        UPDATE ESTOQUE.PRODUTOS 
-                        SET is_active = FALSE 
-                        WHERE empresa = %s AND table_type = %s
-                        """, (emp, tbl))
-                        
-                        cursor.execute("""
-                        UPDATE ESTOQUE.PRODUTOS 
-                        SET is_active = TRUE 
-                        WHERE empresa = %s AND table_type = %s 
-                        AND version_id = (
-                            SELECT version_id FROM CONFIG.VERSIONS 
-                            WHERE empresa = %s AND table_type = %s AND is_active = TRUE
-                        )
-                        """, (emp, tbl, emp, tbl))
-                    elif tbl == 'ANALYTICS':
+                    if tbl == 'ANALYTICS':
                         cursor.execute("""
                         UPDATE ESTOQUE.ANALYTICS_DATA 
                         SET is_active = FALSE 

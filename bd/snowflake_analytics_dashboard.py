@@ -183,29 +183,7 @@ def get_analytics_page_data(empresa: str, version_id: int = None):
             st.error(f"❌ Erro ao carregar dados de análise: {str(data_error)}")
             pass
         
-        # 4. Load CBM data from timeline table (for Solicitação de Pedidos)
-        try:
-            cursor = conn.cursor()
-            cursor.execute("""
-            SELECT item, cbm
-            FROM ESTOQUE.PRODUTOS
-            WHERE empresa = %s AND table_type = 'TIMELINE' AND is_active = TRUE
-            AND item IS NOT NULL AND cbm IS NOT NULL
-            """, (empresa,))
-            
-            cbm_data = {}
-            for row in cursor.fetchall():
-                produto = str(row[0]).strip()
-                cbm = float(row[1] or 0)
-                if produto and produto != 'nan' and cbm > 0:
-                    cbm_data[produto] = cbm
-            
-            result['timeline_cbm_data'] = cbm_data
-            cursor.close()
-            
-        except Exception as cbm_error:
-            # Don't fail if CBM data can't be loaded
-            pass
+        # CBM data removed - not needed anymore
         
         conn.close()
         return result

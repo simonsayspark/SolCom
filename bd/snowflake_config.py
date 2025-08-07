@@ -22,7 +22,6 @@ from .snowflake_tables import (
 )
 
 from .snowflake_data import (
-    load_data_with_history,
     load_analytics_data,
     get_cached_counts,
     load_combined_data_stats
@@ -70,7 +69,6 @@ __all__ = [
     'add_analytics_columns',
     
     # Data Loading
-    'load_data_with_history',
     'load_analytics_data',
     'get_cached_counts',
     'load_combined_data_stats',

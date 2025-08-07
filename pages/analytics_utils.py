@@ -1393,10 +1393,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
     # Add Solicitação de Pedidos table right after Detalhamento de Compras
     st.subheader("📋 Solicitação de Pedidos")
     
-    # Load CBM data from session state (already loaded in analytics.py)
-    cbm_data = st.session_state.get('cbm_data', {})
-    if not cbm_data:
-        st.info("ℹ️ Dados CBM não disponíveis - valores serão mostrados como 0")
+    # CBM data removed - not needed anymore
     
     # Create the purchase request dataframe with the requested columns using the same filtered data
     solicitacao_data = []
@@ -1464,21 +1461,8 @@ def show_priority_timeline(df, empresa="MINIPA"):
         else:
             new_previsao_com_pos = 999  # No consumption
         
-        # 🔧 FIX: Enhanced CBM lookup with better fallback logic
+        # CBM removed - not needed
         cbm = 0
-        # First try from timeline processed data
-        if 'CBM' in row.index:
-            cbm = float(row.get('CBM', 0) or 0)
-        
-        # If still zero, try original analytics data
-        if cbm == 0:
-            original_row = df[df['Produto'] == produto]
-            if len(original_row) > 0 and 'CBM' in original_row.columns:
-                cbm = float(original_row['CBM'].iloc[0] or 0)
-        
-        # If still zero, try timeline data mapping
-        if cbm == 0:
-            cbm = cbm_data.get(produto, 0)
         
         # 12. MOQ - use the processed MOQ column
         moq = float(row.get('MOQ', 0) or 0)

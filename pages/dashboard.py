@@ -10,17 +10,17 @@ def show_dashboard():
 
     with col1:
         st.markdown("""
-        ### 📅 Timeline de Compras
-        Visualize e otimize suas compras com base em MOQ e análise de estoque.
+        ### 📊 Análise de Estoque
+        Sistema completo de análise e priorização de produtos.
         
         **Recursos:**
         - ⏰ Previsão de esgotamento
-        - 🎯 Otimização de MOQ 
+        - 🎯 Priorização inteligente
         - 📈 Gráficos interativos
         - 💰 Análise financeira
         """)
-        if st.button("🚀 Acessar Timeline", use_container_width=True, key="nav_timeline"):
-            st.session_state.current_page = "timeline"
+        if st.button("🚀 Acessar Análise", use_container_width=True, key="nav_analytics"):
+            st.session_state.current_page = "analytics"
             st.rerun()
 
     with col2:

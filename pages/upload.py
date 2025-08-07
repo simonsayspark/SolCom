@@ -119,7 +119,7 @@ def show_data_upload():
     
     # Import Snowflake functions
     try:
-        from bd.snowflake_config import (upload_excel_to_snowflake, load_data_with_history, 
+        from bd.snowflake_config import (upload_excel_to_snowflake, 
                                         load_analytics_data, test_connection, get_upload_versions, 
                                         delete_version, fix_active_versions)
         from bd.snowflake_upload_dashboard import get_cached_upload_page_data
@@ -160,16 +160,7 @@ def show_data_upload():
         col1, col2 = st.columns([3, 1])
         
         with col1:
-            # Show timeline data
-            timeline_stats = dashboard_data['stats']['timeline']
-            timeline_count = timeline_stats.get('count', 0)
-            
-            if timeline_count > 0:
-                st.success(f"📅 Timeline: {timeline_count} produtos salvos")
-                if timeline_stats.get('latest_upload'):
-                    st.info(f"🕒 Último upload: {timeline_stats['latest_upload']}")
-            else:
-                st.info("📅 Timeline: Nenhum dado encontrado")
+                    # Timeline removed - table dropped
             
             # Show analytics data
             analytics_stats = dashboard_data['stats']['analytics']
@@ -186,71 +177,10 @@ def show_data_upload():
             with st.expander(f"📋 Histórico de Versões - {empresa_selecionada}", expanded=False):
                 try:
                     # Use the data we already fetched
-                    versions_timeline = dashboard_data['versions_timeline']
+                    # Timeline removed - table dropped
                     versions_analytics = dashboard_data['versions_analytics']
                     
-                    if versions_timeline:
-                        st.write("**📅 Timeline de Compras:**")
-                        for i, v in enumerate(versions_timeline[:5]):
-                            status_icon = "🟢" if v['is_active'] else "⚪"
-                            
-                            # Use custom description or fallback to version number
-                            display_name = v.get('description', '').strip()
-                            if not display_name:
-                                display_name = f"Versão {v['version_id']}"
-                            
-                            # Show filename if available
-                            filename_info = f" - 📁 {v.get('arquivo_origem', 'N/A')}" if v.get('arquivo_origem') else ""
-                            
-                            # Create a container for each version
-                            version_container = st.container()
-                            with version_container:
-                                col1, col2 = st.columns([4, 1])
-                                with col1:
-                                    st.write(f"{status_icon} **{display_name}** - {v['upload_date']}{filename_info}")
-                                with col2:
-                                    if not v['is_active']:  # Can't delete active version
-                                        delete_button = st.button("🗑️ Deletar", 
-                                                                 key=f"del_timeline_{v['version_id']}_{i}", 
-                                                                 help="Deletar esta versão",
-                                                                 type="secondary",
-                                                                 use_container_width=True)
-                                        if delete_button:
-                                            st.session_state[f"confirm_delete_timeline_{v['version_id']}"] = True
-                                            st.rerun()
-                                    else:
-                                        st.write("🔒 **Ativa**")
-                                
-                                # Show confirmation dialog
-                                if st.session_state.get(f"confirm_delete_timeline_{v['version_id']}", False):
-                                    st.error(f"⚠️ **CONFIRMAR EXCLUSÃO:** {display_name}")
-                                    col1, col2 = st.columns(2)
-                                    with col1:
-                                        if st.button("✅ SIM, DELETAR", 
-                                                    key=f"confirm_del_timeline_{v['version_id']}",
-                                                    type="primary",
-                                                    use_container_width=True):
-                                            # Use the consolidated function for deletion
-                                            delete_data = get_cached_upload_page_data(
-                                                empresa_code,
-                                                delete_version_id=v['version_id'],
-                                                delete_table_type="TIMELINE"
-                                            )
-                                            if delete_data['delete_result'] and delete_data['delete_result']['success']:
-                                                st.success(f"✅ {display_name} deletada!")
-                                                get_cached_upload_page_data.clear()  # Clear cache
-                                                st.session_state[f"confirm_delete_timeline_{v['version_id']}"] = False
-                                                st.rerun()
-                                            else:
-                                                st.error("❌ Falha ao deletar versão")
-                                    with col2:
-                                        if st.button("❌ Cancelar", 
-                                                    key=f"cancel_del_timeline_{v['version_id']}",
-                                                    use_container_width=True):
-                                            st.session_state[f"confirm_delete_timeline_{v['version_id']}"] = False
-                                            st.rerun()
-                                
-                                st.divider()  # Visual separator between versions
+
                     
                     if versions_analytics:
                         st.write("**📊 Análise de Estoque:**")
@@ -315,7 +245,7 @@ def show_data_upload():
                                 
                                 st.divider()  # Visual separator between versions
                     
-                    if not versions_timeline and not versions_analytics:
+                    if not versions_analytics:
                         st.info("Nenhuma versão encontrada. Faça seu primeiro upload!")
                 except Exception as e:
                     st.warning(f"Erro ao carregar versões: {str(e)}")
@@ -365,7 +295,7 @@ def show_data_upload():
     # Create two distinct upload options
     upload_type = st.radio(
         "📋 Selecione o tipo de dados:",
-        ["📊 Análise de Estoque com Prioridades (Merged Excel)", "📅 Timeline de Compras (MOQ/Fornecedores)", "📊 Análise de Estoque (Export)"],
+        ["📊 Análise de Estoque com Prioridades (Merged Excel)", "📊 Análise de Estoque (Export)"],
         help="Escolha o tipo correto para que os dados sejam processados adequadamente"
     )
     
@@ -390,15 +320,7 @@ def show_data_upload():
             help="Arquivo que já passou pelo data merger e priority analysis",
             key="merged_upload"
         )
-    elif upload_type == "📅 Timeline de Compras (MOQ/Fornecedores)":
-        st.info("📝 **Para Timeline:** Upload com colunas Item, Fornecedor, QTD, Modelo, Preço FOB, MOQ, etc.")
-        table_prefix = "TIMELINE"
-        uploaded_file = st.file_uploader(
-            "📁 Arquivo Excel para Timeline de Compras",
-            type=['xlsx', 'xls'],
-            help="Arquivo com dados de fornecedores, MOQ, preços FOB, etc.",
-            key="timeline_upload"
-        )
+
     else:
         st.info("📊 **Para Análise:** Upload com colunas Produto, Estoque, Média 6 Meses, Estoque Cobertura, etc.")
         table_prefix = "ANALYTICS"
@@ -508,16 +430,11 @@ def show_data_upload():
                                     st.success(f"🎉 Dados salvos com sucesso para {empresa_selecionada}!")
                                     st.balloons()
                                     
-                                    # Show different messages based on upload type
-                                    if table_prefix == "TIMELINE":
-                                        st.info("✅ **Dados salvos para Timeline de Compras**")
-                                        st.write("👉 Acesse a página '📅 Timeline de Compras' para ver a análise")
-                                    else:
-                                        st.info("✅ **Dados salvos para Análise de Estoque**") 
-                                        st.write("👉 Acesse a página '📊 Análise de Estoque' para ver os relatórios")
+                                    # Show success message
+                                    st.info("✅ **Dados salvos para Análise de Estoque**") 
+                                    st.write("👉 Acesse a página '📊 Análise de Estoque' para ver os relatórios")
                                     
                                     # Clear all caches at once for efficiency
-                                    load_data_with_history.clear()
                                     load_analytics_data.clear()
                                     get_upload_versions.clear()
                                     get_cached_upload_page_data.clear()
