@@ -1236,14 +1236,17 @@ def show_priority_timeline(df, empresa="MINIPA"):
                         'Qtde em trânsito: %{customdata[0]:.0f} unidades<br>' +
                         'Compras até 30 dias: %{customdata[1]:.0f} unidades<br>' +
                         'Total esperado: %{customdata[2]:.0f} unidades<br>' +
-                        'Nova cobertura total: %{customdata[3]:.1f} meses<br>' +
+                        'Nova cobertura total: %{customdata[4]:.1f} + %{customdata[5]:.1f} = %{customdata[6]:.1f} meses<br>' +
                         '<extra></extra>'
                     ),
                     customdata=np.column_stack((
                         display_df['Qtde_Embarque'],
                         display_df['Compras_Ate_30_Dias'],
                         display_df['Qtde_Embarque'] + display_df['Compras_Ate_30_Dias'],
-                        display_df['Meses_Cobertura_Esperada']
+                        display_df['Meses_Cobertura_Esperada'],
+                        display_df['Meses_Cobertura'],
+                        display_df['Meses_Adicional_Embarque'],
+                        display_df['Meses_Cobertura'] + display_df['Meses_Adicional_Embarque']
                     )),
                     name='Estoque Esperado',
                     legendgroup='timeline'
