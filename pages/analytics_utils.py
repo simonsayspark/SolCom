@@ -834,7 +834,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
                     'Compras_Ate_30_Dias': compras_ate_30_dias,
                     'Media_Mensal': media_mensal,
                     'Meses_Cobertura': meses_cobertura,
-                    'Meses_Cobertura_Esperada': estoque_esperado / media_mensal if media_mensal > 0 else 999,
+                    'Meses_Cobertura_Esperada': meses_cobertura + ((qtde_embarque + compras_ate_30_dias) / media_mensal if media_mensal > 0 else 0),
                     'Dias_Ate_Pedido': dias_ate_pedido,
                     'Dias_Restantes_Esperado': 3650,  # No consumption, so large value
                     'Dias_Ate_Pedido_Esperado': 3650,  # No consumption, so large value
@@ -866,7 +866,9 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 meses_cobertura = estoque / media_mensal
                 
             # Calculate expected coverage with incoming inventory
-            meses_cobertura_esperada = estoque_esperado / media_mensal
+            # FIX: Nova cobertura total = cobertura atual + cobertura adicional
+            cobertura_adicional = (qtde_embarque + compras_ate_30_dias) / media_mensal if media_mensal > 0 else 0
+            meses_cobertura_esperada = meses_cobertura + cobertura_adicional
             
             dias_restantes = int(meses_cobertura * 30)
             dias_restantes_esperado = int(meses_cobertura_esperada * 30)
