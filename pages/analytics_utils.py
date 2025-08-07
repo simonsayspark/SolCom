@@ -806,10 +806,12 @@ def show_priority_timeline(df, empresa="MINIPA"):
         estoque_cobertura = float(row.get('Estoque Cobertura', row.get('Estoque_Cobertura', 0)) or 0)
         qtde_embarque = float(row.get('Qtde Embarque', row.get('Qtde_Embarque', 0)) or 0)
         compras_ate_30_dias = float(row.get('Compras Até 30 Dias', row.get('Compras_Ate_30_Dias', 0)) or 0)
+        compras_61_90_dias = float(row.get('Compras 61 a 90 Dias', row.get('Compras_61_90_Dias', 0)) or 0)
+        compras_mais_90_dias = float(row.get('Compras > 90 Dias', row.get('Compras_Mais_90_Dias', 0)) or 0)
         previsao = float(row.get('Previsão', row.get('Previsao', 0)) or 0)
         
-        # Calculate expected stock including incoming shipments
-        estoque_esperado = estoque + qtde_embarque + compras_ate_30_dias
+        # Calculate expected stock including ALL incoming shipments
+        estoque_esperado = estoque + qtde_embarque + compras_ate_30_dias + compras_61_90_dias + compras_mais_90_dias
         
         # Calculate timeline metrics
         # Handle case where there's no consumption data
@@ -832,9 +834,11 @@ def show_priority_timeline(df, empresa="MINIPA"):
                     'Estoque_Esperado': estoque_esperado,
                     'Qtde_Embarque': qtde_embarque,
                     'Compras_Ate_30_Dias': compras_ate_30_dias,
+                    'Compras_61_90_Dias': compras_61_90_dias,
+                    'Compras_Mais_90_Dias': compras_mais_90_dias,
                     'Media_Mensal': media_mensal,
                     'Meses_Cobertura': meses_cobertura,
-                    'Meses_Cobertura_Esperada': meses_cobertura + ((qtde_embarque + compras_ate_30_dias) / media_mensal if media_mensal > 0 else 0),
+                    'Meses_Cobertura_Esperada': meses_cobertura + ((qtde_embarque + compras_ate_30_dias + compras_61_90_dias + compras_mais_90_dias) / media_mensal if media_mensal > 0 else 0),
                     'Dias_Ate_Pedido': dias_ate_pedido,
                     'Dias_Restantes_Esperado': 3650,  # No consumption, so large value
                     'Dias_Ate_Pedido_Esperado': 3650,  # No consumption, so large value
@@ -866,8 +870,9 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 meses_cobertura = estoque / media_mensal
                 
             # Calculate expected coverage with incoming inventory
-            # FIX: Nova cobertura total = cobertura atual + cobertura adicional
-            cobertura_adicional = (qtde_embarque + compras_ate_30_dias) / media_mensal if media_mensal > 0 else 0
+            # FIX: Nova cobertura total = cobertura atual + cobertura adicional (including ALL future purchases)
+            total_future_purchases = qtde_embarque + compras_ate_30_dias + compras_61_90_dias + compras_mais_90_dias
+            cobertura_adicional = total_future_purchases / media_mensal if media_mensal > 0 else 0
             meses_cobertura_esperada = meses_cobertura + cobertura_adicional
             
             dias_restantes = int(meses_cobertura * 30)
@@ -946,6 +951,8 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 'Estoque_Esperado': estoque_esperado,
                 'Qtde_Embarque': qtde_embarque,
                 'Compras_Ate_30_Dias': compras_ate_30_dias,
+                'Compras_61_90_Dias': compras_61_90_dias,
+                'Compras_Mais_90_Dias': compras_mais_90_dias,
                 'Media_Mensal': media_mensal,
                 'Meses_Cobertura': meses_cobertura,
                 'Meses_Cobertura_Esperada': meses_cobertura_esperada,
@@ -1118,9 +1125,9 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 with col1:
                     st.write(f"**{prod['Produto']}** - {prod['Fornecedor']}")
                     # Show expected inventory info if available
-                    if prod['Qtde_Embarque'] > 0 or prod['Compras_Ate_30_Dias'] > 0:
-                        incoming_total = prod['Qtde_Embarque'] + prod['Compras_Ate_30_Dias']
-                        st.caption(f"📦 Em trânsito: {incoming_total:.0f} unids (+{prod['Meses_Cobertura_Esperada'] - prod['Meses_Cobertura']:.1f} meses)")
+                    total_incoming = prod['Qtde_Embarque'] + prod['Compras_Ate_30_Dias'] + prod['Compras_61_90_Dias'] + prod['Compras_Mais_90_Dias']
+                    if total_incoming > 0:
+                        st.caption(f"📦 Em trânsito/pedidos futuros: {total_incoming:.0f} unids (+{prod['Meses_Cobertura_Esperada'] - prod['Meses_Cobertura']:.1f} meses)")
                 with col2:
                     if prod['Dias_Ate_Pedido'] == 0:
                         st.write(f"📅 **PEDIR AGORA**")
@@ -1147,7 +1154,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
         # Convert days to months and handle negative values for display
         display_df['Meses_Ate_Pedido'] = display_df['Dias_Ate_Pedido'] / 30
         display_df['Meses_Adicional_Embarque'] = display_df.apply(lambda row: 
-            (row['Qtde_Embarque'] + row['Compras_Ate_30_Dias']) / row['Media_Mensal'] 
+            (row['Qtde_Embarque'] + row['Compras_Ate_30_Dias'] + row['Compras_61_90_Dias'] + row['Compras_Mais_90_Dias']) / row['Media_Mensal'] 
             if row['Media_Mensal'] > 0 else 0, axis=1)
         
         # Debug: Show chart info
@@ -1234,15 +1241,18 @@ def show_priority_timeline(df, empresa="MINIPA"):
                         'Cobertura adicional: +%{x:.1f} meses<br>' +
                         'Qtde em trânsito: %{customdata[0]:.0f} unidades<br>' +
                         'Compras até 30 dias: %{customdata[1]:.0f} unidades<br>' +
-                        'Total esperado: %{customdata[2]:.0f} unidades<br>' +
-                        'Nova cobertura total: %{customdata[4]:.1f} + %{customdata[5]:.1f} = %{customdata[6]:.1f} meses<br>' +
+                        'Compras 61-90 dias: %{customdata[2]:.0f} unidades<br>' +
+                        'Compras > 90 dias: %{customdata[3]:.0f} unidades<br>' +
+                        'Total futuro: %{customdata[4]:.0f} unidades<br>' +
+                        'Nova cobertura total: %{customdata[5]:.1f} + %{customdata[6]:.1f} = %{customdata[7]:.1f} meses<br>' +
                         '<extra></extra>'
                     ),
                     customdata=np.column_stack((
                         display_df['Qtde_Embarque'],
                         display_df['Compras_Ate_30_Dias'],
-                        display_df['Qtde_Embarque'] + display_df['Compras_Ate_30_Dias'],
-                        display_df['Meses_Cobertura_Esperada'],
+                        display_df['Compras_61_90_Dias'],
+                        display_df['Compras_Mais_90_Dias'],
+                        display_df['Qtde_Embarque'] + display_df['Compras_Ate_30_Dias'] + display_df['Compras_61_90_Dias'] + display_df['Compras_Mais_90_Dias'],
                         display_df['Meses_Cobertura'],
                         display_df['Meses_Adicional_Embarque'],
                         display_df['Meses_Cobertura'] + display_df['Meses_Adicional_Embarque']
@@ -1457,10 +1467,27 @@ def show_priority_timeline(df, empresa="MINIPA"):
         # 10. Compras até 30 dias - get from timeline data
         compras_ate_30_dias = float(row.get('Compras_Ate_30_Dias', 0) or 0)
         
-        # 11. New Previsao com New POs (pedidos) - FIX: Use Nova Cobertura Total
-        # Nova Cobertura Total = (estoque_total + in_transit_ship + compras_ate_30_dias) / avg_sales
+        # 10b. Compras 61 a 90 dias - get from original data
+        compras_61_90_dias = 0
+        if len(original_row) > 0:
+            for col in ['Compras_61_90_Dias', 'Compras 61 a 90 Dias']:
+                if col in original_row.columns:
+                    compras_61_90_dias = float(original_row[col].iloc[0] or 0)
+                    break
+        
+        # 10c. Compras > 90 dias - get from original data
+        compras_mais_90_dias = 0
+        if len(original_row) > 0:
+            for col in ['Compras_Mais_90_Dias', 'Compras > 90 Dias']:
+                if col in original_row.columns:
+                    compras_mais_90_dias = float(original_row[col].iloc[0] or 0)
+                    break
+        
+        # 11. New Previsao com New POs (pedidos) - FIX: Use Nova Cobertura Total including ALL future orders
+        # Nova Cobertura Total = (estoque_total + in_transit_ship + ALL future purchases) / avg_sales
+        total_future_purchases = compras_ate_30_dias + compras_61_90_dias + compras_mais_90_dias
         if avg_sales > 0:
-            new_previsao_com_pos = (estoque_total + in_transit_ship + compras_ate_30_dias) / avg_sales
+            new_previsao_com_pos = (estoque_total + in_transit_ship + total_future_purchases) / avg_sales
         else:
             new_previsao_com_pos = 999  # No consumption
         
@@ -1495,6 +1522,8 @@ def show_priority_timeline(df, empresa="MINIPA"):
             'Estoque Total': estoque_total,
             'In Transit Ship': in_transit_ship,
             'Compras até 30 dias': compras_ate_30_dias,
+            'Compras 61 a 90 dias': compras_61_90_dias,
+            'Compras > 90 dias': compras_mais_90_dias,
             'Avg Sales': avg_sales,
             'Estoque + inTransit': estoque_mais_intransit,
             'New Previsao com New POs (pedidos)': new_previsao_com_pos,
