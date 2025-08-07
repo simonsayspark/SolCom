@@ -1154,15 +1154,14 @@ def show_priority_timeline(df, empresa="MINIPA"):
         st.write(f"🎯 **Produtos no gráfico:** {len(display_df)} | **Altura do gráfico:** {max(1800, len(display_df) * 80)} pixels | **Pixels por produto:** 80")
         
         # Create figure with vertical subplot layout for better visibility
-        rows = 3 if show_investment else 2
+        rows = 2 if show_investment else 1
         subplot_titles = [
-            '📅 Timeline de Pedidos (em meses)',
-            '📦 Quantidades por Cenário'
+            '📅 Timeline de Pedidos (em meses)'
         ]
-        row_heights = [0.6, 0.4]
+        row_heights = [1.0]
         if show_investment:
             subplot_titles.append('💰 Investimento por Cenário')
-            row_heights = [0.4, 0.3, 0.3]
+            row_heights = [0.7, 0.3]
 
         fig = make_subplots(
             rows=rows, cols=1,
@@ -1254,53 +1253,9 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 row=1, col=1
             )
         
-        # 2. Quantity comparison chart - now on row 2
-        fig.add_trace(
-            go.Bar(
-                y=display_df['Produto'],
-                x=display_df['Qtd_MOQ'],
-                orientation='h',
-                marker_color='#FF6B6B',
-                name='MOQ',
-                showlegend=True,
-                text=[f'{x:.0f}' for x in display_df['Qtd_MOQ']],
-                textposition='auto',
-                hovertemplate='<b>%{y}</b><br>MOQ: %{x:.0f}<extra></extra>'
-            ),
-            row=2, col=1
-        )
+
         
-        fig.add_trace(
-            go.Bar(
-                y=display_df['Produto'],
-                x=display_df['Qtd_Negotiated'],
-                orientation='h',
-                marker_color='#4ECDC4',
-                name='Negociado',
-                showlegend=True,
-                text=[f'{x:.0f}' for x in display_df['Qtd_Negotiated']],
-                textposition='auto',
-                hovertemplate='<b>%{y}</b><br>Negociado: %{x:.0f}<extra></extra>'
-            ),
-            row=2, col=1
-        )
-        
-        fig.add_trace(
-            go.Bar(
-                y=display_df['Produto'],
-                x=display_df['Qtd_Ideal'],
-                orientation='h',
-                marker_color='#45B7D1',
-                name='Ideal',
-                showlegend=True,
-                text=[f'{x:.0f}' for x in display_df['Qtd_Ideal']],
-                textposition='auto',
-                hovertemplate='<b>%{y}</b><br>Ideal: %{x:.0f}<extra></extra>'
-            ),
-            row=2, col=1
-        )
-        
-        # 3. Investment comparison chart - only for admins
+        # 2. Investment comparison chart - only for admins
         if show_investment:
             fig.add_trace(
                 go.Bar(
@@ -1314,7 +1269,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
                     textposition='outside',
                     hovertemplate='<b>%{y}</b><br>Investimento MOQ: R$ %{x:,.2f}<extra></extra>'
                 ),
-                row=3, col=1
+                row=2, col=1
             )
 
             fig.add_trace(
@@ -1329,9 +1284,9 @@ def show_priority_timeline(df, empresa="MINIPA"):
                     textposition='outside',
                     hovertemplate='<b>%{y}</b><br>Investimento Negociado: R$ %{x:,.2f}<extra></extra>'
                 ),
-                row=3, col=1
+                row=2, col=1
             )
-
+            
             fig.add_trace(
                 go.Bar(
                     y=display_df['Produto'],
@@ -1344,7 +1299,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
                     textposition='outside',
                     hovertemplate='<b>%{y}</b><br>Investimento Ideal: R$ %{x:,.2f}<extra></extra>'
                 ),
-                row=3, col=1
+                row=2, col=1
             )
         
         # Update layout - make graphs much taller for better visibility
@@ -1357,29 +1312,26 @@ def show_priority_timeline(df, empresa="MINIPA"):
             font=dict(size=14),
             margin=dict(l=300, r=100, t=100, b=100),
             yaxis=dict(tickmode='array', tickvals=display_df['Produto'].tolist(), ticktext=display_df['Produto'].tolist()),
-            yaxis2=dict(tickmode='array', tickvals=display_df['Produto'].tolist(), ticktext=display_df['Produto'].tolist())
         )
         if show_investment:
-            layout_kwargs['yaxis3'] = dict(tickmode='array', tickvals=display_df['Produto'].tolist(), ticktext=display_df['Produto'].tolist())
+            layout_kwargs['yaxis2'] = dict(tickmode='array', tickvals=display_df['Produto'].tolist(), ticktext=display_df['Produto'].tolist())
 
         fig.update_layout(**layout_kwargs)
         
         # Update axes
         fig.update_xaxes(title_text="Meses até Pedido", row=1, col=1, title_font_size=14)
-        fig.update_xaxes(title_text="Quantidade", row=2, col=1, title_font_size=14)
         if show_investment:
-            fig.update_xaxes(title_text="Investimento (R$)", row=3, col=1, title_font_size=14, tickformat=",.0f")
+            fig.update_xaxes(title_text="Investimento (R$)", row=2, col=1, title_font_size=14, tickformat=",.0f")
         
         # Set barmode for each subplot individually
-        # Row 1 (timeline) should be stacked, rows 2 and 3 should be grouped
+        # Row 1 (timeline) should be stacked, row 2 should be grouped
         fig.update_traces(row=1, col=1, offsetgroup=1)
-        fig.update_traces(row=2, col=1, offsetgroup=2)
         if show_investment:
-            fig.update_traces(row=3, col=1, offsetgroup=3)
+            fig.update_traces(row=2, col=1, offsetgroup=2)
         
         # Update y-axes to show all products with proper alignment
         # Fix alignment issue by ensuring consistent y-axis configuration
-        rows_iter = [1, 2] + ([3] if show_investment else [])
+        rows_iter = [1] + ([2] if show_investment else [])
         for row_num in rows_iter:
             fig.update_yaxes(
                 tickfont_size=13, 
@@ -1436,139 +1388,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
         
       
     
-    # Detailed table with priority information
-    st.subheader("📋 Detalhamento de Compras")
-    
-    # Select columns to display based on selected scenario
-    base_columns = ['Produto', 'Fornecedor', 'Urgencia', 'Data_Pedido', 'Dias_Ate_Pedido']
-    
-    if "MOQ" in scenario:
-        scenario_columns = ['Qtd_MOQ', 'Investimento_MOQ']
-    elif "Negociado" in scenario:
-        scenario_columns = ['Qtd_Negotiated', 'Investimento_Negotiated']
-    else:
-        scenario_columns = ['Qtd_Ideal', 'Investimento_Ideal']
-    
-    extra_columns = ['MOQ', 'Preco_Unit', 'Estoque_Atual', 'Media_Mensal']
-    
-    if has_priority_data:
-        priority_columns = ['Priority_Score', 'Criticality', 'Annual_Impact']
-    else:
-        priority_columns = []
-    
-    display_columns = base_columns + scenario_columns + extra_columns + priority_columns
-    
-    # Format the dataframe for display
-    display_timeline_df = filtered_df[display_columns].copy()
-    
-    # Rename columns for better display
-    column_rename = {
-        'Qtd_MOQ': 'Qtd (MOQ)',
-        'Qtd_Negotiated': 'Qtd (Negociado)',
-        'Qtd_Ideal': 'Qtd (Ideal)',
-        'Investimento_MOQ': 'Invest. (MOQ)',
-        'Investimento_Negotiated': 'Invest. (Negociado)', 
-        'Investimento_Ideal': 'Invest. (Ideal)',
-        'Preco_Unit': 'Preço Unit.',
-        'Media_Mensal': 'Consumo Mensal',
-        'Estoque_Atual': 'Estoque'
-    }
-    
-    display_timeline_df = display_timeline_df.rename(columns=column_rename)
-    
-    # Format numeric columns
-    for col in display_timeline_df.columns:
-        if 'Invest.' in col:
-            display_timeline_df[col] = display_timeline_df[col].apply(lambda x: f'R$ {x:,.2f}')
-        elif 'Annual_Impact' in col:
-            display_timeline_df[col] = display_timeline_df[col].apply(lambda x: f'R$ {x:,.2f}')
-        elif 'Priority_Score' in col:
-            display_timeline_df[col] = display_timeline_df[col].round(3)
-        elif col in ['Preço Unit.', 'Consumo Mensal', 'Estoque']:
-            display_timeline_df[col] = display_timeline_df[col].round(2)
-    
-    st.dataframe(
-        display_timeline_df,
-        use_container_width=True,
-        height=400,
-        hide_index=True
-    )
-    
-    # Add CSV download options for Priority Timeline
-    st.subheader("📥 Exportar Timeline de Prioridades")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        csv = display_timeline_df.to_csv(index=False, sep=';', encoding='utf-8-sig', decimal=',')
-        st.download_button(
-            label="📄 Baixar como CSV",
-            data=csv,
-            file_name=f'timeline_prioritario_{empresa}_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.csv',
-            mime='text/csv',
-            use_container_width=True
-        )
-    
-    with col2:
-        # Excel export
-        try:
-            import io
-            buffer = io.BytesIO()
-            
-            # Create a Pandas Excel writer using XlsxWriter
-            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                display_timeline_df.to_excel(writer, sheet_name='Timeline Prioritario', index=False)
-                
-                # Get the xlsxwriter workbook and worksheet objects
-                workbook = writer.book
-                worksheet = writer.sheets['Timeline Prioritario']
-                
-                # Add some cell formatting
-                header_format = workbook.add_format({
-                    'bold': True,
-                    'text_wrap': True,
-                    'valign': 'top',
-                    'fg_color': '#D7E4BD',
-                    'border': 1
-                })
-                
-                # Write the column headers with the defined format
-                for col_num, value in enumerate(display_timeline_df.columns.values):
-                    worksheet.write(0, col_num, value, header_format)
-                
-                # Auto-adjust columns width
-                for column in display_timeline_df:
-                    column_width = max(display_timeline_df[column].astype(str).map(len).max(), len(column))
-                    col_idx = display_timeline_df.columns.get_loc(column)
-                    worksheet.set_column(col_idx, col_idx, min(column_width + 2, 50))
-            
-            # Reset buffer position
-            buffer.seek(0)
-            
-            st.download_button(
-                label="📊 Baixar como Excel",
-                data=buffer,
-                file_name=f'timeline_prioritario_{empresa}_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.xlsx',
-                mime='application/vnd.ms-excel',
-                use_container_width=True,
-                help="Excel format - universal compatibility"
-            )
-        except ImportError:
-            # Fallback method without xlsxwriter
-            import io
-            excel_buffer = io.BytesIO()
-            display_timeline_df.to_excel(excel_buffer, index=False)
-            excel_buffer.seek(0)
-            
-            st.download_button(
-                label="📊 Baixar como Excel",
-                data=excel_buffer,
-                file_name=f'timeline_prioritario_{empresa}_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.xlsx',
-                mime='application/vnd.ms-excel',
-                use_container_width=True,
-                help="Excel format - universal compatibility"
 
-            )
 
     # Add Solicitação de Pedidos table right after Detalhamento de Compras
     st.subheader("📋 Solicitação de Pedidos")
@@ -1634,15 +1454,15 @@ def show_priority_timeline(df, empresa="MINIPA"):
         # 9. Estoque + inTransit - calculate total expected stock
         estoque_mais_intransit = estoque_total + in_transit_ship
         
-        # 10. New Previsao com New POs (pedidos) - try to get from original data
-        new_previsao_com_pos = 0
-        original_row = df[df['Produto'] == produto]
-        if len(original_row) > 0:
-            for col in ['Previsão', 'Previsao', 'Previsao_Total_New_Pos', 'Previsão Total']:
-                if col in original_row.columns:
-                    new_previsao_com_pos = float(original_row[col].iloc[0] or 0)
-                    if new_previsao_com_pos > 0:
-                        break
+        # 10. Compras até 30 dias - get from timeline data
+        compras_ate_30_dias = float(row.get('Compras_Ate_30_Dias', 0) or 0)
+        
+        # 11. New Previsao com New POs (pedidos) - FIX: Use Nova Cobertura Total
+        # Nova Cobertura Total = (estoque_total + in_transit_ship + compras_ate_30_dias) / avg_sales
+        if avg_sales > 0:
+            new_previsao_com_pos = (estoque_total + in_transit_ship + compras_ate_30_dias) / avg_sales
+        else:
+            new_previsao_com_pos = 999  # No consumption
         
         # 🔧 FIX: Enhanced CBM lookup with better fallback logic
         cbm = 0
@@ -1674,6 +1494,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
             'Preco FOB Total': preco_fob_total,
             'Estoque Total': estoque_total,
             'In Transit Ship': in_transit_ship,
+            'Compras até 30 dias': compras_ate_30_dias,
             'Avg Sales': avg_sales,
             'Estoque + inTransit': estoque_mais_intransit,
             'New Previsao com New POs (pedidos)': new_previsao_com_pos,
