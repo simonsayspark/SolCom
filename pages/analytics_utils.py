@@ -1356,12 +1356,13 @@ def show_priority_timeline(df, empresa="MINIPA"):
         # Add zero line to timeline at 4 months (lead time threshold)
         fig.add_vline(x=4, line_dash="dash", line_color="orange", row=1, col=1)
         fig.add_annotation(
-            x=4, y=len(display_df)-1,
+            x=4, y=len(display_df)+2,  # Move annotation higher above the bars
             text="Lead Time (4 meses)",
             showarrow=True,
             arrowhead=2,
             row=1, col=1,
-            font=dict(color="orange", size=12)
+            font=dict(color="orange", size=12),
+            yshift=20  # Additional vertical shift upward
         )
         
         # Add zero line
