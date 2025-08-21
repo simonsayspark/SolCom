@@ -8,8 +8,15 @@ from bd.column_mapping import apply_column_remap
 
 def preprocess_analytics_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """Normalize column names and fill missing fields."""
+    import streamlit as st
+    
+    st.write(f"🔍 **DEBUG Preprocessing:** Entrada com {len(df)} linhas")
+    st.write(f"🔍 **Colunas originais:** {list(df.columns)[:10]}")  # Show first 10 columns
+    
     df_processed = df.copy()
     df_processed, _ = apply_column_remap(df_processed)
+    
+    st.write(f"🔍 **Após column_remap:** {len(df_processed)} linhas")
     df_processed = df_processed.rename(columns={
         'Consumo_6_Meses': 'Consumo 6 Meses',
         'Media_6_Meses': 'Média 6 Meses',
@@ -65,6 +72,7 @@ def preprocess_analytics_dataframe(df: pd.DataFrame) -> pd.DataFrame:
             axis=1
         )
 
+    st.write(f"🔍 **Final preprocessing:** {len(df_processed)} linhas")
     return df_processed
 
 def load_page():
@@ -156,13 +164,22 @@ def load_page():
         
         # Load data with company and version selection
         # If we need a different version than the initial load, get it
-        if selected_version_id != None or not initial_data['analytics_data'] is not None:
+        if selected_version_id is not None or initial_data['analytics_data'] is None:
             # We need to reload with specific version
+            st.info(f"🔄 Recarregando dados para versão específica...")
             analytics_data = get_cached_analytics_page_data(empresa_code, selected_version_id)
             df = analytics_data['analytics_data']
         else:
             # Use the data we already loaded
             df = initial_data['analytics_data']
+        
+        # Debug information
+        if df is None:
+            st.error("❌ DataFrame é None")
+        elif len(df) == 0:
+            st.error("❌ DataFrame está vazio")
+        else:
+            st.success(f"✅ DataFrame carregado com {len(df)} linhas")
         
         if df is not None and len(df) > 0:
             version_text = f"v{selected_version_id}" if selected_version_id else "ativa"
@@ -311,10 +328,12 @@ def load_page():
 
     # Only show analysis if data is loaded (either from Snowflake or local upload)
     if df is not None:
+        st.info(f"🔧 Preprocessando {len(df)} produtos...")
+        
         # Preprocess dataframe with caching to avoid recomputation
         df_processed = preprocess_analytics_dataframe(df)
         
-        # Preprocessing already handles column normalization and coverage calculations
+        st.info(f"✅ Preprocessamento concluído: {len(df_processed)} produtos")
         
         # Use processed dataframe
         df = df_processed
