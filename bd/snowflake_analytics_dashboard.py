@@ -77,19 +77,9 @@ def get_analytics_page_data(empresa: str, version_id: int = None):
             # Don't fail if versions can't be loaded
             pass
         
-        # 2. Check if analytics table exists and has data
+        # 2. Check if analytics table exists
         try:
-            cursor.execute("""
-            SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA 
-            WHERE empresa = %s AND is_active = TRUE
-            """, (empresa,))
-            
-            active_count = cursor.fetchone()[0]
-            if active_count == 0:
-                # No data for this company
-                cursor.close()
-                conn.close()
-                return result
+            cursor.execute("SELECT 1 FROM ESTOQUE.ANALYTICS_DATA LIMIT 1")
         except:
             # Table might not exist
             cursor.close()
@@ -98,39 +88,25 @@ def get_analytics_page_data(empresa: str, version_id: int = None):
         
         # 3. Load the actual analytics data
         try:
-            if version_id is None:
-                # Load active version
-                query = """
-                SELECT produto as "Produto", 
-                       estoque as "Estoque", 
-                       media_6_meses as "Média 6 Meses",
-                       consumo_6_meses as "Consumo 6 Meses",
-                       estoque_cobertura as "Estoque Cobertura",
-                       moq as "MOQ",
-                       ultimo_fornecedor as "UltimoFornecedor",
-                       qtde_tot_compras as "Qtde Tot Compras",
-                       compras_ate_30_dias as "Compras Até 30 Dias",
-                       compras_31_60_dias as "Compras 31 a 60 Dias", 
-                       compras_61_90_dias as "Compras 61 a 90 Dias",
-                       compras_mais_90_dias as "Compras > 90 Dias",
-                       qtde_embarque as "Qtde Embarque",
-                       preco_unitario as "preco_unitario",
-                       carteira as "Carteira",
-                       data_upload,
-                       version_id,
-                       -- Check for merged Excel columns
-                       criticality,
-                       priority_score,
-                       relevance_class,
-                       monthly_volume
-                FROM ESTOQUE.ANALYTICS_DATA 
-                WHERE empresa = %s AND is_active = TRUE
-                ORDER BY produto
-                """
-                query_params = [empresa]
-            else:
-                # Load specific version
-                query = """
+            # Pick an effective version id: explicit > active from versions > latest
+            effective_version_id = version_id
+            if effective_version_id is None:
+                # Try active version from versions list
+                active_versions = [v for v in result['versions'] if v.get('is_active')]
+                if active_versions:
+                    effective_version_id = active_versions[0]['version_id']
+                elif result['versions']:
+                    # Fallback to most recent by order already returned
+                    effective_version_id = result['versions'][0]['version_id']
+
+            if effective_version_id is None:
+                # No versions found for this company, return empty result
+                cursor.close()
+                conn.close()
+                return result
+
+            # Always load by a concrete version id to avoid is_active mismatches
+            query = """
                 SELECT produto as "Produto", 
                        estoque as "Estoque", 
                        media_6_meses as "Média 6 Meses",
@@ -157,7 +133,7 @@ def get_analytics_page_data(empresa: str, version_id: int = None):
                 WHERE empresa = %s AND version_id = %s
                 ORDER BY produto
                 """
-                query_params = [empresa, version_id]
+            query_params = [empresa, effective_version_id]
             
             cursor.close()  # Close cursor before using pandas
             

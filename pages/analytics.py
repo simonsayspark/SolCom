@@ -183,11 +183,19 @@ def load_page():
                 conn_dbg = get_snowflake_connection()
                 if conn_dbg:
                     cur_dbg = conn_dbg.cursor()
-                    # Count rows for the selected version
-                    if selected_version_id is not None:
-                        cur_dbg.execute("SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA WHERE empresa = %s AND version_id = %s", (empresa_code, selected_version_id))
+                    # Determine effective version ID using the same logic as server
+                    effective_version_id = selected_version_id
+                    if effective_version_id is None and initial_data and initial_data.get('versions'):
+                        actives = [v for v in initial_data['versions'] if v.get('is_active')]
+                        if actives:
+                            effective_version_id = actives[0]['version_id']
+                        else:
+                            effective_version_id = initial_data['versions'][0]['version_id']
+                    # Count rows for the effective version
+                    if effective_version_id is not None:
+                        cur_dbg.execute("SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA WHERE empresa = %s AND version_id = %s", (empresa_code, effective_version_id))
                     else:
-                        cur_dbg.execute("SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA WHERE empresa = %s AND is_active = TRUE", (empresa_code,))
+                        cur_dbg.execute("SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA WHERE empresa = %s", (empresa_code,))
                     count_rows = cur_dbg.fetchone()[0]
                     st.write(f"🔍 DEBUG: Row count for selection: {count_rows}")
                     # Show 3 sample column names by describing table
