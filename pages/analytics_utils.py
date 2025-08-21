@@ -1506,19 +1506,28 @@ def show_priority_timeline(df, empresa="MINIPA"):
                     compras_mais_90_dias = float(original_row[col].iloc[0] or 0)
                     break
         
-        # Get Carteira (existing orders) from the original data
-        carteira = 0
-        if len(original_row) > 0:
-            for col in ['Carteira', 'carteira']:
+        # Get Carteira (existing orders) from both processed row and original data
+        carteira = 0.0
+        # First try processed row data
+        if 'Carteira' in row.index:
+            try:
+                carteira = float(row.get('Carteira', 0) or 0)
+            except Exception:
+                carteira = 0.0
+        # If not found, try original data with multiple column variations
+        elif len(original_row) > 0:
+            for col in ['Carteira', 'carteira', 'Orders', 'Pedidos']:
                 if col in original_row.columns:
-                    carteira = float(original_row[col].iloc[0] or 0)
-                    if carteira > 0:
+                    try:
+                        carteira = float(original_row[col].iloc[0] or 0)
                         break
+                    except Exception:
+                        continue
         
         # 11. New Previsao com New POs (pedidos) - FIX: Use Nova Cobertura Total including ALL future orders MINUS Carteira
         # Nova Cobertura Total = (estoque_total - carteira + in_transit_ship + ALL future purchases) / avg_sales
         total_future_purchases = compras_ate_30_dias + compras_61_90_dias + compras_mais_90_dias
-        estoque_efetivo = max(0, estoque_total - carteira)  # Subtract carteira from current stock
+        estoque_efetivo = estoque_total - carteira  # Subtract carteira from current stock (can be negative)
         
         if avg_sales > 0:
             new_previsao_com_pos = (estoque_efetivo + in_transit_ship + total_future_purchases) / avg_sales

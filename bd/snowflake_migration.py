@@ -181,11 +181,13 @@ def migrate_to_merged_excel_support():
             ('COMPRAS_61_90_DIAS', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN compras_61_90_dias DECIMAL(10,2)"),
             ('COMPRAS_MAIS_90_DIAS', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN compras_mais_90_dias DECIMAL(10,2)"),
             ('PREVISAO', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN previsao DECIMAL(10,2)"),
-            ('QTDE_TOT_COMPRAS', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN qtde_tot_compras DECIMAL(10,2)"),
-            
-            # Carteira (existing orders) column
-            ('CARTEIRA', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN carteira DECIMAL(10,2) DEFAULT 0")
+            ('QTDE_TOT_COMPRAS', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN qtde_tot_compras DECIMAL(10,2)")
         ]
+
+        # Add carteira column for orders on hand
+        analytics_columns.append(
+            ('CARTEIRA', "ALTER TABLE ESTOQUE.ANALYTICS_DATA ADD COLUMN carteira DECIMAL(10,2)")
+        )
         
         # Get current columns
         cursor.execute("DESCRIBE TABLE ESTOQUE.ANALYTICS_DATA")
@@ -217,10 +219,7 @@ def migrate_to_merged_excel_support():
             ('MONTHLY_VOLUME', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN monthly_volume DECIMAL(10,2)"),
             ('VOLUME_NORMALIZED', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN volume_normalized DECIMAL(5,4)"),
             ('PRICE_NORMALIZED', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN price_normalized DECIMAL(5,4)"),
-            ('RAW_MULTIPLICATION', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN raw_multiplication DECIMAL(12,2)"),
-            
-            # Carteira (existing orders) column
-            ('CARTEIRA', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN carteira DECIMAL(10,2) DEFAULT 0")
+            ('RAW_MULTIPLICATION', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN raw_multiplication DECIMAL(12,2)")
         ]
         
         # Get current columns

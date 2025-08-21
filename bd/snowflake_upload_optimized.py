@@ -99,7 +99,8 @@ def upload_excel_to_snowflake_optimized(df, arquivo_nome, empresa="MINIPA", usua
                 criticality VARCHAR(50),
                 priority_score FLOAT,
                 relevance_class VARCHAR(50),
-                monthly_volume FLOAT
+                monthly_volume FLOAT,
+                carteira FLOAT
             )
             """)
         
@@ -164,9 +165,9 @@ def upload_excel_to_snowflake_optimized(df, arquivo_nome, empresa="MINIPA", usua
                     cursor.execute("""
                     INSERT INTO ESTOQUE.PRODUTOS 
                     (empresa, item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
-                     in_transit, vendas_medias, cbm, moq, carteira, data_upload, upload_version, version_id, 
+                     in_transit, vendas_medias, cbm, moq, data_upload, upload_version, version_id, 
                      table_type, is_active)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
                         empresa,
                         row.get('Item', ''),
@@ -179,7 +180,6 @@ def upload_excel_to_snowflake_optimized(df, arquivo_nome, empresa="MINIPA", usua
                         row.get('Vendas_Medias', 0),
                         row.get('CBM', 0),
                         row.get('MOQ', 0),
-                        row.get('Carteira', 0),
                         datetime.now(),
                         upload_version,
                         version_id,
@@ -193,6 +193,16 @@ def upload_excel_to_snowflake_optimized(df, arquivo_nome, empresa="MINIPA", usua
             # Map columns for analytics
             for idx, row in df_clean.iterrows():
                 try:
+                    # Derive Carteira (orders on hand) if present
+                    carteira_val = 0.0
+                    try:
+                        if 'Carteira' in row.index and pd.notna(row['Carteira']):
+                            carteira_val = float(row['Carteira'])
+                        elif 'carteira' in row.index and pd.notna(row['carteira']):
+                            carteira_val = float(row['carteira'])
+                    except Exception:
+                        carteira_val = 0.0
+
                     cursor.execute("""
                     INSERT INTO ESTOQUE.ANALYTICS_DATA 
                     (empresa, produto, estoque, media_6_meses, consumo_6_meses, estoque_cobertura,
@@ -225,11 +235,49 @@ def upload_excel_to_snowflake_optimized(df, arquivo_nome, empresa="MINIPA", usua
                         row.get('priority_score', None),
                         row.get('relevance_class', None),
                         row.get('monthly_volume', None),
-                        row.get('Carteira', 0)
+                        carteira_val
                     ))
                 except Exception as row_error:
-                    # Row errors logged silently
-                    pass
+                    # Fallback: try without carteira if column does not exist
+                    try:
+                        if 'invalid identifier' in str(row_error).lower() and 'carteira' in str(row_error).lower():
+                            cursor.execute("""
+                            INSERT INTO ESTOQUE.ANALYTICS_DATA 
+                            (empresa, produto, estoque, media_6_meses, consumo_6_meses, estoque_cobertura,
+                             moq, ultimo_fornecedor, qtde_tot_compras, compras_ate_30_dias, compras_31_60_dias,
+                             compras_61_90_dias, compras_mais_90_dias, qtde_embarque, preco_unitario,
+                             data_upload, upload_version, version_id, is_active, 
+                             criticality, priority_score, relevance_class, monthly_volume)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            """, (
+                                empresa,
+                                row.get('Produto', ''),
+                                row.get('Estoque', 0),
+                                row.get('Média 6 Meses', row.get('Media_6_Meses', 0)),
+                                row.get('Consumo 6 Meses', row.get('Consumo_6_Meses', 0)),
+                                row.get('Estoque Cobertura', row.get('Estoque_Cobertura', 999)),
+                                row.get('MOQ', 0),
+                                row.get('UltimoFornecedor', row.get('ultimo_fornecedor', 'Brazil')),
+                                row.get('Qtde Tot Compras', row.get('Qtde_Tot_Compras', 0)),
+                                row.get('Compras Até 30 Dias', row.get('Compras_Ate_30_Dias', 0)),
+                                row.get('Compras 31 a 60 Dias', row.get('Compras_31_60_Dias', 0)),
+                                row.get('Compras 61 a 90 Dias', row.get('Compras_61_90_Dias', 0)),
+                                row.get('Compras > 90 Dias', row.get('Compras_Mais_90_Dias', 0)),
+                                row.get('Qtde Embarque', row.get('Qtde_Embarque', 0)),
+                                row.get('preco_unitario', row.get('Preco_Unitario', 0)),
+                                datetime.now(),
+                                upload_version,
+                                version_id,
+                                True,
+                                row.get('criticality', None),
+                                row.get('priority_score', None),
+                                row.get('relevance_class', None),
+                                row.get('monthly_volume', None)
+                            ))
+                        else:
+                            pass
+                    except Exception:
+                        pass
         
         # 9. Update version record with row count
         cursor.execute("""

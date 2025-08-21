@@ -93,6 +93,7 @@ def create_tables():
             compras_mais_90_dias DECIMAL(10,2),
             previsao DECIMAL(10,2),
             qtde_tot_compras DECIMAL(10,2),
+            carteira DECIMAL(10,2),
             UNIQUE(empresa, upload_version, produto)
         )
         """)
