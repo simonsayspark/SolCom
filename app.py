@@ -68,7 +68,7 @@ def main():
             from pages.upload import show_data_upload
             show_data_upload()
         elif page == "analytics":
-            from pages.analytics import load_page
+            from pages.analytics_utils import load_page
             load_page()
         elif page == "announcements":
             from pages.announcements import show_announcements
