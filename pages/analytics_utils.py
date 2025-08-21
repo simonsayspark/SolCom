@@ -1622,9 +1622,9 @@ def show_priority_timeline(df, empresa="MINIPA"):
     #     st.info("📊 Dados de Carteira não encontrados. Usando estoque bruto para cálculos.")
     
     # # Load CBM data from session state (already loaded in analytics.py)
-    # cbm_data = st.session_state.get('cbm_data', {})
-    # if not cbm_data:
-    #     st.info("ℹ️ Dados CBM não disponíveis - valores serão mostrados como 0")
+    cbm_data = st.session_state.get('cbm_data', {})
+    if not cbm_data:
+        st.info("ℹ️ Dados CBM não disponíveis - valores serão mostrados como 0")
     
     # Create the purchase request dataframe with the requested columns using the same filtered data
     solicitacao_data = []
