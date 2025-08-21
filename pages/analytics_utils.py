@@ -1313,27 +1313,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
     col1.metric("🔴 Urgentes (≤ 4 meses)", urgentes)
     col2.metric("🟢 Monitorar (> 4 meses)", monitorar)
     
-    # Show critical products summary
-    if urgentes > 0:
-        with st.expander("⚡ Produtos Urgentes - Ação Imediata (Lead time ≤ 4 meses)", expanded=False):
-            critical_products = filtered_df[filtered_df['Urgencia'] == 'URGENTE']
-            for _, prod in critical_products.iterrows():
-                col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-                with col1:
-                    st.write(f"**{prod['Produto']}** - {prod['Fornecedor']}")
-                    # Show expected inventory info if available
-                    total_incoming = prod['Qtde_Embarque'] + prod['Compras_Ate_30_Dias'] + prod['Compras_61_90_Dias'] + prod['Compras_Mais_90_Dias']
-                    if total_incoming > 0:
-                        st.caption(f"📦 Em trânsito/pedidos futuros: {total_incoming:.0f} unids (+{prod['Meses_Cobertura_Esperada'] - prod['Meses_Cobertura']:.1f} meses)")
-                with col2:
-                    if prod['Dias_Ate_Pedido'] == 0:
-                        st.write(f"📅 **PEDIR AGORA**")
-                    else:
-                        st.write(f"📅 Pedir até: **{prod['Data_Pedido']}**")
-                with col3:
-                    st.write(f"📦 Qtd: **{prod[qtd_col]:.0f}**")
-                with col4:
-                    st.write(f"💰 R$ **{prod[inv_col]:,.0f}**")
+  
     
     # Interactive Timeline Chart
     if len(filtered_df) > 0:
