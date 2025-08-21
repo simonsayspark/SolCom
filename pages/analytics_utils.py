@@ -1602,29 +1602,29 @@ def show_priority_timeline(df, empresa="MINIPA"):
     
 
 
-    # Add Solicitação de Pedidos table right after Detalhamento de Compras
-    st.subheader("📋 Solicitação de Pedidos")
+    # # Add Solicitação de Pedidos table right after Detalhamento de Compras
+    # st.subheader("📋 Solicitação de Pedidos")
     
-    # Check if we have Carteira data and show explanation
-    has_carteira = any(col in df.columns for col in ['Carteira', 'carteira', 'Carteira_Estoque', 'carteira_estoque', 'Carteira-Estoque', 'carteira-estoque'])
-    if has_carteira:
-        st.success("✅ **Dados de Carteira detectados!** A tabela agora mostra:")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.info("📦 **Estoque Bruto**: Estoque total no sistema")
-        with col2:
-            st.info("📋 **Carteira**: Pedidos já confirmados")
-        with col3:
-            st.info("⚖️ **Estoque Ajustado**: Estoque disponível (Bruto - Carteira)")
+    # # Check if we have Carteira data and show explanation
+    # has_carteira = any(col in df.columns for col in ['Carteira', 'carteira', 'Carteira_Estoque', 'carteira_estoque', 'Carteira-Estoque', 'carteira-estoque'])
+    # if has_carteira:
+    #     st.success("✅ **Dados de Carteira detectados!** A tabela agora mostra:")
+    #     col1, col2, col3 = st.columns(3)
+    #     with col1:
+    #         st.info("📦 **Estoque Bruto**: Estoque total no sistema")
+    #     with col2:
+    #         st.info("📋 **Carteira**: Pedidos já confirmados")
+    #     with col3:
+    #         st.info("⚖️ **Estoque Ajustado**: Estoque disponível (Bruto - Carteira)")
         
-        st.info("💡 **Cálculo de Cobertura**: Usa o Estoque Ajustado para previsões mais precisas")
-    else:
-        st.info("📊 Dados de Carteira não encontrados. Usando estoque bruto para cálculos.")
+    #     st.info("💡 **Cálculo de Cobertura**: Usa o Estoque Ajustado para previsões mais precisas")
+    # else:
+    #     st.info("📊 Dados de Carteira não encontrados. Usando estoque bruto para cálculos.")
     
-    # Load CBM data from session state (already loaded in analytics.py)
-    cbm_data = st.session_state.get('cbm_data', {})
-    if not cbm_data:
-        st.info("ℹ️ Dados CBM não disponíveis - valores serão mostrados como 0")
+    # # Load CBM data from session state (already loaded in analytics.py)
+    # cbm_data = st.session_state.get('cbm_data', {})
+    # if not cbm_data:
+    #     st.info("ℹ️ Dados CBM não disponíveis - valores serão mostrados como 0")
     
     # Create the purchase request dataframe with the requested columns using the same filtered data
     solicitacao_data = []
