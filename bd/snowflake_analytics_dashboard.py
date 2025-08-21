@@ -115,6 +115,7 @@ def get_analytics_page_data(empresa: str, version_id: int = None):
                        compras_mais_90_dias as "Compras > 90 Dias",
                        qtde_embarque as "Qtde Embarque",
                        preco_unitario as "preco_unitario",
+                       carteira as "Carteira",
                        data_upload,
                        version_id,
                        -- Check for merged Excel columns
@@ -144,6 +145,7 @@ def get_analytics_page_data(empresa: str, version_id: int = None):
                        compras_mais_90_dias as "Compras > 90 Dias",
                        qtde_embarque as "Qtde Embarque",
                        preco_unitario as "preco_unitario",
+                       carteira as "Carteira",
                        data_upload,
                        version_id,
                        -- Check for merged Excel columns

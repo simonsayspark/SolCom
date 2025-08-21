@@ -162,7 +162,7 @@ def load_page():
         # Load data with company and version selection
         st.write("🔍 DEBUG: Loading analytics data...")
         # If we need a different version than the initial load, get it
-        if selected_version_id != None or not initial_data.get('analytics_data') is not None:
+        if (selected_version_id is not None) or (initial_data.get('analytics_data') is None):
             # We need to reload with specific version
             st.write(f"🔍 DEBUG: Reloading with version {selected_version_id}")
             analytics_data = get_cached_analytics_page_data(empresa_code, selected_version_id)
@@ -176,6 +176,38 @@ def load_page():
         if df is not None:
             st.write(f"🔍 DEBUG: DataFrame shape: {df.shape}")
             st.write(f"🔍 DEBUG: DataFrame columns: {list(df.columns)}")
+        else:
+            # Deep debug when dataframe is None: run direct Snowflake checks
+            try:
+                from bd.snowflake_connection import get_snowflake_connection
+                conn_dbg = get_snowflake_connection()
+                if conn_dbg:
+                    cur_dbg = conn_dbg.cursor()
+                    # Count rows for the selected version
+                    if selected_version_id is not None:
+                        cur_dbg.execute("SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA WHERE empresa = %s AND version_id = %s", (empresa_code, selected_version_id))
+                    else:
+                        cur_dbg.execute("SELECT COUNT(*) FROM ESTOQUE.ANALYTICS_DATA WHERE empresa = %s AND is_active = TRUE", (empresa_code,))
+                    count_rows = cur_dbg.fetchone()[0]
+                    st.write(f"🔍 DEBUG: Row count for selection: {count_rows}")
+                    # Show 3 sample column names by describing table
+                    cur_dbg.execute("DESCRIBE TABLE ESTOQUE.ANALYTICS_DATA")
+                    cols = [r[0] for r in cur_dbg.fetchall()]
+                    st.write(f"🔍 DEBUG: Table columns (first 15): {cols[:15]}")
+                    # Fetch a small sample to see data presence
+                    sample_sql = "SELECT produto, estoque, media_6_meses, version_id FROM ESTOQUE.ANALYTICS_DATA WHERE empresa = %s "
+                    if selected_version_id is not None:
+                        sample_sql += "AND version_id = %s ORDER BY produto LIMIT 5"
+                        cur_dbg.execute(sample_sql, (empresa_code, selected_version_id))
+                    else:
+                        sample_sql += "AND is_active = TRUE ORDER BY produto LIMIT 5"
+                        cur_dbg.execute(sample_sql, (empresa_code,))
+                    sample = cur_dbg.fetchall()
+                    st.write(f"🔍 DEBUG: Sample rows: {sample}")
+                    cur_dbg.close()
+                    conn_dbg.close()
+            except Exception as deep_dbg_e:
+                st.write(f"🔍 DEBUG: Deep check failed: {str(deep_dbg_e)}")
         
         if df is not None and len(df) > 0:
             version_text = f"v{selected_version_id}" if selected_version_id else "ativa"
