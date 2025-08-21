@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from bd.column_mapping import apply_column_remap
 
-# TODO: Functions need to be implemented: show_executive_summary, calculate_purchase_suggestions, show_purchase_list, show_analytics_dashboard, show_urgent_contacts, show_tabela_geral, show_priority_timeline
+from .analytics_utils import show_executive_summary, calculate_purchase_suggestions, show_purchase_list, show_analytics_dashboard, show_urgent_contacts, show_tabela_geral, show_priority_timeline
 
 
 def preprocess_analytics_dataframe(df: pd.DataFrame) -> pd.DataFrame:
@@ -355,78 +355,3 @@ def load_page():
             
         with tab3:
             show_tabela_geral(df, empresa_selecionada)
-
-
-def show_priority_timeline(df, empresa_selecionada):
-    """Timeline prioritário - placeholder function"""
-    st.info(f"🎯 **Timeline Prioritário para {empresa_selecionada}**")
-    st.markdown("⚠️ Esta funcionalidade está em desenvolvimento.")
-    
-    # Basic timeline view with available data
-    if not df.empty:
-        st.write(f"📊 **{len(df)} produtos** disponíveis para análise")
-        
-        # Show basic stats
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            produtos_baixo_estoque = len(df[df.get('Estoque Cobertura', 999) < 2])
-            st.metric("Produtos Baixo Estoque", produtos_baixo_estoque)
-        with col2:
-            produtos_zero_estoque = len(df[df.get('Estoque', 0) == 0])
-            st.metric("Produtos Sem Estoque", produtos_zero_estoque)
-        with col3:
-            produtos_total = len(df)
-            st.metric("Total de Produtos", produtos_total)
-
-
-def show_analytics_dashboard(produtos_existentes, produtos_novos, empresa_selecionada):
-    """Dashboard de análise - placeholder function"""
-    st.info(f"📊 **Dashboard de Análise para {empresa_selecionada}**")
-    st.markdown("⚠️ Esta funcionalidade está em desenvolvimento.")
-    
-    # Basic dashboard with available data
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Produtos Existentes")
-        if not produtos_existentes.empty:
-            st.write(f"📦 {len(produtos_existentes)} produtos com estoque/consumo")
-            
-            # Basic chart if data is available
-            if 'Estoque Cobertura' in produtos_existentes.columns:
-                st.bar_chart(produtos_existentes['Estoque Cobertura'].head(10))
-        else:
-            st.info("Nenhum produto existente encontrado")
-    
-    with col2:
-        st.subheader("Produtos Novos")
-        if not produtos_novos.empty:
-            st.write(f"🆕 {len(produtos_novos)} produtos novos")
-        else:
-            st.info("Nenhum produto novo encontrado")
-
-
-def show_tabela_geral(df, empresa_selecionada):
-    """Tabela geral - placeholder function"""
-    st.info(f"📋 **Tabela Geral para {empresa_selecionada}**")
-    
-    if not df.empty:
-        st.write(f"📊 Mostrando **{len(df)}** produtos")
-        
-        # Display the dataframe with pagination
-        if len(df) > 100:
-            st.warning(f"⚠️ Dados grandes ({len(df)} linhas). Mostrando primeiras 100 linhas.")
-            st.dataframe(df.head(100), use_container_width=True)
-        else:
-            st.dataframe(df, use_container_width=True)
-            
-        # Download option
-        csv = df.to_csv(index=False)
-        st.download_button(
-            label="📥 Baixar dados completos (CSV)",
-            data=csv,
-            file_name=f"tabela_geral_{empresa_selecionada}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-            mime="text/csv"
-        )
-    else:
-        st.info("Nenhum dado disponível para exibir.")
