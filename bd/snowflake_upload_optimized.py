@@ -198,8 +198,9 @@ def upload_excel_to_snowflake_optimized(df, arquivo_nome, empresa="MINIPA", usua
                      moq, ultimo_fornecedor, qtde_tot_compras, compras_ate_30_dias, compras_31_60_dias,
                      compras_61_90_dias, compras_mais_90_dias, qtde_embarque, preco_unitario,
                      data_upload, upload_version, version_id, is_active, 
-                     criticality, priority_score, relevance_class, monthly_volume)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     criticality, priority_score, relevance_class, monthly_volume,
+                     carteira, carteira_estoque)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
                         empresa,
                         row.get('Produto', ''),
@@ -223,7 +224,9 @@ def upload_excel_to_snowflake_optimized(df, arquivo_nome, empresa="MINIPA", usua
                         row.get('criticality', None),
                         row.get('priority_score', None),
                         row.get('relevance_class', None),
-                        row.get('monthly_volume', None)
+                        row.get('monthly_volume', None),
+                        row.get('Carteira', row.get('carteira', 0)),
+                        row.get('Carteira_Estoque', row.get('carteira_estoque', 0))
                     ))
                 except Exception as row_error:
                     # Row errors logged silently

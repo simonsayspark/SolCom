@@ -35,6 +35,15 @@ COLUMN_REMAP = {
     'UltimoFor': 'ultimo_fornecedor',
     'UltimoFornecedor': 'ultimo_fornecedor',
 
+    # New analytics backlog columns
+    'Carteira': 'Carteira',
+    'carteira': 'Carteira',
+    'Carteira-Estoque': 'Carteira_Estoque',
+    'carteira-estoque': 'Carteira_Estoque',
+    'Carteira_Estoque': 'Carteira_Estoque',
+    'carteira_estoque': 'Carteira_Estoque',
+    'Estoque - Carteira': 'Estoque_Menos_Carteira',
+
     # Forecast columns
     'Previsão Total com New PO': 'Previsao_Total_New_Pos',
     'Previsão Total com New POs': 'Previsao_Total_New_Pos',
