@@ -1742,8 +1742,8 @@ def show_priority_timeline(df, empresa="MINIPA"):
         elif 'carteira_estoque' in row.index:
             carteira_val = float(row.get('carteira_estoque', 0) or 0)
         
-        # Calculate adjusted stock (gross stock minus carteira)
-        estoque_ajustado = max(0.0, estoque_total - carteira_val)
+        # Calculate adjusted stock (gross stock minus carteira) - allow negative values
+        estoque_ajustado = estoque_total - carteira_val
         
         # Calculate adjusted stock + in transit
         estoque_ajustado_mais_intransit = estoque_ajustado + in_transit_ship
@@ -1759,8 +1759,6 @@ def show_priority_timeline(df, empresa="MINIPA"):
             'Produto': produto,
             'Fornecedor': fornecedor,
             'Qtd (MOQ)': qtd_moq,
-            'Preco FOB Unit': preco_fob_unit,
-            'Preco FOB Total': preco_fob_total,
             'Estoque Bruto': estoque_total,
             'Carteira': carteira_val,
             'Estoque Ajustado': estoque_ajustado,
@@ -1773,7 +1771,6 @@ def show_priority_timeline(df, empresa="MINIPA"):
             'Estoque Ajustado + inTransit': estoque_ajustado_mais_intransit,
             'New Previsao com New POs (pedidos)': new_previsao_com_pos,
             'New Previsao Ajustada': new_previsao_ajustada,
-            'CBM': cbm,
             'MOQ': moq,
             'OBS': obs
         })
@@ -1795,11 +1792,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
             else:
                 formatted_solicitacao[col] = formatted_solicitacao[col].astype(int)
         
-        # Format currency columns
-        currency_columns = ['Preco FOB Unit', 'Preco FOB Total']
-        for col in currency_columns:
-            if col in formatted_solicitacao.columns:
-                formatted_solicitacao[col] = formatted_solicitacao[col].apply(lambda x: f'$ {x:,.2f}' if x > 0 else '$ 0.00')
+        # Currency formatting removed - price columns dropped
         
         # Format Carteira and stock columns for better readability
         stock_columns = ['Carteira', 'Estoque Bruto', 'Estoque Ajustado', 'Estoque + inTransit', 'Estoque Ajustado + inTransit']
@@ -1854,24 +1847,14 @@ def show_priority_timeline(df, empresa="MINIPA"):
                         'border': 1
                     })
                     
-                    # Currency format for price columns
-                    currency_format = workbook.add_format({
-                        'num_format': '$ #,##0.00',
-                        'border': 1
-                    })
-                    
                     # Write the column headers with the defined format
                     for col_num, value in enumerate(solicitacao_df.columns.values):
                         worksheet.write(0, col_num, value, header_format)
                     
-                    # Apply currency formatting to price columns
+                    # Auto-adjust columns width
                     for col_num, column in enumerate(solicitacao_df.columns):
-                        if 'Preco' in column:
-                            worksheet.set_column(col_num, col_num, 15, currency_format)
-                        else:
-                            # Auto-adjust columns width
-                            column_width = max(solicitacao_df[column].astype(str).map(len).max(), len(column))
-                            worksheet.set_column(col_num, col_num, min(column_width + 2, 50))
+                        column_width = max(solicitacao_df[column].astype(str).map(len).max(), len(column))
+                        worksheet.set_column(col_num, col_num, min(column_width + 2, 50))
                 
                 # Reset buffer position
                 buffer.seek(0)
