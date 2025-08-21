@@ -51,13 +51,6 @@ COLUMN_REMAP = {
     'Compras > 90 Dias': 'Compras_Mais_90_Dias',
     'Qtde Tot Compras': 'Qtde_Tot_Compras',
 
-    # Orders on hand (carteira) columns
-    'carteira': 'Carteira',
-    'Carteira ': 'Carteira',
-    'Orders': 'Carteira',
-    'Order': 'Carteira',
-    'Pedidos': 'Carteira',
-    'Pedido': 'Carteira',
 
         # Enhanced price column mappings
     'Preço FOB\nUnitário': 'Preco_Unitario',
