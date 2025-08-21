@@ -164,9 +164,9 @@ def upload_excel_to_snowflake_optimized(df, arquivo_nome, empresa="MINIPA", usua
                     cursor.execute("""
                     INSERT INTO ESTOQUE.PRODUTOS 
                     (empresa, item, modelo, fornecedor, qtd_atual, preco_unitario, estoque_total, 
-                     in_transit, vendas_medias, cbm, moq, data_upload, upload_version, version_id, 
+                     in_transit, vendas_medias, cbm, moq, carteira, data_upload, upload_version, version_id, 
                      table_type, is_active)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
                         empresa,
                         row.get('Item', ''),
@@ -179,6 +179,7 @@ def upload_excel_to_snowflake_optimized(df, arquivo_nome, empresa="MINIPA", usua
                         row.get('Vendas_Medias', 0),
                         row.get('CBM', 0),
                         row.get('MOQ', 0),
+                        row.get('Carteira', 0),
                         datetime.now(),
                         upload_version,
                         version_id,
@@ -198,8 +199,8 @@ def upload_excel_to_snowflake_optimized(df, arquivo_nome, empresa="MINIPA", usua
                      moq, ultimo_fornecedor, qtde_tot_compras, compras_ate_30_dias, compras_31_60_dias,
                      compras_61_90_dias, compras_mais_90_dias, qtde_embarque, preco_unitario,
                      data_upload, upload_version, version_id, is_active, 
-                     criticality, priority_score, relevance_class, monthly_volume)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     criticality, priority_score, relevance_class, monthly_volume, carteira)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
                         empresa,
                         row.get('Produto', ''),
@@ -223,7 +224,8 @@ def upload_excel_to_snowflake_optimized(df, arquivo_nome, empresa="MINIPA", usua
                         row.get('criticality', None),
                         row.get('priority_score', None),
                         row.get('relevance_class', None),
-                        row.get('monthly_volume', None)
+                        row.get('monthly_volume', None),
+                        row.get('Carteira', 0)
                     ))
                 except Exception as row_error:
                     # Row errors logged silently

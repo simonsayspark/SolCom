@@ -68,6 +68,14 @@ COLUMN_REMAP = {
     'CBM\n': 'CBM',
     'CBM ': 'CBM',
     'cbm': 'CBM',  # Add this
+    
+    # Carteira (Orders) column mappings
+    'Carteira': 'Carteira',
+    'carteira': 'Carteira',
+    'Orders': 'Carteira',
+    'Pedidos': 'Carteira',
+    'Pedidos Existentes': 'Carteira',
+    'Encomendas': 'Carteira'
 }
 
 

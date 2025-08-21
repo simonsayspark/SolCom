@@ -295,6 +295,7 @@ def load_data_with_history(empresa="MINIPA", version_id=None, usuario="minipa", 
                    vendas_medias as "Vendas_Medias",
                    cbm as "CBM", 
                    moq as "MOQ", 
+                   carteira as "Carteira",
                    data_upload,
                    upload_version,
                    version_id
@@ -317,6 +318,7 @@ def load_data_with_history(empresa="MINIPA", version_id=None, usuario="minipa", 
                    vendas_medias as "Vendas_Medias",
                    cbm as "CBM", 
                    moq as "MOQ", 
+                   carteira as "Carteira",
                    data_upload,
                    upload_version,
                    version_id
@@ -468,6 +470,7 @@ def load_analytics_data(empresa="MINIPA", version_id=None, usuario="minipa", lim
                    compras_mais_90_dias as "Compras > 90 Dias",
                    previsao as "Previsão",
                    qtde_tot_compras as "Qtde Tot Compras",
+                   carteira as "Carteira",
                    data_upload,
                    upload_version,
                    version_id
@@ -502,6 +505,7 @@ def load_analytics_data(empresa="MINIPA", version_id=None, usuario="minipa", lim
                    compras_mais_90_dias as "Compras > 90 Dias",
                    previsao as "Previsão",
                    qtde_tot_compras as "Qtde Tot Compras",
+                   carteira as "Carteira",
                    data_upload,
                    upload_version,
                    version_id

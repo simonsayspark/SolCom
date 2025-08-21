@@ -24,7 +24,11 @@ def show_executive_summary(df, produtos_novos, produtos_existentes, empresa="MIN
     
     with col4:
         if len(produtos_existentes) > 0:
-            criticos = len(produtos_existentes[produtos_existentes['Estoque Cobertura'] <= 1])
+            # Use adjusted stock coverage if available, otherwise use regular
+            if 'Estoque Cobertura Ajustado' in produtos_existentes.columns:
+                criticos = len(produtos_existentes[produtos_existentes['Estoque Cobertura Ajustado'] <= 1])
+            else:
+                criticos = len(produtos_existentes[produtos_existentes['Estoque Cobertura'] <= 1])
             st.metric("🚨 Produtos Críticos", criticos)
         else:
             st.metric("🚨 Produtos Críticos", 0)
@@ -33,9 +37,12 @@ def show_executive_summary(df, produtos_novos, produtos_existentes, empresa="MIN
         # Status breakdown
         st.subheader("🎯 Status dos Produtos Existentes")
         
-        criticos = len(produtos_existentes[produtos_existentes['Estoque Cobertura'] <= 1])
-        alerta = len(produtos_existentes[(produtos_existentes['Estoque Cobertura'] > 1) & (produtos_existentes['Estoque Cobertura'] <= 3)])
-        saudaveis = len(produtos_existentes[produtos_existentes['Estoque Cobertura'] > 3])
+        # Use adjusted stock coverage if available
+        coverage_col = 'Estoque Cobertura Ajustado' if 'Estoque Cobertura Ajustado' in produtos_existentes.columns else 'Estoque Cobertura'
+        
+        criticos = len(produtos_existentes[produtos_existentes[coverage_col] <= 1])
+        alerta = len(produtos_existentes[(produtos_existentes[coverage_col] > 1) & (produtos_existentes[coverage_col] <= 3)])
+        saudaveis = len(produtos_existentes[produtos_existentes[coverage_col] > 3])
         
         col1, col2, col3 = st.columns(3)
         
@@ -98,15 +105,21 @@ def show_executive_summary(df, produtos_novos, produtos_existentes, empresa="MIN
 def calculate_purchase_suggestions(produtos_existentes):
     """Calculate purchase suggestions for products"""
     
-    def calcular_quando_vai_acabar(estoque, consumo_mensal):
+    def calcular_quando_vai_acabar(estoque, consumo_mensal, carteira=0):
         # Handle None/NaN values properly without changing the logic
         if pd.isna(consumo_mensal) or consumo_mensal is None or consumo_mensal <= 0:
             return "Sem consumo", 999
         
         if pd.isna(estoque) or estoque is None:
             estoque = 0
+        
+        if pd.isna(carteira) or carteira is None:
+            carteira = 0
             
-        meses_restantes = estoque / consumo_mensal
+        # Subtract carteira (existing orders) from effective stock
+        estoque_efetivo = max(0, estoque - carteira)
+            
+        meses_restantes = estoque_efetivo / consumo_mensal
         
         if meses_restantes <= 0:
             return "JÁ ACABOU", 0
@@ -116,7 +129,7 @@ def calculate_purchase_suggestions(produtos_existentes):
         else:
             return f"{meses_restantes:.1f} meses", meses_restantes
     
-    def quanto_comprar(consumo_mensal, estoque_atual, moq=0, meses_desejados=6):
+    def quanto_comprar(consumo_mensal, estoque_atual, moq=0, meses_desejados=6, carteira=0):
         # Handle None/NaN values
         if pd.isna(consumo_mensal) or consumo_mensal is None or consumo_mensal <= 0:
             return moq if moq > 0 else 0
@@ -124,8 +137,14 @@ def calculate_purchase_suggestions(produtos_existentes):
         if pd.isna(estoque_atual) or estoque_atual is None:
             estoque_atual = 0
         
+        if pd.isna(carteira) or carteira is None:
+            carteira = 0
+        
+        # Consider carteira (existing orders) when calculating stock need
+        estoque_efetivo = max(0, estoque_atual - carteira)
+        
         estoque_ideal = consumo_mensal * meses_desejados
-        falta = max(0, estoque_ideal - estoque_atual)
+        falta = max(0, estoque_ideal - estoque_efetivo)
         
         if falta <= 0:
             return 0
@@ -147,6 +166,7 @@ def calculate_purchase_suggestions(produtos_existentes):
         estoque = row['Estoque']
         consumo = row['Média 6 Meses']
         moq = row.get('MOQ', 0) if 'MOQ' in row.index else 0
+        carteira = row.get('Carteira', 0) if 'Carteira' in row.index else 0
         fornecedor = 'Brazil'
         
         # Handle supplier column variations - check UltimoFornecedor first since it's in merged Excel
@@ -157,12 +177,14 @@ def calculate_purchase_suggestions(produtos_existentes):
                     fornecedor = value
                     break
         
-        quando_acaba, meses_num = calcular_quando_vai_acabar(estoque, consumo)
-        qtd_comprar = quanto_comprar(consumo, estoque, moq)
+        quando_acaba, meses_num = calcular_quando_vai_acabar(estoque, consumo, carteira)
+        qtd_comprar = quanto_comprar(consumo, estoque, moq, carteira=carteira)
         
         suggestions.append({
             'Produto': produto,
             'Estoque_Atual': estoque,
+            'Carteira': carteira,
+            'Estoque_Efetivo': max(0, estoque - carteira),
             'Consumo_Mensal': consumo,
             'MOQ': moq,
             'Fornecedor': fornecedor,
@@ -1484,11 +1506,22 @@ def show_priority_timeline(df, empresa="MINIPA"):
                     compras_mais_90_dias = float(original_row[col].iloc[0] or 0)
                     break
         
-        # 11. New Previsao com New POs (pedidos) - FIX: Use Nova Cobertura Total including ALL future orders
-        # Nova Cobertura Total = (estoque_total + in_transit_ship + ALL future purchases) / avg_sales
+        # Get Carteira (existing orders) from the original data
+        carteira = 0
+        if len(original_row) > 0:
+            for col in ['Carteira', 'carteira']:
+                if col in original_row.columns:
+                    carteira = float(original_row[col].iloc[0] or 0)
+                    if carteira > 0:
+                        break
+        
+        # 11. New Previsao com New POs (pedidos) - FIX: Use Nova Cobertura Total including ALL future orders MINUS Carteira
+        # Nova Cobertura Total = (estoque_total - carteira + in_transit_ship + ALL future purchases) / avg_sales
         total_future_purchases = compras_ate_30_dias + compras_61_90_dias + compras_mais_90_dias
+        estoque_efetivo = max(0, estoque_total - carteira)  # Subtract carteira from current stock
+        
         if avg_sales > 0:
-            new_previsao_com_pos = (estoque_total + in_transit_ship + total_future_purchases) / avg_sales
+            new_previsao_com_pos = (estoque_efetivo + in_transit_ship + total_future_purchases) / avg_sales
         else:
             new_previsao_com_pos = 999  # No consumption
         
@@ -1521,6 +1554,8 @@ def show_priority_timeline(df, empresa="MINIPA"):
             'Preco FOB Unit': preco_fob_unit,
             'Preco FOB Total': preco_fob_total,
             'Estoque Total': estoque_total,
+            'Carteira': carteira,
+            'Estoque Efetivo': estoque_efetivo,
             'In Transit Ship': in_transit_ship,
             'Compras até 30 dias': compras_ate_30_dias,
             'Compras 61 a 90 dias': compras_61_90_dias,

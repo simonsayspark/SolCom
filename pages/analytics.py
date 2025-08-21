@@ -41,6 +41,13 @@ def preprocess_analytics_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         df_processed['UltimoFornecedor'] = df_processed['UltimoFornecedor'].fillna('Brazil')
         df_processed.loc[df_processed['UltimoFornecedor'].str.strip() == '', 'UltimoFornecedor'] = 'Brazil'
         df_processed.loc[df_processed['UltimoFornecedor'].str.lower() == 'nan', 'UltimoFornecedor'] = 'Brazil'
+    
+    # Handle Carteira column - default to 0 if not present
+    if 'Carteira' not in df_processed.columns:
+        df_processed['Carteira'] = 0
+    else:
+        # Ensure Carteira is numeric and fill NaN with 0
+        df_processed['Carteira'] = pd.to_numeric(df_processed['Carteira'], errors='coerce').fillna(0)
 
     if 'Estoque Cobertura' not in df_processed.columns:
         if 'Estoque' in df_processed.columns and 'Média 6 Meses' in df_processed.columns:
@@ -48,6 +55,15 @@ def preprocess_analytics_dataframe(df: pd.DataFrame) -> pd.DataFrame:
                 lambda row: row['Estoque'] / row['Média 6 Meses'] if row['Média 6 Meses'] > 0 else 999,
                 axis=1
             )
+    
+    # Calculate Adjusted Stock Coverage considering Carteira (existing orders)
+    if 'Estoque' in df_processed.columns and 'Média 6 Meses' in df_processed.columns and 'Carteira' in df_processed.columns:
+        df_processed['Estoque Ajustado'] = df_processed['Estoque'] - df_processed['Carteira']
+        df_processed['Estoque Ajustado'] = df_processed['Estoque Ajustado'].clip(lower=0)  # Don't allow negative stock
+        df_processed['Estoque Cobertura Ajustado'] = df_processed.apply(
+            lambda row: row['Estoque Ajustado'] / row['Média 6 Meses'] if row['Média 6 Meses'] > 0 else 999,
+            axis=1
+        )
 
     return df_processed
 
