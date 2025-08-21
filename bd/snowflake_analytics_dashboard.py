@@ -86,10 +86,18 @@ def get_analytics_page_data(empresa: str, version_id: int = None):
             
             active_count = cursor.fetchone()[0]
             if active_count == 0:
-                # No data for this company
-                cursor.close()
-                conn.close()
-                return result
+                # No active data — fallback to latest available version if present
+                fallback_version_id = None
+                if result.get('versions'):
+                    # versions already ordered by is_active DESC, upload_date DESC
+                    fallback_version_id = result['versions'][0]['version_id']
+                if fallback_version_id is None:
+                    cursor.close()
+                    conn.close()
+                    return result
+                # Use the latest version even if not active (only when no explicit version is requested)
+                if version_id is None:
+                    version_id = fallback_version_id
         except:
             # Table might not exist
             cursor.close()
@@ -160,7 +168,15 @@ def get_analytics_page_data(empresa: str, version_id: int = None):
             cursor.close()  # Close cursor before using pandas
             
             # Use pandas to read the data
-            df = pd.read_sql(query, conn, params=query_params)
+            # Attempt to include optional Carteira columns if schema supports them; fallback if not
+            try:
+                enriched_query = query.replace(
+                    'FROM ESTOQUE.ANALYTICS_DATA',
+                    ', carteira as "Carteira", carteira_estoque as "Carteira_Estoque"\n                FROM ESTOQUE.ANALYTICS_DATA'
+                )
+                df = pd.read_sql(enriched_query, conn, params=query_params)
+            except Exception:
+                df = pd.read_sql(query, conn, params=query_params)
             
             if not df.empty:
                 result['analytics_data'] = df

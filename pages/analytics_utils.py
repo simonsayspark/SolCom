@@ -736,6 +736,16 @@ def show_priority_timeline(df, empresa="MINIPA"):
         
         # Get basic data - handle multiple column name formats
         estoque = float(row.get('Estoque', 0) or 0)
+        # Adjust stock by subtracting Carteira (order backlog) if present
+        try:
+            carteira_val = 0.0
+            for carteira_col in ['Carteira', 'carteira', 'Carteira_Estoque', 'carteira_estoque', 'Carteira-Estoque', 'carteira-estoque']:
+                if carteira_col in row.index:
+                    carteira_val = float(row.get(carteira_col, 0) or 0)
+                    break
+            estoque = max(0.0, estoque - carteira_val)
+        except Exception:
+            pass
         
         # Handle different naming conventions for monthly average
         media_mensal = 0
@@ -863,11 +873,8 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 })
         else:
             # Normal calculation when there's consumption data
-            # Use Estoque Cobertura if available, otherwise calculate
-            if estoque_cobertura > 0:
-                meses_cobertura = estoque_cobertura
-            else:
-                meses_cobertura = estoque / media_mensal
+            # Calculate coverage using adjusted stock (estoque already adjusted above)
+            meses_cobertura = (estoque / media_mensal) if media_mensal > 0 else 0
                 
             # Calculate expected coverage with incoming inventory
             # FIX: Nova cobertura total = cobertura atual + cobertura adicional (including ALL future purchases)
