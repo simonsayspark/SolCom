@@ -208,38 +208,44 @@ def migrate_to_merged_excel_support():
             else:
                 st.info(f"ℹ️ {col_name.lower()} already exists in ANALYTICS_DATA")
         
-        # Check and add columns to PRODUTOS table (timeline)
+        # Check and add columns to PRODUTOS table (timeline) - with error handling
         st.info("📅 Updating PRODUTOS table...")
         
-        produtos_columns = [
-            ('PRIORITY_SCORE', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN priority_score DECIMAL(5,4)"),
-            ('CRITICALITY', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN criticality VARCHAR(20)"),
-            ('RELEVANCE_CLASS', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN relevance_class VARCHAR(20)"),
-            ('ANNUAL_IMPACT', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN annual_impact DECIMAL(12,2)"),
-            ('MONTHLY_VOLUME', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN monthly_volume DECIMAL(10,2)"),
-            ('VOLUME_NORMALIZED', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN volume_normalized DECIMAL(5,4)"),
-            ('PRICE_NORMALIZED', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN price_normalized DECIMAL(5,4)"),
-            ('RAW_MULTIPLICATION', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN raw_multiplication DECIMAL(12,2)")
-        ]
-        
-        # Get current columns
-        cursor.execute("DESCRIBE TABLE ESTOQUE.PRODUTOS")
-        current_columns = [col[0].upper() for col in cursor.fetchall()]
-        
         produtos_added = 0
-        for col_name, alter_sql in produtos_columns:
-            if col_name not in current_columns:
-                try:
-                    cursor.execute(alter_sql)
-                    st.success(f"✅ Added {col_name.lower()} to PRODUTOS")
-                    produtos_added += 1
-                except Exception as e:
-                    if "already exists" not in str(e).lower():
-                        st.error(f"❌ Error adding {col_name.lower()}: {str(e)}")
-                    else:
-                        st.info(f"ℹ️ {col_name.lower()} already exists")
-            else:
-                st.info(f"ℹ️ {col_name.lower()} already exists in PRODUTOS")
+        try:
+            # First check if PRODUTOS table exists
+            cursor.execute("DESCRIBE TABLE ESTOQUE.PRODUTOS")
+            current_columns = [col[0].upper() for col in cursor.fetchall()]
+            
+            produtos_columns = [
+                ('PRIORITY_SCORE', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN priority_score DECIMAL(5,4)"),
+                ('CRITICALITY', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN criticality VARCHAR(20)"),
+                ('RELEVANCE_CLASS', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN relevance_class VARCHAR(20)"),
+                ('ANNUAL_IMPACT', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN annual_impact DECIMAL(12,2)"),
+                ('MONTHLY_VOLUME', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN monthly_volume DECIMAL(10,2)"),
+                ('VOLUME_NORMALIZED', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN volume_normalized DECIMAL(5,4)"),
+                ('PRICE_NORMALIZED', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN price_normalized DECIMAL(5,4)"),
+                ('RAW_MULTIPLICATION', "ALTER TABLE ESTOQUE.PRODUTOS ADD COLUMN raw_multiplication DECIMAL(12,2)")
+            ]
+            
+            for col_name, alter_sql in produtos_columns:
+                if col_name not in current_columns:
+                    try:
+                        cursor.execute(alter_sql)
+                        st.success(f"✅ Added {col_name.lower()} to PRODUTOS")
+                        produtos_added += 1
+                    except Exception as e:
+                        if "already exists" not in str(e).lower():
+                            st.error(f"❌ Error adding {col_name.lower()}: {str(e)}")
+                        else:
+                            st.info(f"ℹ️ {col_name.lower()} already exists")
+                else:
+                    st.info(f"ℹ️ {col_name.lower()} already exists in PRODUTOS")
+        
+        except Exception as produtos_error:
+            st.warning(f"⚠️ PRODUTOS table not accessible or doesn't exist: {str(produtos_error)}")
+            st.info("💡 This is normal if you only use ANALYTICS data. PRODUTOS table is used for timeline data.")
+            produtos_added = 0
         
         # Commit changes
         conn.commit()
