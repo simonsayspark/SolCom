@@ -841,13 +841,16 @@ def show_priority_timeline(df, empresa="MINIPA"):
                     'Produto': produto,
                     'Fornecedor': fornecedor,
                     'Estoque_Atual': estoque,
+                    'Estoque_Ajustado': estoque_ajustado,
                     'Estoque_Esperado': estoque_esperado,
+                    'Estoque_Esperado_Ajustado': estoque_esperado_ajustado,
                     'Qtde_Embarque': qtde_embarque,
                     'Compras_Ate_30_Dias': compras_ate_30_dias,
                     'Compras_61_90_Dias': compras_61_90_dias,
                     'Compras_Mais_90_Dias': compras_mais_90_dias,
                     'Media_Mensal': media_mensal,
                     'Meses_Cobertura': meses_cobertura,
+                    'Meses_Cobertura_Ajustado': meses_cobertura_ajustado,
                     'Meses_Cobertura_Esperada': meses_cobertura + ((qtde_embarque + compras_ate_30_dias + compras_61_90_dias + compras_mais_90_dias) / media_mensal if media_mensal > 0 else 0),
                     'Dias_Ate_Pedido': dias_ate_pedido,
                     'Dias_Restantes_Esperado': 3650,  # No consumption, so large value
@@ -869,7 +872,8 @@ def show_priority_timeline(df, empresa="MINIPA"):
                     'Annual_Impact': annual_impact,
                     'Urgencia': urgencia,
                     'Cor': cor,
-                    'Lead_Time': 0
+                    'Lead_Time': 0,
+                    'Carteira': carteira_val
                 })
         else:
             # Normal calculation when there's consumption data
@@ -955,13 +959,16 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 'Produto': produto,
                 'Fornecedor': fornecedor,
                 'Estoque_Atual': estoque,
+                'Estoque_Ajustado': estoque_ajustado,
                 'Estoque_Esperado': estoque_esperado,
+                'Estoque_Esperado_Ajustado': estoque_esperado_ajustado,
                 'Qtde_Embarque': qtde_embarque,
                 'Compras_Ate_30_Dias': compras_ate_30_dias,
                 'Compras_61_90_Dias': compras_61_90_dias,
                 'Compras_Mais_90_Dias': compras_mais_90_dias,
                 'Media_Mensal': media_mensal,
                 'Meses_Cobertura': meses_cobertura,
+                'Meses_Cobertura_Ajustado': meses_cobertura_ajustado,
                 'Meses_Cobertura_Esperada': meses_cobertura_esperada,
                 'Dias_Ate_Pedido': dias_ate_pedido,
                 'Dias_Restantes_Esperado': dias_restantes_esperado,
@@ -983,7 +990,8 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 'Annual_Impact': annual_impact,
                 'Urgencia': urgencia,
                 'Cor': cor,
-                'Lead_Time': lead_time_days
+                'Lead_Time': lead_time_days,
+                'Carteira': carteira_val
             })
     
     if not timeline_data:
@@ -1198,12 +1206,16 @@ def show_priority_timeline(df, empresa="MINIPA"):
                     '<b>%{y}</b><br>' +
                     '<b>ESTOQUE ATUAL</b><br>' +
                     'Cobertura atual: %{x:.1f} meses<br>' +
-                    'Estoque atual: %{customdata[0]:.0f} unidades<br>' +
-                    'Consumo mensal: %{customdata[1]:.1f} unidades<br>' +
+                    'Estoque bruto: %{customdata[0]:.0f} unidades<br>' +
+                    'Carteira (pedidos): %{customdata[1]:.0f} unidades<br>' +
+                    'Estoque ajustado: %{customdata[2]:.0f} unidades<br>' +
+                    'Consumo mensal: %{customdata[3]:.1f} unidades<br>' +
                     '<extra></extra>'
                 ),
                 customdata=np.column_stack((
                     display_df['Estoque_Atual'],
+                    display_df.get('Carteira', 0),
+                    display_df.get('Estoque_Ajustado', display_df['Estoque_Atual']),
                     display_df['Media_Mensal']
                 )),
                 name='Estoque Atual',
