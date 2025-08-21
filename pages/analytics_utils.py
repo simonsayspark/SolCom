@@ -659,6 +659,181 @@ def show_tabela_geral(df, empresa="MINIPA"):
             )
 
 def show_priority_timeline(df, empresa="MINIPA"):
+    """Show priority-driven timeline with Carteira support"""
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+    from datetime import datetime, timedelta
+    
+    st.subheader(f"🎯 Timeline de Compras Prioritário - {empresa}")
+    
+    # Check if we have Carteira data
+    has_carteira = any(col in df.columns for col in ['Carteira', 'carteira', 'Carteira_Estoque', 'carteira_estoque', 'Carteira-Estoque', 'carteira-estoque'])
+    if has_carteira:
+        st.success("✅ Dados de Carteira detectados! Usando estoque ajustado para cálculos.")
+    else:
+        st.info("📊 Dados de Carteira não encontrados. Usando estoque bruto.")
+    
+    # Prepare data for timeline analysis
+    timeline_data = []
+    hoje = datetime.now()
+    
+    for idx, row in df.iterrows():
+        # Skip empty rows
+        produto = str(row.get('Produto', '')).strip()
+        if not produto or produto == 'nan':
+            continue
+        
+        # Get basic data
+        estoque_bruto = float(row.get('Estoque', 0) or 0)
+        
+        # Get Carteira value if present
+        carteira_val = 0.0
+        if has_carteira:
+            for carteira_col in ['Carteira', 'carteira', 'Carteira_Estoque', 'carteira_estoque', 'Carteira-Estoque', 'carteira-estoque']:
+                if carteira_col in row.index:
+                    try:
+                        carteira_val = float(row.get(carteira_col, 0) or 0)
+                        break
+                    except (ValueError, TypeError):
+                        continue
+        
+        # Calculate adjusted stock
+        estoque_ajustado = max(0.0, estoque_bruto - carteira_val)
+        
+        # Get consumption data
+        media_mensal = 0
+        for col in ['Média 6 Meses', 'Media_6_Meses', 'media_6_meses', 'Consumo 6 Meses', 'consumo_6_meses']:
+            if col in row.index:
+                try:
+                    media_mensal = float(row.get(col, 0) or 0)
+                    break
+                except (ValueError, TypeError):
+                    continue
+        
+        # Calculate coverage
+        if media_mensal > 0:
+            meses_cobertura = estoque_ajustado / media_mensal
+            dias_ate_pedido = max(0, int(meses_cobertura * 30) - 120)  # 4 months lead time
+        else:
+            meses_cobertura = 999
+            dias_ate_pedido = 3650
+        
+        # Determine urgency and color
+        if dias_ate_pedido <= 0:
+            urgencia = 'URGENTE'
+            cor = '#8B0000'  # Dark red
+        elif dias_ate_pedido <= 30:
+            urgencia = 'URGENTE'
+            cor = '#FF0000'  # Red
+        elif dias_ate_pedido <= 60:
+            urgencia = 'URGENTE'
+            cor = '#FF4500'  # Orange red
+        elif dias_ate_pedido <= 120:
+            urgencia = 'URGENTE'
+            cor = '#FFA500'  # Orange
+        else:
+            urgencia = 'MONITORAR'
+            cor = '#32CD32'  # Green
+        
+        timeline_data.append({
+            'Produto': produto,
+            'Estoque_Bruto': estoque_bruto,
+            'Carteira': carteira_val,
+            'Estoque_Ajustado': estoque_ajustado,
+            'Media_Mensal': media_mensal,
+            'Meses_Cobertura': meses_cobertura,
+            'Dias_Ate_Pedido': dias_ate_pedido,
+            'Urgencia': urgencia,
+            'Cor': cor
+        })
+    
+    if not timeline_data:
+        st.warning("⚠️ Nenhum produto com dados suficientes para análise de timeline.")
+        return
+    
+    # Convert to DataFrame and sort
+    timeline_df = pd.DataFrame(timeline_data)
+    timeline_df = timeline_df.sort_values(['Dias_Ate_Pedido'])
+    
+    # Show metrics
+    col1, col2, col3 = st.columns(3)
+    urgentes = len(timeline_df[timeline_df['Urgencia'] == 'URGENTE'])
+    monitorar = len(timeline_df[timeline_df['Urgencia'] == 'MONITORAR'])
+    
+    col1.metric("🔴 Urgentes (≤ 4 meses)", urgentes)
+    col2.metric("🟢 Monitorar (> 4 meses)", monitorar)
+    col3.metric("📦 Total Produtos", len(timeline_df))
+    
+    # Create timeline chart
+    if len(timeline_df) > 0:
+        # Limit display to top 50 products for better visibility
+        display_df = timeline_df.head(50)
+        
+        fig = go.Figure()
+        
+        # Add bars for current stock coverage
+        fig.add_trace(go.Bar(
+            y=display_df['Produto'],
+            x=display_df['Meses_Cobertura'],
+            orientation='h',
+            marker_color=display_df['Cor'],
+            text=[f"{row['Meses_Cobertura']:.1f}m" for _, row in display_df.iterrows()],
+            textposition='inside',
+            hovertemplate=(
+                '<b>%{y}</b><br>' +
+                '<b>ESTOQUE ATUAL</b><br>' +
+                'Cobertura: %{x:.1f} meses<br>' +
+                'Estoque bruto: %{customdata[0]:.0f} unidades<br>' +
+                'Carteira: %{customdata[1]:.0f} unidades<br>' +
+                'Estoque ajustado: %{customdata[2]:.0f} unidades<br>' +
+                'Consumo mensal: %{customdata[3]:.1f} unidades<br>' +
+                '<extra></extra>'
+            ),
+            customdata=np.column_stack((
+                display_df['Estoque_Bruto'],
+                display_df['Carteira'],
+                display_df['Estoque_Ajustado'],
+                display_df['Media_Mensal']
+            )),
+            name='Estoque Atual'
+        ))
+        
+        # Update layout
+        fig.update_layout(
+            title=f'📊 Timeline de Compras - {empresa}',
+            height=max(800, len(display_df) * 20),
+            showlegend=True,
+            barmode='stack',
+            font=dict(size=12),
+            margin=dict(l=300, r=100, t=100, b=100),
+            yaxis=dict(tickmode='array', tickvals=display_df['Produto'].tolist(), ticktext=display_df['Produto'].tolist())
+        )
+        
+        # Update axes
+        fig.update_xaxes(title_text="Meses de Cobertura", title_font_size=14)
+        
+        # Add lead time line
+        fig.add_vline(x=4, line_dash="dash", line_color="orange", line_width=2)
+        fig.add_annotation(
+            x=4, y=len(display_df)+2,
+            text="Lead Time (4 meses)",
+            showarrow=True,
+            arrowhead=2,
+            font=dict(color="orange", size=12),
+            yshift=20
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Show detailed table
+        st.subheader("📋 Detalhamento de Produtos")
+        st.dataframe(
+            display_df[['Produto', 'Estoque_Bruto', 'Carteira', 'Estoque_Ajustado', 'Media_Mensal', 'Meses_Cobertura', 'Urgencia']].round(2),
+            use_container_width=True,
+            height=400
+        )
+
+def show_priority_timeline(df, empresa="MINIPA"):
     """Show priority-driven timeline with merged data support"""
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
@@ -1430,6 +1605,22 @@ def show_priority_timeline(df, empresa="MINIPA"):
     # Add Solicitação de Pedidos table right after Detalhamento de Compras
     st.subheader("📋 Solicitação de Pedidos")
     
+    # Check if we have Carteira data and show explanation
+    has_carteira = any(col in df.columns for col in ['Carteira', 'carteira', 'Carteira_Estoque', 'carteira_estoque', 'Carteira-Estoque', 'carteira-estoque'])
+    if has_carteira:
+        st.success("✅ **Dados de Carteira detectados!** A tabela agora mostra:")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.info("📦 **Estoque Bruto**: Estoque total no sistema")
+        with col2:
+            st.info("📋 **Carteira**: Pedidos já confirmados")
+        with col3:
+            st.info("⚖️ **Estoque Ajustado**: Estoque disponível (Bruto - Carteira)")
+        
+        st.info("💡 **Cálculo de Cobertura**: Usa o Estoque Ajustado para previsões mais precisas")
+    else:
+        st.info("📊 Dados de Carteira não encontrados. Usando estoque bruto para cálculos.")
+    
     # Load CBM data from session state (already loaded in analytics.py)
     cbm_data = st.session_state.get('cbm_data', {})
     if not cbm_data:
@@ -1540,20 +1731,48 @@ def show_priority_timeline(df, empresa="MINIPA"):
         # 13. OBS - empty column for manual notes
         obs = ""
         
+        # Get Carteira value for this product
+        carteira_val = 0.0
+        if 'Carteira' in row.index:
+            carteira_val = float(row.get('Carteira', 0) or 0)
+        elif 'carteira' in row.index:
+            carteira_val = float(row.get('carteira', 0) or 0)
+        elif 'Carteira_Estoque' in row.index:
+            carteira_val = float(row.get('Carteira_Estoque', 0) or 0)
+        elif 'carteira_estoque' in row.index:
+            carteira_val = float(row.get('carteira_estoque', 0) or 0)
+        
+        # Calculate adjusted stock (gross stock minus carteira)
+        estoque_ajustado = max(0.0, estoque_total - carteira_val)
+        
+        # Calculate adjusted stock + in transit
+        estoque_ajustado_mais_intransit = estoque_ajustado + in_transit_ship
+        
+        # Calculate adjusted coverage with future purchases
+        total_future_purchases = compras_ate_30_dias + compras_61_90_dias + compras_mais_90_dias
+        if avg_sales > 0:
+            new_previsao_ajustada = (estoque_ajustado + in_transit_ship + total_future_purchases) / avg_sales
+        else:
+            new_previsao_ajustada = 999  # No consumption
+        
         solicitacao_data.append({
             'Produto': produto,
             'Fornecedor': fornecedor,
             'Qtd (MOQ)': qtd_moq,
             'Preco FOB Unit': preco_fob_unit,
             'Preco FOB Total': preco_fob_total,
-            'Estoque Total': estoque_total,
+            'Estoque Bruto': estoque_total,
+            'Carteira': carteira_val,
+            'Estoque Ajustado': estoque_ajustado,
             'In Transit Ship': in_transit_ship,
             'Compras até 30 dias': compras_ate_30_dias,
             'Compras 61 a 90 dias': compras_61_90_dias,
             'Compras > 90 dias': compras_mais_90_dias,
             'Avg Sales': avg_sales,
             'Estoque + inTransit': estoque_mais_intransit,
+            'Estoque Ajustado + inTransit': estoque_ajustado_mais_intransit,
             'New Previsao com New POs (pedidos)': new_previsao_com_pos,
+            'New Previsao Ajustada': new_previsao_ajustada,
             'CBM': cbm,
             'MOQ': moq,
             'OBS': obs
@@ -1581,6 +1800,12 @@ def show_priority_timeline(df, empresa="MINIPA"):
         for col in currency_columns:
             if col in formatted_solicitacao.columns:
                 formatted_solicitacao[col] = formatted_solicitacao[col].apply(lambda x: f'$ {x:,.2f}' if x > 0 else '$ 0.00')
+        
+        # Format Carteira and stock columns for better readability
+        stock_columns = ['Carteira', 'Estoque Bruto', 'Estoque Ajustado', 'Estoque + inTransit', 'Estoque Ajustado + inTransit']
+        for col in stock_columns:
+            if col in formatted_solicitacao.columns:
+                formatted_solicitacao[col] = formatted_solicitacao[col].apply(lambda x: f'{x:,.0f}' if pd.notna(x) else '0')
         
         # Display the dataframe
         st.dataframe(
