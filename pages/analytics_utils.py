@@ -735,17 +735,20 @@ def show_priority_timeline(df, empresa="MINIPA"):
             continue
         
         # Get basic data - handle multiple column name formats
-        estoque = float(row.get('Estoque', 0) or 0)
-        # Adjust stock by subtracting Carteira (order backlog) if present
+        estoque_bruto = float(row.get('Estoque', 0) or 0)
+        # Get Carteira value (order backlog) if present
+        carteira_val = 0.0
         try:
-            carteira_val = 0.0
             for carteira_col in ['Carteira', 'carteira', 'Carteira_Estoque', 'carteira_estoque', 'Carteira-Estoque', 'carteira-estoque']:
                 if carteira_col in row.index:
                     carteira_val = float(row.get(carteira_col, 0) or 0)
                     break
-            estoque = max(0.0, estoque - carteira_val)
         except Exception:
             pass
+        
+        # Calculate adjusted stock (gross stock minus carteira)
+        estoque_ajustado = max(0.0, estoque_bruto - carteira_val)
+        estoque = estoque_ajustado  # Use adjusted stock for calculations
         
         # Handle different naming conventions for monthly average
         media_mensal = 0
@@ -822,6 +825,8 @@ def show_priority_timeline(df, empresa="MINIPA"):
         
         # Calculate expected stock including ALL incoming shipments
         estoque_esperado = estoque + qtde_embarque + compras_ate_30_dias + compras_61_90_dias + compras_mais_90_dias
+        # Calculate adjusted expected stock (expected stock minus carteira)
+        estoque_esperado_ajustado = max(0.0, estoque_esperado - carteira_val)
         
         # Calculate timeline metrics
         # Handle case where there's no consumption data
@@ -840,7 +845,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 timeline_data.append({
                     'Produto': produto,
                     'Fornecedor': fornecedor,
-                    'Estoque_Atual': estoque,
+                    'Estoque_Atual': estoque_bruto,
                     'Estoque_Ajustado': estoque_ajustado,
                     'Estoque_Esperado': estoque_esperado,
                     'Estoque_Esperado_Ajustado': estoque_esperado_ajustado,
@@ -879,6 +884,8 @@ def show_priority_timeline(df, empresa="MINIPA"):
             # Normal calculation when there's consumption data
             # Calculate coverage using adjusted stock (estoque already adjusted above)
             meses_cobertura = (estoque / media_mensal) if media_mensal > 0 else 0
+            # Calculate adjusted coverage using gross stock (for comparison)
+            meses_cobertura_ajustado = (estoque_bruto / media_mensal) if media_mensal > 0 else 0
                 
             # Calculate expected coverage with incoming inventory
             # FIX: Nova cobertura total = cobertura atual + cobertura adicional (including ALL future purchases)
@@ -958,7 +965,7 @@ def show_priority_timeline(df, empresa="MINIPA"):
             timeline_data.append({
                 'Produto': produto,
                 'Fornecedor': fornecedor,
-                'Estoque_Atual': estoque,
+                'Estoque_Atual': estoque_bruto,
                 'Estoque_Ajustado': estoque_ajustado,
                 'Estoque_Esperado': estoque_esperado,
                 'Estoque_Esperado_Ajustado': estoque_esperado_ajustado,
