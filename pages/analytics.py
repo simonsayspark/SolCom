@@ -75,82 +75,70 @@ def load_page():
     
     with col3:
         if st.button("🔄 Atualizar Dados", 
-                    help="Atualizar dados do Snowflake (normalmente cache por 7 dias)",
+                    help="Recarregar dados do armazenamento local",
                     use_container_width=True,
                     key="analytics_refresh"):
-            from bd.snowflake_config import load_analytics_data, get_upload_versions
-            from bd.snowflake_analytics_dashboard import get_cached_analytics_page_data
-            load_analytics_data.clear()  # Clear old function cache
-            get_cached_analytics_page_data.clear()  # Clear new function cache
-            get_upload_versions.clear()  # Clear version cache
-            st.success("✅ Cache de análise limpo! Dados atualizados.")
+            st.success("✅ Dados atualizados!")
             st.rerun()
     
-    # Try to load data from Snowflake first
-    try:
-        from bd.snowflake_config import load_analytics_data, get_upload_versions
-        from bd.snowflake_analytics_dashboard import get_cached_analytics_page_data
+    # Load data from local storage
+    from bd.local_storage import load_data, get_versions
+    
+    # Get versions for this company
+    versions = get_versions(empresa_code, "ANALYTICS")
+    
+    # Version selector with custom names and filenames
+    if versions:
+        st.subheader(f"📦 Seleção de Versão - {empresa_selecionada}")
+        col1, col2 = st.columns([2, 1])
         
-        # Get ALL data in ONE connection - versions and analytics data
-        initial_data = get_cached_analytics_page_data(empresa_code)
-        versions = initial_data['versions']
-        
-        # Version selector with custom names and filenames
-        if versions:
-            st.subheader(f"📦 Seleção de Versão - {empresa_selecionada}")
-            col1, col2 = st.columns([2, 1])
+        with col1:
+            # Create version options with custom names and filenames
+            version_options = ["Versão Ativa (mais recente)"]
+            version_mapping = {0: None}  # 0 = active version
             
-            with col1:
-                # Create version options with custom names and filenames
-                version_options = ["Versão Ativa (mais recente)"]
-                version_mapping = {0: None}  # 0 = active version
+            for i, v in enumerate(versions):
+                display_name = v.get('description', '').strip()
+                if not display_name:
+                    display_name = f"Versão {v['version_id']}"
                 
-                for i, v in enumerate(versions):
-                    display_name = v.get('description', '').strip()
-                    if not display_name:
-                        display_name = f"Versão {v['version_id']}"
-                    
-                    filename_info = f" - 📁 {v.get('arquivo_origem', 'N/A')}" if v.get('arquivo_origem') else ""
-                    option_text = f"{display_name} ({v['upload_date']}){filename_info}"
-                    
-                    version_options.append(option_text)
-                    version_mapping[i + 1] = v['version_id']
+                filename_info = f" - 📁 {v.get('arquivo_origem', 'N/A')}" if v.get('arquivo_origem') else ""
+                option_text = f"{display_name} ({v['upload_date']}){filename_info}"
                 
-                selected_option = st.selectbox(
-                    "Escolha a versão dos dados:",
-                    options=range(len(version_options)),
-                    format_func=lambda x: version_options[x],
-                    help="Selecione uma versão específica ou use a versão ativa"
-                )
-                
-                selected_version_id = version_mapping[selected_option]
-                
-                if selected_version_id:
-                    st.info(f"📊 Carregando versão específica: {version_options[selected_option]}")
-                else:
-                    st.info("📊 Carregando versão ativa (mais recente)")
+                version_options.append(option_text)
+                version_mapping[i + 1] = v['version_id']
             
-            with col2:
-                st.metric("📊 Versões Disponíveis", len(versions))
-                active_versions = len([v for v in versions if v['is_active']])
-                st.metric("🟢 Versão Ativa", f"{active_versions}/1")
-        else:
-            selected_version_id = None
-            st.info(f"💡 Nenhuma versão de análise encontrada para {empresa_selecionada}")
+            selected_option = st.selectbox(
+                "Escolha a versão dos dados:",
+                options=range(len(version_options)),
+                format_func=lambda x: version_options[x],
+                help="Selecione uma versão específica ou use a versão ativa"
+            )
+            
+            selected_version_id = version_mapping[selected_option]
+            
+            if selected_version_id:
+                st.info(f"📊 Carregando versão específica: {version_options[selected_option]}")
+            else:
+                st.info("📊 Carregando versão ativa (mais recente)")
         
-        # Load data with company and version selection
-        # If we need a different version than the initial load, get it
-        if selected_version_id != None or not initial_data['analytics_data'] is not None:
-            # We need to reload with specific version
-            analytics_data = get_cached_analytics_page_data(empresa_code, selected_version_id)
-            df = analytics_data['analytics_data']
-        else:
-            # Use the data we already loaded
-            df = initial_data['analytics_data']
-        
-        if df is not None and len(df) > 0:
-            version_text = f"v{selected_version_id}" if selected_version_id else "ativa"
-            st.success(f"✅ {len(df)} produtos carregados")
+        with col2:
+            st.metric("📊 Versões Disponíveis", len(versions))
+            active_versions = len([v for v in versions if v['is_active']])
+            st.metric("🟢 Versão Ativa", f"{active_versions}/1")
+    else:
+        selected_version_id = None
+        st.info(f"💡 Nenhuma versão de análise encontrada para {empresa_selecionada}")
+    
+    # Load data with company and version selection
+    if versions:
+        df = load_data(empresa_code, "ANALYTICS", selected_version_id)
+    else:
+        df = None
+    
+    if df is not None and len(df) > 0:
+        version_text = f"v{selected_version_id}" if selected_version_id else "ativa"
+        st.success(f"✅ {len(df)} produtos carregados")
             
             # # DEBUG: Check if data_upload column exists before accessing it
             # if 'data_upload' in df.columns:
@@ -223,23 +211,15 @@ def load_page():
             #             axis=1
             #         )
         
-        # else:
-        #     st.info(f"💡 Nenhum dado de análise encontrado para {empresa_selecionada}.")
-        #     st.markdown("👉 **Vá para 'Upload de Dados' e selecione '📊 Análise de Estoque (Export)' para enviar dados para esta empresa primeiro.**")
-        #     df = None
-            
-    except ImportError:
-        st.warning("⚠️ Snowflake não configurado. Usando upload local temporário.")
-        df = None
-        empresa_code = "MINIPA"  # Default for fallback
-    except Exception as e:
-        st.error(f"❌ Erro ao carregar dados de análise para {empresa_selecionada}: {str(e)}")
+    else:
+        selected_version_id = None
+        st.info(f"💡 Nenhuma versão de análise encontrada para {empresa_selecionada}")
         df = None
 
-    # Fallback to local upload if no cloud data
+    # Fallback to local upload if no data found
     if df is None:
-        st.subheader("📁 Upload Local (Temporário)")
-        st.markdown("⚠️ **Este upload é temporário. Para salvar na nuvem, use 'Upload de Dados' → 'Análise de Estoque'**")
+        st.subheader("📁 Upload Local")
+        st.markdown("💡 **Faça upload de um arquivo Excel para análise ou use 'Upload de Dados' para salvar permanentemente**")
         
         uploaded_file = st.file_uploader(
             "Faça upload do arquivo Excel (.xlsx)",
@@ -275,7 +255,7 @@ def load_page():
                 st.info("💡 Certifique-se de que o arquivo contém uma planilha 'Export' com as colunas necessárias")
                 return
         else:
-            st.info("📁 Faça upload de um arquivo Excel para análise local ou use os dados da nuvem")
+            st.info("📁 Faça upload de um arquivo Excel para análise local ou use 'Upload de Dados' para salvar permanentemente")
             
             # Show sample format
             with st.expander("📋 Formato esperado do arquivo"):
@@ -293,7 +273,7 @@ def load_page():
                 """)
             return
 
-    # Only show analysis if data is loaded (either from Snowflake or local upload)
+    # Only show analysis if data is loaded (either from local storage or local upload)
     if df is not None:
         # Preprocess dataframe with caching to avoid recomputation
         df_processed = preprocess_analytics_dataframe(df)
@@ -319,13 +299,8 @@ def load_page():
         
         with tab1:
             try:
-                # Pass CBM data from our initial load (if available)
-                cbm_data = initial_data.get('timeline_cbm_data', {}) if 'initial_data' in locals() else {}
-                if not cbm_data and 'analytics_data' in locals():
-                    cbm_data = analytics_data.get('timeline_cbm_data', {})
-                
-                # Store CBM data in session state to be used by analytics_utils
-                st.session_state['cbm_data'] = cbm_data
+                # CBM data - initialize empty dict (can be populated from timeline data if needed)
+                cbm_data = st.session_state.get('cbm_data', {})
                 
                 show_priority_timeline(df, empresa_selecionada)
             except Exception as e:

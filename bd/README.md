@@ -7,75 +7,75 @@ This folder contains all database-related configurations for the MINIPA purchasi
 ```
 bd/
 ├── __init__.py          # Package initialization
-├── snowflake_config.py  # Snowflake connection and operations
+├── local_storage.py     # Local file storage operations
+├── column_mapping.py    # Column name standardization
 └── README.md           # This file
 ```
 
-## ❄️ Snowflake Setup
+## 💾 Local File Storage
 
-### 1. **Database Schema** (Recommended)
-```sql
--- Main database
-CREATE DATABASE COMPRAS_MINIPA;
+The system now uses local file storage instead of a cloud database. Data is stored in parquet files with version management.
 
--- Schemas
-CREATE SCHEMA COMPRAS_MINIPA.ESTOQUE;      -- Inventory data
-CREATE SCHEMA COMPRAS_MINIPA.TIMELINE;     -- Purchase timeline
-CREATE SCHEMA COMPRAS_MINIPA.ANALYTICS;    -- Reports
-CREATE SCHEMA COMPRAS_MINIPA.CONFIG;       -- Configuration
+### 1. **Data Directory Structure**
+
+```
+data/
+├── MINIPA/
+│   ├── analytics/
+│   │   ├── version_1.parquet
+│   │   ├── version_2.parquet
+│   │   └── metadata.json
+│   └── timeline/
+│       ├── version_1.parquet
+│       └── metadata.json
+└── MINIPA_INDUSTRIA/
+    └── (same structure)
 ```
 
-### 2. **Configuration File**
-Create `.streamlit/secrets.toml` with your credentials:
+### 2. **Usage in App**
 
-```toml
-[snowflake]
-account = "your-organization-your-account"
-user = "your_username"
-password = "your_password"
-role = "SYSADMIN"
-warehouse = "COMPUTE_WH"
-database = "COMPRAS_MINIPA"
-schema = "ESTOQUE"
-```
-
-### 3. **Usage in App**
 ```python
-from bd.snowflake_config import (
-    test_connection,
-    upload_excel_to_snowflake, 
-    load_data_from_snowflake,
-    create_tables
+from bd.local_storage import (
+    save_uploaded_data,
+    load_data,
+    get_versions,
+    delete_version
 )
 
-# Test connection
-if test_connection():
-    # Upload Excel data
-    success = upload_excel_to_snowflake(df, "filename.xlsx")
-    
-    # Load data back
-    df = load_data_from_snowflake()
+# Save uploaded data
+result = save_uploaded_data(
+    df=df,
+    empresa="MINIPA",
+    table_type="ANALYTICS",
+    filename="data.xlsx",
+    description="Q4 2024 Update"
+)
+
+# Load data (active version)
+df = load_data("MINIPA", "ANALYTICS")
+
+# Load specific version
+df = load_data("MINIPA", "ANALYTICS", version_id=2)
+
+# Get version history
+versions = get_versions("MINIPA", "ANALYTICS")
+
+# Delete a version
+result = delete_version("MINIPA", "ANALYTICS", version_id=1)
 ```
-
-## 🔒 Security Features
-
-- ✅ **Credentials never in code** - Uses Streamlit secrets
-- ✅ **Encrypted connections** - All data encrypted in transit
-- ✅ **Role-based access** - Control who sees what
-- ✅ **Audit trail** - Track all uploads and changes
-- ✅ **Data isolation** - User-specific data separation
-
-## 📊 Data Flow
-
-1. **Upload**: Excel files → Snowflake tables
-2. **Process**: Snowflake → Timeline analysis  
-3. **Display**: Snowflake → Interactive charts
-4. **Secure**: All data in cloud, zero local storage
 
 ## 🎯 Benefits
 
-- **No more Excel files in repository**
-- **Team collaboration** - Multiple users, same data
-- **Version control** - Track data changes over time
-- **Scalability** - Handle large datasets efficiently
-- **Security** - Enterprise-grade data protection 
+- ✅ **No authentication required** - No database credentials needed
+- ✅ **Faster loading** - Local file I/O, no network calls
+- ✅ **Simpler deployment** - No database setup required
+- ✅ **Data persists** - Files stored locally across sessions
+- ✅ **Version history** - Full version control maintained
+- ✅ **No external dependencies** - Works out of the box
+
+## 📊 Data Flow
+
+1. **Upload**: Excel files → Local parquet files
+2. **Process**: Local files → Timeline analysis  
+3. **Display**: Local files → Interactive charts
+4. **Storage**: All data in local `data/` directory
