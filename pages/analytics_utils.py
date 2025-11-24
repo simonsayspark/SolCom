@@ -1093,23 +1093,6 @@ def show_priority_timeline(df, empresa="MINIPA"):
                 data_pedido = hoje + timedelta(days=max_days - lead_time_days)
                 dias_ate_pedido = max_days - lead_time_days
             
-            # SIMPLIFIED urgency logic based on 4-month lead time
-            if dias_ate_pedido <= 120:  # 4 months = 120 days
-                # Anything within lead time is URGENT
-                urgencia = 'URGENTE'
-                # Color gradient based on urgency within the 4 months
-                if dias_ate_pedido <= 0:
-                    cor = '#8B0000'  # Dark red for overdue
-                elif dias_ate_pedido <= 30:
-                    cor = '#FF0000'  # Red for within 1 month
-                elif dias_ate_pedido <= 60:
-                    cor = '#FF4500'  # Orange red for within 2 months
-                else:
-                    cor = '#FFA500'  # Orange for within 4 months
-            else:
-                urgencia = 'MONITORAR'
-                cor = '#32CD32'  # Green
-            
             # Calculate three scenarios: MOQ, Negotiated, Ideal
             # Scenario 1: MOQ (minimum order)
             qtd_moq = moq if moq > 0 else 50
@@ -1136,6 +1119,24 @@ def show_priority_timeline(df, empresa="MINIPA"):
             # Calculate if still urgent with expected stock
             dias_ate_pedido_esperado = dias_restantes_esperado - lead_time_days
             ainda_urgente_com_estoque_futuro = dias_ate_pedido_esperado <= 120  # Still within 4-month lead time
+            
+            # Urgency determination based on expected stock (with future purchases)
+            # This ensures products with 4+ months of stock when considering future purchases are not marked as urgent
+            if dias_ate_pedido_esperado <= 120:  # 4 months = 120 days
+                # Anything within lead time is URGENT
+                urgencia = 'URGENTE'
+                # Color gradient based on urgency within the 4 months
+                if dias_ate_pedido_esperado <= 0:
+                    cor = '#8B0000'  # Dark red for overdue
+                elif dias_ate_pedido_esperado <= 30:
+                    cor = '#FF0000'  # Red for within 1 month
+                elif dias_ate_pedido_esperado <= 60:
+                    cor = '#FF4500'  # Orange red for within 2 months
+                else:
+                    cor = '#FFA500'  # Orange for within 4 months
+            else:
+                urgencia = 'MONITORAR'
+                cor = '#32CD32'  # Green
             
             timeline_data.append({
                 'Produto': produto,
